@@ -56,10 +56,12 @@ export class RedisIoAdapter extends IoAdapter {
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  
   app.use(cookieParser());
-  // 1. Cấu hình CORS
+
+  // 1. Cấu hình CORS (Đã mở rộng để nhận diện IP thiết bị)
   app.enableCors({
-    origin: true, // Hoặc ['http://localhost:3000', 'https://your-frontend-domain.com'] để bảo mật hơn
+    origin: true, 
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
     allowedHeaders: 'Content-Type, Accept, Authorization, x-device-id, user-agent, Cache-Control, Pragma, Expires',
@@ -69,24 +71,21 @@ async function bootstrap() {
 
   // 2. Tối ưu & Validate
   app.use(compression());
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, transformOptions: {
-      enableImplicitConversion: true // 👈 Dòng quan trọng: Tự động chuyển đổi kiểu dữ liệu
-    } }));
+  app.useGlobalPipes(new ValidationPipe({ 
+    whitelist: true, 
+    transform: true, 
+    transformOptions: { enableImplicitConversion: true } 
+  }));
   app.use(json({ limit: '50mb' })); 
   app.use(urlencoded({ extended: true, limit: '50mb' }));
 
-  // 3. Cấu hình Redis Adapter cho Socket.io (Cluster Support)
-  // const redisIoAdapter = new RedisIoAdapter(app);
-  // try {
-  //   await redisIoAdapter.connectToRedis();
-  //   app.useWebSocketAdapter(redisIoAdapter);
-  //   console.log('✅ Redis Adapter for WebSocket connected successfully.');
-  // } catch (error) {
-  //   console.error('❌ Failed to connect Redis Adapter:', error);
-  // }
-
-  // 4. Chạy server
-  await app.listen(process.env.PORT ?? 3001);
-  console.log(`Application is running on: ${await app.getUrl()}`);
+  // 4. Chạy server - QUAN TRỌNG NHẤT Ở ĐÂY
+  const port = process.env.PORT ?? 3001;
+  
+  // Sửa từ app.listen(port) thành bản dưới đây để lắng nghe trên mọi địa chỉ IP
+  await app.listen(port, '0.0.0.0'); 
+  
+  console.log(`✅ Server is listening on all network interfaces (0.0.0.0:${port})`);
+  console.log(`🚀 For iPhone, use URL: http://<YOUR_COMPUTER_IP>:${port}`);
 }
 bootstrap();
