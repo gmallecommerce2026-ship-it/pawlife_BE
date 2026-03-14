@@ -35,27 +35,6 @@ export class AuthController {
     return this.authService.changePassword(userId, changePasswordDto);
   }
 
-  @Post('google')
-  async googleLogin(
-    @Body() body: { email: string; name: string; picture?: string },
-    @Req() req: Request,
-    @Headers('user-agent') userAgent: string,
-    @Headers('x-device-name') deviceNameHeader?: string,
-    @Headers('x-device-os') deviceOsHeader?: string,
-  ) {
-    // Lấy IP chính xác (Xử lý trường hợp qua proxy/ngrok)
-    const ip = req.headers['x-forwarded-for'] || '';
-    const ipString = Array.isArray(ip) ? ip[0] : ip;
-
-    return this.authService.googleLogin(
-      body, 
-      userAgent || '', 
-      ipString, 
-      deviceNameHeader, 
-      deviceOsHeader
-    );
-  }
-
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(

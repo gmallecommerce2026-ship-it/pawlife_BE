@@ -29,36 +29,7 @@ export class AuthService {
   ) {
     this.googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
   }
-  async googleLogin(
-    googleUserData: { email: string; name: string; picture?: string },
-    userAgent: string, 
-    ip: string, 
-    deviceNameHeader?: string, 
-    deviceOsHeader?: string
-  ) {
-    const { email, name, picture } = googleUserData;
 
-    // Sử dụng upsert để: Nếu có thì update (hoặc bỏ qua), nếu chưa thì tạo mới
-    const user = await this.prisma.user.upsert({
-      where: { email },
-      update: {}, // Nếu đăng nhập lại, không ghi đè dữ liệu user đã sửa
-      create: {
-        email,
-        name: name,
-        avatarUrl: picture,
-        provider: 'google',
-      },
-    });
-
-    // SỬ DỤNG CHUNG HÀM TẠO PHIÊN VÀ TOKEN (Đồng bộ hoàn toàn với login thường)
-    return await this.generateAuthResponse(
-      user, 
-      userAgent, 
-      ip, 
-      deviceNameHeader, 
-      deviceOsHeader
-    );
-  }
   async verifyGoogleSignIn(idToken: string) {
     // 1. Verify token với Google
     const ticket = await googleClient.verifyIdToken({
