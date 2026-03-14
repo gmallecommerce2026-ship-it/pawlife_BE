@@ -111,7 +111,7 @@ model User {
   gender    String?   // Thêm trường này
   dob       DateTime? // Thêm trường này
   avatarUrl String?
-
+  provider  String    @default("local")
   // Trạng thái tài khoản (Quan trọng cho App Store - Account Deletion)
   isDeleted Boolean  @default(false)
   createdAt DateTime @default(now())

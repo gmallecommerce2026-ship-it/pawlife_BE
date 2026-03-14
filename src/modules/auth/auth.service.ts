@@ -15,6 +15,7 @@ import { UAParser } from 'ua-parser-js';
 import * as geoip from 'geoip-lite';
 import * as speakeasy from 'speakeasy';
 import * as qrcode from 'qrcode';
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 @Injectable()
 export class AuthService {
   private googleClient: OAuth2Client;
@@ -27,6 +28,70 @@ export class AuthService {
     private readonly notificationsService: NotificationsService
   ) {
     this.googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+  }
+  async googleLogin(googleUserData: { email: string; name: string; picture?: string }) {
+    const { email, name, picture } = googleUserData;
+
+    // Sử dụng upsert để: Nếu có thì update (hoặc bỏ qua), nếu chưa thì tạo mới
+    const user = await this.prisma.user.upsert({
+      where: { email },
+      update: {}, // Nếu đăng nhập lại, không ghi đè dữ liệu user đã sửa
+      create: {
+        email,
+        name: name,
+        avatarUrl: picture,
+        provider: 'google',
+        // Lưu ý: Gender và DOB Google không trả về mặc định, sẽ nói rõ ở phần lưu ý
+      },
+    });
+
+    // Tạo JWT token cho App sử dụng
+    const payload = { sub: user.id, email: user.email };
+    const accessToken = this.jwtService.sign(payload);
+
+    return {
+      accessToken,
+      user,
+    };
+  }
+  async verifyGoogleSignIn(idToken: string) {
+    // 1. Verify token với Google
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    
+    if (!payload || !payload.email) {
+      throw new Error('Invalid Google Token');
+    }
+
+    const { email, name, picture } = payload;
+
+    // 2. Tìm user trong hệ thống
+    let user = await this.prisma.user.findUnique({ where: { email } });
+    let isNewUser = false;
+
+    // 3. Nếu user chưa tồn tại (Đăng nhập lần đầu)
+    if (!user) {
+      isNewUser = true;
+      user = await this.prisma.user.create({
+        data: {
+          email: email,
+          name: name, // Có thể dùng name làm default nickname
+          avatarUrl: picture,
+        },
+      });
+    }
+
+    // 4. Tạo JWT Token của hệ thống
+    const accessToken = this.jwtService.sign({ sub: user.id, email: user.email });
+
+    return {
+      accessToken,
+      user,
+      isNewUser, // Trả về flag này để Frontend biết đường xử lý
+    };
   }
   async getDevices(userId: string, currentSessionId?: string) {
     const devices = await this.prisma.deviceSession.findMany({

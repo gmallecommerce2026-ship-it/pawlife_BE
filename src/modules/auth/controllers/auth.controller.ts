@@ -35,6 +35,11 @@ export class AuthController {
     return this.authService.changePassword(userId, changePasswordDto);
   }
 
+  @Post('google')
+  async googleLogin(@Body() body: { email: string; name: string; picture?: string }) {
+    return this.authService.googleLogin(body);
+  }
+
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
