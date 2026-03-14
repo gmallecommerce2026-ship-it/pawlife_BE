@@ -472,6 +472,7 @@ export class AuthService {
   ) {
     let email: string;
     let name: string = 'User';
+    
     try {
       switch (dto.provider) {
         case 'GOOGLE': {

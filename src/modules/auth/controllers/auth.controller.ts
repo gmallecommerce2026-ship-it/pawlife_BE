@@ -93,6 +93,7 @@ export class AuthController {
     @Ip() ip: string,
   ) {
     const realIp = forwardedIp ? forwardedIp.split(',')[0] : ip;
+    console.log("social login start debugging!");
     return this.authService.socialLogin(socialLoginDto, userAgent, realIp, deviceNameHeader, deviceOsHeader);
   }
   @Get('devices')
