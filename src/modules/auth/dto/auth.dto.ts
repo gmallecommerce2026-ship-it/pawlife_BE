@@ -1,5 +1,5 @@
 // src/auth/dto/auth.dto.ts
-import { IsEmail, IsNotEmpty, IsString, MinLength, Length, IsOptional, IsEnum } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MinLength, Length, IsOptional, IsEnum, IsIn } from 'class-validator';
 
 export enum OtpType {
   SIGNUP = 'SIGNUP',
@@ -7,8 +7,14 @@ export enum OtpType {
 }
 
 export class SocialLoginDto {
+  @IsString()
+  @IsNotEmpty({ message: 'Provider không được để trống' })
+  @IsIn(['GOOGLE', 'APPLE', 'FACEBOOK'], { message: 'Provider không hợp lệ' })
   provider: 'GOOGLE' | 'APPLE' | 'FACEBOOK';
-  token: string; // Token nhận được từ SDK ở Frontend
+
+  @IsString()
+  @IsNotEmpty({ message: 'Token không được để trống' })
+  token: string;
 }
 // Dùng cho Đăng ký
 export class RegisterDto {
