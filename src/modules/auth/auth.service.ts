@@ -537,11 +537,12 @@ export class AuthService {
     dto: SocialLoginDto, 
     userAgent: string, 
     ip: string,
-    deviceNameHeader?: string, // Thêm tham số này
-    deviceOsHeader?: string    // Thêm tham số này
+    deviceNameHeader?: string,
+    deviceOsHeader?: string
   ) {
     let email: string;
     let name: string = 'User';
+    let picture: string | null = null; // 1. Thêm biến hứng avatar
     
     try {
       switch (dto.provider) {
@@ -552,41 +553,35 @@ export class AuthService {
           });
           const payload = ticket.getPayload();
           
-          if (!payload) {
-            throw new BadRequestException('Google token payload rỗng.');
-          }
-          if (!payload.email) {
-            throw new BadRequestException('Google token không chứa email.');
+          if (!payload || !payload.email) {
+            throw new BadRequestException('Google token không hợp lệ.');
           }
 
           email = payload.email;
           name = payload.name || 'Google User';
+          picture = payload.picture || null; // 2. Lấy avatar từ Google
           break;
         }
 
         case 'FACEBOOK': {
           const { data } = await axios.get(
-            `https://graph.facebook.com/me?fields=id,name,email&access_token=${dto.token}`,
+            `https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${dto.token}`,
           );
-          if (!data || !data.email) {
-            throw new BadRequestException('Facebook không trả về email.');
-          }
+          if (!data || !data.email) throw new BadRequestException('Facebook không trả về email.');
           
           email = data.email;
           name = data.name || 'Facebook User';
+          picture = data.picture?.data?.url || null; // Lấy avatar từ FB nếu có
           break;
         }
 
         case 'APPLE': {
+          // Apple thường chỉ gửi email/name ở lần đăng nhập đầu tiên
           const payload = await appleSignin.verifyIdToken(dto.token, {
             audience: process.env.APPLE_CLIENT_ID,
             ignoreExpiration: true, 
           });
-
-          if (!payload || typeof payload.email !== 'string') {
-            throw new BadRequestException('Apple token không chứa email hợp lệ.');
-          }
-
+          if (!payload || typeof payload.email !== 'string') throw new BadRequestException('Apple token lỗi.');
           email = payload.email;
           break;
         }
@@ -595,17 +590,10 @@ export class AuthService {
           throw new BadRequestException('Provider không được hỗ trợ.');
       }
     } catch (error) {
-      console.error(`[SocialLogin] Error verifying ${dto.provider} token:`, error);
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
       throw new UnauthorizedException('Token mạng xã hội không hợp lệ hoặc đã hết hạn.');
     }
 
-    if (!email) {
-      throw new BadRequestException('Không thể lấy được thông tin email từ nền tảng này.');
-    }
-
+    // 3. Tìm hoặc tạo user mới với dữ liệu lấy được
     let user = await this.prisma.user.findUnique({
       where: { email },
     });
@@ -614,14 +602,23 @@ export class AuthService {
       user = await this.prisma.user.create({
         data: {
           email,
-          name
+          name,
+          avatarUrl: picture, // Tự động set avatar
+          // gender và dob tạm thời để null, user sẽ cập nhật sau
         },
       });
+    } else {
+      // (Tùy chọn) Nếu user đã tồn tại nhưng chưa có avatar/name, bạn có thể update thêm ở đây
+      if (!user.avatarUrl && picture) {
+         user = await this.prisma.user.update({
+             where: { email },
+             data: { avatarUrl: picture, name: user.name === 'User' ? name : user.name }
+         });
+      }
     }
 
-    // ĐÃ SỬA: Thêm await và truyền đủ 3 tham số
-  return await this.generateAuthResponse(user, userAgent, ip, deviceNameHeader, deviceOsHeader);
-}
+    return await this.generateAuthResponse(user, userAgent, ip, deviceNameHeader, deviceOsHeader);
+  }
 
   // --- HÀM HELPER TẠO TOKEN ---
   // --- HÀM HELPER TẠO TOKEN & LƯU PHIÊN THIẾT BỊ ---
