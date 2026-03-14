@@ -1,5 +1,5 @@
 // src/modules/auth/controllers/auth.controller.ts
-import { Controller, Post, Body, HttpCode, HttpStatus, Delete, UseGuards, Headers, Ip, Param, Get } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, Delete, UseGuards, Headers, Ip, Param, Get, Req } from '@nestjs/common';
 import { AuthService } from '../auth.service';
 import { RegisterDto, LoginDto, SocialLoginDto, SendOtpDto, ResetPasswordDto, ChangePasswordDto } from '../dto/auth.dto';
 import { User } from 'src/common/decorators/user.decorator';
@@ -36,8 +36,24 @@ export class AuthController {
   }
 
   @Post('google')
-  async googleLogin(@Body() body: { email: string; name: string; picture?: string }) {
-    return this.authService.googleLogin(body);
+  async googleLogin(
+    @Body() body: { email: string; name: string; picture?: string },
+    @Req() req: Request,
+    @Headers('user-agent') userAgent: string,
+    @Headers('x-device-name') deviceNameHeader?: string,
+    @Headers('x-device-os') deviceOsHeader?: string,
+  ) {
+    // Lấy IP chính xác (Xử lý trường hợp qua proxy/ngrok)
+    const ip = req.headers['x-forwarded-for'] || '';
+    const ipString = Array.isArray(ip) ? ip[0] : ip;
+
+    return this.authService.googleLogin(
+      body, 
+      userAgent || '', 
+      ipString, 
+      deviceNameHeader, 
+      deviceOsHeader
+    );
   }
 
   @Post('login')

@@ -29,7 +29,13 @@ export class AuthService {
   ) {
     this.googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
   }
-  async googleLogin(googleUserData: { email: string; name: string; picture?: string }) {
+  async googleLogin(
+    googleUserData: { email: string; name: string; picture?: string },
+    userAgent: string, 
+    ip: string, 
+    deviceNameHeader?: string, 
+    deviceOsHeader?: string
+  ) {
     const { email, name, picture } = googleUserData;
 
     // Sử dụng upsert để: Nếu có thì update (hoặc bỏ qua), nếu chưa thì tạo mới
@@ -41,18 +47,17 @@ export class AuthService {
         name: name,
         avatarUrl: picture,
         provider: 'google',
-        // Lưu ý: Gender và DOB Google không trả về mặc định, sẽ nói rõ ở phần lưu ý
       },
     });
 
-    // Tạo JWT token cho App sử dụng
-    const payload = { sub: user.id, email: user.email };
-    const accessToken = this.jwtService.sign(payload);
-
-    return {
-      accessToken,
-      user,
-    };
+    // SỬ DỤNG CHUNG HÀM TẠO PHIÊN VÀ TOKEN (Đồng bộ hoàn toàn với login thường)
+    return await this.generateAuthResponse(
+      user, 
+      userAgent, 
+      ip, 
+      deviceNameHeader, 
+      deviceOsHeader
+    );
   }
   async verifyGoogleSignIn(idToken: string) {
     // 1. Verify token với Google
