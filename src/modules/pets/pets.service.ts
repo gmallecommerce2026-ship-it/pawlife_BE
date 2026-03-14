@@ -116,13 +116,14 @@ export class PetsService {
     let pets = await this.prisma.pet.findMany({
       where: whereCondition,
       take: limit,
+      orderBy: { createdAt: 'desc' }, // <--- THÊM DÒNG NÀY ĐỂ FIX THỨ TỰ
       include: {
         images: {
-          orderBy: { createdAt: 'asc' } // <--- THÊM DÒNG NÀY
+          orderBy: { createdAt: 'asc' } 
         },
         shelter: { select: { name: true, avatarUrl: true } }
       }
-    });
+  });
 
     // Fallback cho luồng Prisma query
     if (pets.length === 0) {

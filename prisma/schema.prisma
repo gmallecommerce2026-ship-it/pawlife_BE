@@ -207,7 +207,7 @@ model Pet {
 
   ownerId String?
   owner   User?   @relation("UserPets", fields: [ownerId], references: [id])
-
+  createdAt   DateTime @default(now())
   shelterId String?
   shelter   Shelter? @relation(fields: [shelterId], references: [id])
 
