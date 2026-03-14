@@ -619,34 +619,55 @@ export class AuthService {
     deviceNameHeader?: string, 
     deviceOsHeader?: string
   ) {
+    // --- 1. KIỂM TRA & TỰ ĐỘNG CHUẨN HOÁ DỮ LIỆU ---
+    let updatedData: any = {};
+    let needsUpdate = false;
+
+    // Nếu name trống, null, hoặc là tên mặc định -> Lấy prefix của email
+    if (!user.name || user.name.trim() === '' || user.name === 'User') {
+      updatedData.name = user.email.split('@')[0]; // VD: an.nguyen@gmail.com -> an.nguyen
+      user.name = updatedData.name; // Cập nhật luôn biến local để trả về FE
+      needsUpdate = true;
+    }
+
+    // Nếu bạn muốn ép Gender mặc định (Tuỳ chọn)
+    if (!user.gender) {
+      updatedData.gender = 'UNKNOWN'; // Hoặc bỏ qua nếu muốn user tự điền sau
+      user.gender = updatedData.gender;
+      needsUpdate = true;
+    }
+
+    // NẾU CÓ THAY ĐỔI -> UPDATE LẠI VÀO DATABASE ĐỂ ĐỒNG BỘ VĨNH VIỄN
+    if (needsUpdate) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: updatedData,
+      });
+    }
+
+    // --- 2. XỬ LÝ LƯU PHIÊN THIẾT BỊ (GIỮ NGUYÊN CODE CỦA BẠN) ---
     const parser = new UAParser(userAgent);
     const os = parser.getOS();
     const device = parser.getDevice();
     
     let deviceType = 'smartphone';
-    // Logic xác định tablet/laptop của bạn giữ nguyên...
     if (device.type === 'tablet') deviceType = 'tablet';
     if (!device.type && (os.name === 'Mac OS' || os.name === 'Windows' || os.name === 'Linux' || os.name === 'Ubuntu')) {
       deviceType = 'laptop';
     }
 
-    // XỬ LÝ VỊ TRÍ (LOCATION)
-    // Lưu ý: Nếu IP là ::1 hoặc 192.168.x.x thì geoip sẽ luôn trả về null. 
-    // Khi deploy lên server thật có IP Public thì nó mới hoạt động.
     const geo = geoip.lookup(ip);
     const location = geo ? `${geo.city || ''}, ${geo.country || ''}`.replace(/^, |, $/g, '') || 'Unknown Location' : 'Unknown Location';
 
-    // XỬ LÝ TÊN THIẾT BỊ
-    // Ưu tiên lấy từ header do React Native gửi lên. Nếu không có (ví dụ login từ Web), fallback về ua-parser
     const deviceName = deviceNameHeader || device.model || os.name || 'Unknown Device';
     const finalOsName = deviceOsHeader || `${os.name || ''} ${os.version || ''}`.trim() || 'Unknown OS';
 
     const session = await this.prisma.deviceSession.create({
       data: {
         userId: user.id,
-        deviceName: deviceName, // Sẽ lưu "Ân - Hà Nội" hoặc "iPhone 14 Pro"
+        deviceName: deviceName,
         deviceType: deviceType,
-        os: finalOsName,        // Sẽ lưu "ios 16.0"
+        os: finalOsName,
         ipAddress: ip,
         location: location,
       }
@@ -655,13 +676,14 @@ export class AuthService {
     const payload = { userId: user.id, sessionId: session.id };
     const accessToken = this.jwtService.sign(payload);
 
+    // --- 3. TRẢ VỀ FRONTEND ---
     return {
       message: 'Đăng nhập thành công',
       accessToken,
       user: {
         id: user.id,
         email: user.email,
-        name: user.name,
+        name: user.name, // CHẮC CHẮN SẼ CÓ GIÁ TRỊ (Không bao giờ rỗng)
         phone: user.phone,
         gender: user.gender, 
         dob: user.dob,       
