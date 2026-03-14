@@ -339,7 +339,9 @@ export class PetsService {
           status: 'ADOPTED', 
         },
         include: {
-          images: true,
+          images: {
+            orderBy: { createdAt: 'asc' },
+          }
         },
       });
 
