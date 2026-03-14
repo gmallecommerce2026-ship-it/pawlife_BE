@@ -310,6 +310,7 @@ export class PetsService {
           include: {
             images: {
               take: 1,
+              orderBy: { createdAt: 'asc' } // <--- THÊM DÒNG NÀY
             },
             shelter: {
               select: {
@@ -408,7 +409,9 @@ export class PetsService {
       where: whereCondition,
       take: limit,
       include: {
-        images: true,
+        images: {
+          orderBy: { createdAt: 'asc' } // <--- THÊM DÒNG NÀY
+        },
         shelter: {
           select: { id: true, name: true, avatarUrl: true }
         }
@@ -426,7 +429,9 @@ export class PetsService {
     const pet = await this.prisma.pet.findUnique({
       where: { id },
       include: {
-        images: true,
+        images: {
+          orderBy: { createdAt: 'asc' } // <--- THÊM DÒNG NÀY
+        },
         tags: true,
         shelter: {
           select: { id: true, name: true, contactInfo: true, address: true, avatarUrl: true }
