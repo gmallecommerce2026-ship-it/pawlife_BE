@@ -77,8 +77,11 @@ export class PetsService {
 
       const petIds = pets.map(p => p.id);
       const images = petIds.length > 0 
-        ? await this.prisma.petImage.findMany({ where: { petId: { in: petIds } } })
-        : [];
+      ? await this.prisma.petImage.findMany({ 
+          where: { petId: { in: petIds } },
+          orderBy: { createdAt: 'asc' } // <--- THÊM DÒNG NÀY ĐỂ ĐẢM BẢO THỨ TỰ ẢNH
+        })
+      : [];
 
       const formattedData = pets.map(pet => {
         const petImages = images.filter(img => img.petId === pet.id);
@@ -114,7 +117,9 @@ export class PetsService {
       where: whereCondition,
       take: limit,
       include: {
-        images: true,
+        images: {
+          orderBy: { createdAt: 'asc' } // <--- THÊM DÒNG NÀY
+        },
         shelter: { select: { name: true, avatarUrl: true } }
       }
     });
@@ -133,7 +138,7 @@ export class PetsService {
         },
         take: limit,
         include: {
-          images: true,
+          images: { orderBy: { createdAt: 'asc' } }, // <--- THÊM DÒNG NÀY
           shelter: { select: { name: true, avatarUrl: true } }
         }
       });
