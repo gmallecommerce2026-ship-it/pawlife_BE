@@ -512,8 +512,10 @@ export class AuthService {
     deviceOsHeader?: string
   ) {
     let email: string;
-    let name: string = 'User';
-    let picture: string | null = null; // 1. Thêm biến hứng avatar
+    let name: string = dto.name || ''; // Ưu tiên tên từ React Native truyền lên
+    let picture: string | null = null; 
+    let gender: string | null = dto.gender || null;
+    let dob: Date | null = dto.dob ? new Date(dto.dob) : null;
     
     try {
       switch (dto.provider) {
@@ -529,31 +531,39 @@ export class AuthService {
           }
 
           email = payload.email;
-          name = payload.name || 'Google User';
-          picture = payload.picture || null; // 2. Lấy avatar từ Google
+          // Nếu không có tên, lấy tiền tố email làm tên (VD: nguyenvana@... -> nguyenvana)
+          if (!name) name = payload.name || email.split('@')[0];
+          picture = payload.picture || null; 
           break;
         }
 
         case 'FACEBOOK': {
+          // Bổ sung lấy gender và birthday từ Facebook Graph API
           const { data } = await axios.get(
-            `https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${dto.token}`,
+            `https://graph.facebook.com/me?fields=id,name,email,picture.type(large),gender,birthday&access_token=${dto.token}`,
           );
           if (!data || !data.email) throw new BadRequestException('Facebook không trả về email.');
           
           email = data.email;
-          name = data.name || 'Facebook User';
-          picture = data.picture?.data?.url || null; // Lấy avatar từ FB nếu có
+          if (!name) name = data.name || email.split('@')[0];
+          picture = data.picture?.data?.url || null;
+          
+          // Ghi đè nếu Facebook có trả về (định dạng birthday của FB là MM/DD/YYYY)
+          if (!gender && data.gender) gender = data.gender;
+          if (!dob && data.birthday) dob = new Date(data.birthday);
           break;
         }
 
         case 'APPLE': {
-          // Apple thường chỉ gửi email/name ở lần đăng nhập đầu tiên
           const payload = await appleSignin.verifyIdToken(dto.token, {
             audience: process.env.APPLE_CLIENT_ID,
             ignoreExpiration: true, 
           });
           if (!payload || typeof payload.email !== 'string') throw new BadRequestException('Apple token lỗi.');
+          
           email = payload.email;
+          // Apple thường chỉ gửi name lần đầu, nên lấy luôn prefix của email làm chuẩn
+          if (!name) name = email.split('@')[0];
           break;
         }
 
@@ -570,20 +580,29 @@ export class AuthService {
     });
 
     if (!user) {
+      // Tự động set đủ thông tin cho lần đầu đăng nhập
       user = await this.prisma.user.create({
         data: {
           email,
-          name,
-          avatarUrl: picture, // Tự động set avatar
-          // gender và dob tạm thời để null, user sẽ cập nhật sau
+          name, 
+          avatarUrl: picture, 
+          gender: gender,
+          dob: dob,
         },
       });
     } else {
-      // (Tùy chọn) Nếu user đã tồn tại nhưng chưa có avatar/name, bạn có thể update thêm ở đây
-      if (!user.avatarUrl && picture) {
+      // Nếu user đã tồn tại nhưng trước đó bị thiếu thông tin, ta tự động chèn thêm
+      const updateData: any = {};
+      
+      if (!user.name || user.name === 'User') updateData.name = name;
+      if (!user.avatarUrl && picture) updateData.avatarUrl = picture;
+      if (!user.gender && gender) updateData.gender = gender;
+      if (!user.dob && dob) updateData.dob = dob;
+
+      if (Object.keys(updateData).length > 0) {
          user = await this.prisma.user.update({
              where: { email },
-             data: { avatarUrl: picture, name: user.name === 'User' ? name : user.name }
+             data: updateData
          });
       }
     }

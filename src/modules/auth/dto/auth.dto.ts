@@ -15,6 +15,18 @@ export class SocialLoginDto {
   @IsString()
   @IsNotEmpty({ message: 'Token không được để trống' })
   token: string;
+
+  // Thêm các trường này để App React Native có thể truyền xuống
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  gender?: string;
+
+  @IsOptional()
+  dob?: string | Date; 
 }
 // Dùng cho Đăng ký
 export class RegisterDto {
