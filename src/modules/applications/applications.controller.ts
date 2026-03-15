@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApplicationsService } from './applications.service';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { User } from '../../common/decorators/user.decorator';
@@ -15,6 +15,15 @@ export class ApplicationsController {
   ) {
     console.log("application created!");
     const data = await this.applicationsService.createApplication(userId, createApplicationDto);
+    return { success: true, data };
+  }
+  @Get(':id')
+  async getApplicationById(
+    @User('id') userId: string,
+    @Param('id') applicationId: string,
+  ) {
+    console.log(`Getting application detail for id: ${applicationId}`);
+    const data = await this.applicationsService.getApplicationById(userId, applicationId);
     return { success: true, data };
   }
   @Get('my-applications')

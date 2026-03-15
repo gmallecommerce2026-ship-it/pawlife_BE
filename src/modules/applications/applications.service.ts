@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 
@@ -6,6 +6,31 @@ import { CreateApplicationDto } from './dto/create-application.dto';
 export class ApplicationsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async getApplicationById(userId: string, applicationId: string) {
+    const application = await this.prisma.adoptionApplication.findFirst({
+      where: { 
+        id: applicationId,
+        userId: userId // Đảm bảo chỉ lấy đơn của chính user đó
+      },
+      include: {
+        pet: {
+          include: {
+            images: { orderBy: { createdAt: 'asc' } },
+            shelter: {
+              select: { name: true, avatarUrl: true }
+            }
+          },
+        },
+      },
+    });
+
+    if (!application) {
+      throw new NotFoundException('Không tìm thấy đơn đăng ký nhận nuôi này!');
+    }
+
+    return application;
+  }
+  
   async createApplication(userId: string, data: CreateApplicationDto) {
     // 1. Kiểm tra giới hạn 5 đơn đăng ký đang hoạt động
     const activeApplicationsCount = await this.prisma.adoptionApplication.count({
