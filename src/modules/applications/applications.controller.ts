@@ -1,3 +1,4 @@
+// src/modules/applications/applications.controller.ts
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApplicationsService } from './applications.service';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
@@ -18,21 +19,18 @@ export class ApplicationsController {
     return { success: true, data };
   }
 
-  // 1. ĐẶT ROUTE TĨNH LÊN TRƯỚC
   @Get('my-applications')
   async getMyApplications(@User('id') userId: string) {
-    console.log("getting my applications!");
     const data = await this.applicationsService.getMyApplications(userId);
     return { success: true, data };
   }
 
-  // 2. ĐẶT ROUTE ĐỘNG (CÓ PARAM :id) XUỐNG CUỐI CÙNG
+  // API ĐỂ LẤY CHI TIẾT
   @Get(':id')
   async getApplicationById(
     @User('id') userId: string,
     @Param('id') applicationId: string,
   ) {
-    console.log(`Getting application detail for id: ${applicationId}`);
     const data = await this.applicationsService.getApplicationById(userId, applicationId);
     return { success: true, data };
   }

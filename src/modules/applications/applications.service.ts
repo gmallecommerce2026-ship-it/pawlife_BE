@@ -1,3 +1,4 @@
+// src/modules/applications/applications.service.ts
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
@@ -6,38 +7,11 @@ import { CreateApplicationDto } from './dto/create-application.dto';
 export class ApplicationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getApplicationById(userId: string, applicationId: string) {
-    const application = await this.prisma.adoptionApplication.findFirst({
-      where: { 
-        id: applicationId,
-        userId: userId // Đảm bảo chỉ lấy đơn của chính user đó
-      },
-      include: {
-        pet: {
-          include: {
-            images: { orderBy: { createdAt: 'asc' } },
-            shelter: {
-              select: { name: true, avatarUrl: true }
-            }
-          },
-        },
-      },
-    });
-
-    if (!application) {
-      throw new NotFoundException('Không tìm thấy đơn đăng ký nhận nuôi này!');
-    }
-
-    return application;
-  }
-  
   async createApplication(userId: string, data: CreateApplicationDto) {
-    // 1. Kiểm tra giới hạn 5 đơn đăng ký đang hoạt động
     const activeApplicationsCount = await this.prisma.adoptionApplication.count({
       where: {
         userId,
         status: {
-          // Các đơn KHÔNG thuộc 2 trạng thái này thì được tính là đang hoạt động
           notIn: ['CLOSED', 'ADOPTION_COMPLETED'],
         },
       },
@@ -49,12 +23,11 @@ export class ApplicationsService {
       );
     }
 
-    // 2. Kiểm tra trùng lặp (User nộp nhiều đơn cho cùng 1 pet)
     const existingApp = await this.prisma.adoptionApplication.findFirst({
       where: { 
         userId, 
         petId: data.petId,
-        status: { not: 'CLOSED' } // Cho phép nộp lại nếu đơn trước đó cho pet này đã bị CLOSED
+        status: { not: 'CLOSED' } 
       },
     });
 
@@ -62,12 +35,11 @@ export class ApplicationsService {
       throw new BadRequestException('Bạn đã gửi đơn đăng ký cho thú cưng này rồi.');
     }
 
-    // 3. Tạo đơn mới
     return await this.prisma.adoptionApplication.create({
       data: {
         userId,
         ...data,
-        status: 'SUBMITTED', // Trạng thái mặc định khi mới tạo
+        status: 'SUBMITTED', 
       },
     });
   }
@@ -88,5 +60,31 @@ export class ApplicationsService {
     });
 
     return applications;
+  }
+
+  // BỔ SUNG HÀM NÀY ĐỂ LẤY CHI TIẾT ĐƠN ỨNG TUYỂN
+  async getApplicationById(userId: string, applicationId: string) {
+    const application = await this.prisma.adoptionApplication.findFirst({
+      where: { 
+        id: applicationId,
+        userId: userId 
+      },
+      include: {
+        pet: {
+          include: {
+            images: { orderBy: { createdAt: 'asc' } },
+            shelter: {
+              select: { name: true, avatarUrl: true }
+            }
+          },
+        },
+      },
+    });
+
+    if (!application) {
+      throw new NotFoundException('Không tìm thấy đơn đăng ký nhận nuôi này!');
+    }
+
+    return application;
   }
 }
