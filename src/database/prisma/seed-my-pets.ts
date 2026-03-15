@@ -1,4 +1,4 @@
-import { PrismaClient, Role, PetGender, PetSize, PetStatus, TagStatus } from '@prisma/client';
+import { PrismaClient, Role, PetGender, PetSize, PetStatus, TagStatus, VerificationStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -39,7 +39,6 @@ async function main() {
     }
   });
 
-
   // 2. Thêm bé Luna - Đang đi lạc (LOST)
   console.log('Đang tạo bé LUNA...');
   const luna = await prisma.pet.create({
@@ -52,6 +51,9 @@ async function main() {
       color: 'Vàng rơm',
       status: PetStatus.ADOPTED, 
       ownerId: myUser.id, 
+      // THÊM QR CODE VÀ TRẠNG THÁI XÁC THỰC
+      qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=pawlife://tag/luna-lost-tag-id',
+      qrVerificationStatus: VerificationStatus.VERIFIED,
       images: {
         create: [
           { url: 'https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=600&auto=format&fit=crop' }
@@ -65,7 +67,7 @@ async function main() {
       }
     }
   });
-  console.log(`Đã thêm thành công Pet: ${luna.name}`);
+  console.log(`Đã thêm thành công Pet: ${luna.name} kèm QR Code`);
 
   // 3. Thêm bé Piglet - Đang an toàn ở nhà (ACTIVE)
   console.log('Đang tạo bé Piglet...');
@@ -78,7 +80,10 @@ async function main() {
       size: PetSize.SMALL,
       color: 'Xám Trắng',
       status: PetStatus.ADOPTED, 
-      ownerId: myUser.id, 
+      ownerId: myUser.id,
+      // THÊM QR CODE VÀ TRẠNG THÁI XÁC THỰC 
+      qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=pawlife://tag/piglet-safe-tag-id',
+      qrVerificationStatus: VerificationStatus.VERIFIED,
       images: {
         create: [
           { url: 'https://images.unsplash.com/photo-1513245543132-31f507417b26?q=80&w=600&auto=format&fit=crop' }
@@ -92,7 +97,7 @@ async function main() {
       }
     }
   });
-  console.log(`Đã thêm thành công Pet: ${piglet.name}`);
+  console.log(`Đã thêm thành công Pet: ${piglet.name} kèm QR Code`);
 
   console.log('✅ Đã thêm dữ liệu My Pets thành công!');
 }
