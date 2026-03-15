@@ -73,7 +73,7 @@ async function main() {
   console.log('Đang tạo bé Piglet...');
   const piglet = await prisma.pet.create({
     data: {
-      name: 'Piglet',
+      name: 'Piglet a',
       species: 'Cat',
       breed: 'Tabby Cat',
       gender: PetGender.MALE,
