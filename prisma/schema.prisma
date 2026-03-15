@@ -131,7 +131,7 @@ model User {
   deviceSessions   DeviceSession[]
   twoFactorSecret      String?  
   isTwoFactorEnabled   Boolean  @default(false)
-
+  adoptionApplications AdoptionApplication[]
   interestedEvents EventInterest[]
 }
 
@@ -213,6 +213,50 @@ model Pet {
 
   tags             Tag[]
   adoptionRequests AdoptionRequest[]
+  adoptionApplications AdoptionApplication[]
+}
+
+model AdoptionApplication {
+  id               String            @id @default(uuid())
+  userId           String
+  user             User              @relation(fields: [userId], references: [id])
+  petId            String
+  pet              Pet               @relation(fields: [petId], references: [id])
+  status           ApplicationStatus @default(SUBMITTED)
+  
+  // --- Section A: Contact Information ---
+  fullName         String
+  phone            String            // Đổi từ phoneNumber sang phone cho khớp UI
+  zalo             String
+  adoptFor         String            // Myself / Someone else
+  
+  // --- Section B: Living Conditions ---
+  location         String            // Đổi từ address sang location
+  housing          String            // Loại nhà ở (Apartment, House...)
+  children         String            // Có trẻ em không (Yes/No)
+  cage             String            // Nhốt chuồng không (Yes/No/Sometimes)
+  
+  // --- Section C & D: Experience & Employment ---
+  petExperience    String            // Yes/No/Still living...
+  prevPetHistory   String            @db.Text // @db.Text cho phép lưu chuỗi dài (tuỳ chọn tuỳ DB bạn dùng, hoặc để String)
+  employmentStatus String
+  
+  // --- Section E: Adoption Commitment ---
+  adoptionReason   String
+  commitments      Json              // Lưu các giá trị (vaccine, medical, expenses, updateStatus, homeVisit, provideID)
+
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@unique([userId, petId])
+}
+
+enum ApplicationStatus {
+  SUBMITTED
+  PENDING
+  NEED_MORE_INFO
+  ADOPTION_COMPLETED
+  CLOSED
 }
 
 model PetImage {
