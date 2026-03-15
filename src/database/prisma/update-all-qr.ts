@@ -1,9 +1,8 @@
 import { PrismaClient, VerificationStatus } from '@prisma/client';
-import { randomUUID } from 'crypto'; // Import hàm tạo UUID chuẩn của Node.js
+import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
 
-// Hàm kiểm tra xem chuỗi có phải là UUID hợp lệ không
 const isUUID = (str: string) => 
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
@@ -15,7 +14,10 @@ async function main() {
   for (const pet of allPets) {
     const existingTags = await prisma.tag.findMany({ where: { petId: pet.id } });
 
-    // 1. Xóa các Tag bị lỗi định dạng (ví dụ: 'luna-lost-tag-id')
+    // SỬA LỖI Ở ĐÂY: Kiểm tra trạng thái LOST từ các Tag cũ thay vì từ pet.status
+    const isCurrentlyLost = existingTags.some(tag => tag.status === 'LOST');
+
+    // 1. Xóa các Tag bị lỗi định dạng
     const invalidTags = existingTags.filter(tag => !isUUID(tag.id));
     if (invalidTags.length > 0) {
       await prisma.tag.deleteMany({
@@ -26,12 +28,10 @@ async function main() {
     // 2. Nếu Pet chưa có Tag chuẩn UUID, tiến hành tạo mới
     const hasValidTag = existingTags.some(tag => isUUID(tag.id));
     if (!hasValidTag) {
-      const newUuidTag = randomUUID(); // TẠO MÃ UUID CHUẨN
+      const newUuidTag = randomUUID(); 
       
-      // Tạo URL mã QR chứa UUID mới
       const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=pawlife://tag/${newUuidTag}`;
 
-      // Cập nhật lại Pet với URL ảnh QR mới
       await prisma.pet.update({
         where: { id: pet.id },
         data: {
@@ -40,11 +40,11 @@ async function main() {
         }
       });
 
-      // Tạo thẻ Tag chuẩn
+      // Tạo thẻ Tag chuẩn và giữ nguyên trạng thái đi lạc (nếu có)
       await prisma.tag.create({
         data: {
           id: newUuidTag,
-          status: pet.status === 'LOST' ? 'LOST' : 'ACTIVE',
+          status: isCurrentlyLost ? 'LOST' : 'ACTIVE',
           petId: pet.id
         }
       });
