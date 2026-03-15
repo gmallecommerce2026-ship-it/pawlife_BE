@@ -5,27 +5,48 @@ import { CreateApplicationDto } from './dto/create-application.dto';
 @Injectable()
 export class ApplicationsService {
   constructor(private readonly prisma: PrismaService) {}
+
   async createApplication(userId: string, data: CreateApplicationDto) {
-    // 1. Kiểm tra xem user đã nộp đơn cho pet này chưa
-    const existingApp = await this.prisma.adoptionApplication.findFirst({
-      where: { userId, petId: data.petId },
-    });
-
-    if (existingApp) {
-      throw new BadRequestException('You have already applied for this pet.');
-    }
-
-    // 2. Tạo đơn đăng ký mới
-    const newApplication = await this.prisma.adoptionApplication.create({
-      data: {
+    // 1. Kiểm tra giới hạn 5 đơn đăng ký đang hoạt động
+    const activeApplicationsCount = await this.prisma.adoptionApplication.count({
+      where: {
         userId,
-        // Spread toàn bộ data từ DTO vào (fullName, phone, commitments,...)
-        ...data, 
+        status: {
+          // Các đơn KHÔNG thuộc 2 trạng thái này thì được tính là đang hoạt động
+          notIn: ['CLOSED', 'ADOPTION_COMPLETED'],
+        },
       },
     });
 
-    return newApplication;
+    if (activeApplicationsCount >= 5) {
+      throw new BadRequestException(
+        'Bạn đang có 5 đơn đăng ký đang chờ xử lý. Vui lòng đợi kết quả hoặc đóng các đơn cũ trước khi gửi đơn mới.'
+      );
+    }
+
+    // 2. Kiểm tra trùng lặp (User nộp nhiều đơn cho cùng 1 pet)
+    const existingApp = await this.prisma.adoptionApplication.findFirst({
+      where: { 
+        userId, 
+        petId: data.petId,
+        status: { not: 'CLOSED' } // Cho phép nộp lại nếu đơn trước đó cho pet này đã bị CLOSED
+      },
+    });
+
+    if (existingApp) {
+      throw new BadRequestException('Bạn đã gửi đơn đăng ký cho thú cưng này rồi.');
+    }
+
+    // 3. Tạo đơn mới
+    return await this.prisma.adoptionApplication.create({
+      data: {
+        userId,
+        ...data,
+        status: 'SUBMITTED', // Trạng thái mặc định khi mới tạo
+      },
+    });
   }
+
   async getMyApplications(userId: string) {
     const applications = await this.prisma.adoptionApplication.findMany({
       where: { userId },
@@ -34,7 +55,7 @@ export class ApplicationsService {
           select: {
             name: true,
             breed: true,
-            images: true, // Điều chỉnh field ảnh tùy theo schema Pet của bạn
+            images: true, 
           },
         },
       },
