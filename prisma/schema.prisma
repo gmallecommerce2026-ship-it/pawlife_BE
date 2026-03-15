@@ -367,6 +367,7 @@ enum NotificationType {
   PASSWORD
   FEATURE
   EVENT
+  TAG_SCANNED
 }
 // 4. Thông báo (Notifications)
 model Notification {
