@@ -17,6 +17,7 @@ import { EventsModule } from './modules/events/events.module';
 import { TagsModule } from './modules/tags/tags.module';
 import { PawcareModule } from './modules/pawcare/pawcare.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ApplicationsModule } from './modules/applications/applications.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -83,7 +84,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     EventsModule,
     TagsModule,
     PawcareModule,
-    NotificationsModule
+    NotificationsModule,
+    ApplicationsModule
   ],
   controllers: [AppController],
   providers: [AppService],
