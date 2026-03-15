@@ -8,15 +8,25 @@ import { CreateApplicationDto } from './dto/create-application.dto';
 @UseGuards(JwtAuthGuard)
 export class ApplicationsController {
   constructor(private readonly applicationsService: ApplicationsService) {}
+
   @Post()
   async createApplication(
     @User('id') userId: string,
     @Body() createApplicationDto: CreateApplicationDto,
   ) {
-    console.log("application created!");
     const data = await this.applicationsService.createApplication(userId, createApplicationDto);
     return { success: true, data };
   }
+
+  // 1. ĐẶT ROUTE TĨNH LÊN TRƯỚC
+  @Get('my-applications')
+  async getMyApplications(@User('id') userId: string) {
+    console.log("getting my applications!");
+    const data = await this.applicationsService.getMyApplications(userId);
+    return { success: true, data };
+  }
+
+  // 2. ĐẶT ROUTE ĐỘNG (CÓ PARAM :id) XUỐNG CUỐI CÙNG
   @Get(':id')
   async getApplicationById(
     @User('id') userId: string,
@@ -24,13 +34,6 @@ export class ApplicationsController {
   ) {
     console.log(`Getting application detail for id: ${applicationId}`);
     const data = await this.applicationsService.getApplicationById(userId, applicationId);
-    return { success: true, data };
-  }
-  @Get('my-applications')
-  async getMyApplications(@User('id') userId: string) {
-    
-    console.log("getting application!");
-    const data = await this.applicationsService.getMyApplications(userId);
     return { success: true, data };
   }
 }
