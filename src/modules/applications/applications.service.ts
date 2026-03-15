@@ -87,4 +87,29 @@ export class ApplicationsService {
 
     return application;
   }
+
+  async withdrawApplication(userId: string, applicationId: string) {
+    // Kiểm tra xem đơn có tồn tại và thuộc về user đang đăng nhập không
+    const application = await this.prisma.adoptionApplication.findFirst({
+      where: { 
+        id: applicationId,
+        userId: userId 
+      },
+    });
+
+    if (!application) {
+      throw new NotFoundException('Không tìm thấy đơn đăng ký nhận nuôi này!');
+    }
+
+    // Không cho phép rút đơn nếu đã đóng hoặc đã hoàn thành
+    if (application.status === 'CLOSED' || application.status === 'ADOPTION_COMPLETED') {
+      throw new BadRequestException('Không thể thu hồi đơn đăng ký ở trạng thái này!');
+    }
+
+    // Cập nhật trạng thái thành CLOSED
+    return await this.prisma.adoptionApplication.update({
+      where: { id: applicationId },
+      data: { status: 'CLOSED' },
+    });
+  }
 }
