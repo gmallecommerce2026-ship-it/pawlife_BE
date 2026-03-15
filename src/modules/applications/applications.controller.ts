@@ -13,11 +13,14 @@ export class ApplicationsController {
     @User('id') userId: string,
     @Body() createApplicationDto: CreateApplicationDto,
   ) {
+    console.log("application created!");
     const data = await this.applicationsService.createApplication(userId, createApplicationDto);
     return { success: true, data };
   }
   @Get('my-applications')
   async getMyApplications(@User('id') userId: string) {
+    
+    console.log("getting application!");
     const data = await this.applicationsService.getMyApplications(userId);
     return { success: true, data };
   }
