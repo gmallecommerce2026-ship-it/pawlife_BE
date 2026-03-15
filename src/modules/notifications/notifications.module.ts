@@ -10,6 +10,6 @@ import { DatabaseModule } from '../../database/database.module';
   imports: [DatabaseModule],
   controllers: [NotificationsController],
   providers: [NotificationsService, NotificationsGateway],
-  exports: [NotificationsService], // Export để các service khác inject được
+  exports: [NotificationsService, NotificationsGateway],
 })
 export class NotificationsModule {}
