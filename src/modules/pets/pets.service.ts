@@ -4,13 +4,21 @@ import { SwipePetDto } from './dto/swipe-pet.dto';
 import { PetGender, PetSize, Prisma, NotificationType } from '@prisma/client';
 import { CreatePetDto } from './dto/create-pet.dto';
 import { NotificationsService } from '../notifications/notifications.service';
-
+import { TagStatus } from '@prisma/client';
 export interface FeedFilters {
   gender?: PetGender;
   size?: PetSize;
   species?: string;
 }
-
+const ownerSelectQuery = {
+  select: {
+    id: true,
+    fullName: true,
+    avatar: true,
+    phoneNumber: true, // Chỉ trả về khi cần thiết (ví dụ: pet đang bị thất lạc)
+    address: true,
+  },
+};
 @Injectable()
 export class PetsService {
   constructor(
@@ -429,6 +437,7 @@ export class PetsService {
     const pet = await this.prisma.pet.findUnique({
       where: { id },
       include: {
+        owner: ownerSelectQuery,
         images: {
           orderBy: { createdAt: 'asc' } // <--- THÊM DÒNG NÀY
         },
@@ -436,9 +445,6 @@ export class PetsService {
         shelter: {
           select: { id: true, name: true, contactInfo: true, address: true, avatarUrl: true }
         },
-        owner: {
-          select: { id: true, name: true, phone: true, avatarUrl: true }
-        }
       },
     });
 
@@ -469,7 +475,47 @@ export class PetsService {
       avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null,
     };
   }
+  async getPetByTagId(tagId: string) {
+    // 1. SỬA LỖI 1: Phải query từ bảng Tag, không query từ bảng Pet
+    const tag = await this.prisma.tag.findUnique({
+      where: { id: tagId }, 
+      include: {
+        pet: {
+          include: {
+            // 2. SỬA LỖI 3: Bắt buộc phải include owner thì TypeScript mới nhận diện được `pet.owner`
+            owner: {
+              select: {
+                id: true,
+                name: true,
+                avatarUrl: true,
+                phone: true, // Lấy đúng tên trường trong User schema
+              },
+            },
+          },
+        },
+      },
+    });
 
+    if (!tag || !tag.pet) {
+      throw new NotFoundException('Không tìm thấy thú cưng với mã thẻ này');
+    }
+
+    const pet = tag.pet;
+    
+    // 3. SỬA LỖI 2: Xác định trạng thái thất lạc từ bảng Tag, không lấy từ Pet
+    const isLost = tag.status === TagStatus.LOST;
+
+    // Logic bảo mật: Ẩn số điện thoại nếu thú cưng không ở trạng thái LOST
+    if (!isLost && pet.owner) {
+      pet.owner.phone = null;
+    }
+
+    // Trả về object gom chung data của pet, owner và cờ isLost để frontend dễ xử lý
+    return {
+      ...pet,
+      isLost: isLost, 
+    };
+  }
   async updatePet(userId: string, petId: string, updateData: any) {
     const pet = await this.prisma.pet.findUnique({
       where: { id: petId },
