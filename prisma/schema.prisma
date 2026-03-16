@@ -294,7 +294,11 @@ model Tag {
 // ==========================================
 // CÁC MODEL BỔ SUNG CHO TÍNH NĂNG DỰ ÁN
 // ==========================================
-
+enum TagReportStatus {
+  PENDING   // Đang chờ xử lý / Vừa quét
+  RESOLVED  // Đã tìm thấy / Đã giải quyết
+  ARCHIVED  // Lưu trữ (nếu cần)
+}
 // 1. Quét vòng cổ thông minh & Báo lạc
 model TagReport {
   id          String   @id @default(uuid())
@@ -305,6 +309,7 @@ model TagReport {
   latitude    Float? // Tọa độ GPS
   longitude   Float?
   message     String? // Lời nhắn từ người quét
+  status      TagReportStatus @default(PENDING)
   scannedAt   DateTime @default(now())
 }
 

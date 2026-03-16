@@ -51,6 +51,21 @@ export class TagsService {
 
     return report;
   }
+  async resolveTagReport(reportId: string) {
+    const report = await this.prisma.tagReport.findUnique({
+      where: { id: reportId },
+    });
+
+    if (!report) {
+      throw new NotFoundException('Không tìm thấy báo cáo quét thẻ này.');
+    }
+
+    // Cập nhật trạng thái thành RESOLVED thay vì xóa
+    return this.prisma.tagReport.update({
+      where: { id: reportId },
+      data: { status: 'RESOLVED' },
+    });
+  }
   async scanTag(tagId: string) {
     // 1. Tìm thông tin Tag và các liên kết liên quan
     const tag = await this.prisma.tag.findUnique({
@@ -73,16 +88,16 @@ export class TagsService {
     const pet = tag.pet;
     const isLost = tag.status === TagStatus.LOST;
 
-    // 2. Nếu thú cưng đang lạc, gửi thông báo cho chủ sở hữu
-    if (isLost && pet.ownerId) {
-      await this.notificationsService.createAndSendNotification({
-        userId: pet.ownerId,
-        title: '⚠️ Cảnh báo: Thú cưng bị quét mã!',
-        body: `Ai đó vừa quét mã QR trên vòng cổ của bé ${pet.name}. Hãy kiểm tra thông tin liên hệ ngay!`,
-        type: NotificationType.TAG,
-        referenceId: tag.id,
-      });
-    }
+    // // 2. Nếu thú cưng đang lạc, gửi thông báo cho chủ sở hữu
+    // if (isLost && pet.ownerId) {
+    //   await this.notificationsService.createAndSendNotification({
+    //     userId: pet.ownerId,
+    //     title: '⚠️ Cảnh báo: Thú cưng bị quét mã!',
+    //     body: `Ai đó vừa quét mã QR trên vòng cổ của bé ${pet.name}. Hãy kiểm tra thông tin liên hệ ngay!`,
+    //     type: NotificationType.TAG,
+    //     referenceId: tag.id,
+    //   });
+    // }
 
     // 3. Định dạng dữ liệu trả về cho Frontend
     return {

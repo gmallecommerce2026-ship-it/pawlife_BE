@@ -16,4 +16,9 @@ export class TagsController {
   async createReport(@Body() createTagReportDto: CreateTagReportDto) {
     return this.tagsService.createTagReport(createTagReportDto);
   }
+
+  @Patch('report/:id/resolve')
+  async resolveReport(@Param('id') id: string) {
+    return this.tagsService.resolveTagReport(id);
+  }
 }
