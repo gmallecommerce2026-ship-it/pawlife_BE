@@ -85,16 +85,6 @@ export class NotificationsService {
             },
           });
           break;
-        case 'TAG':
-          detailData = await this.prisma.tagReport.findUnique({
-            where: { id: notification.referenceId },
-            include: {
-              tag: {
-                include: { pet: true },
-              },
-            },
-          });
-          break;
 
         case 'EVENT':
           detailData = await this.prisma.event.findUnique({
