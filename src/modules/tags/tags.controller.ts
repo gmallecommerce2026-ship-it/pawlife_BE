@@ -1,5 +1,5 @@
 // src/modules/tags/tags.controller.ts
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { TagsService } from './tags.service';
 import { CreateTagReportDto } from './dto/create-tag-report.dto';
 
