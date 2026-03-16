@@ -13,10 +13,9 @@ export interface FeedFilters {
 const ownerSelectQuery = {
   select: {
     id: true,
-    fullName: true,
-    avatar: true,
-    phoneNumber: true, // Chỉ trả về khi cần thiết (ví dụ: pet đang bị thất lạc)
-    address: true,
+    name: true,       // Đã sửa thành name
+    avatarUrl: true,  // Đã sửa thành avatarUrl
+    phone: true,// Chỉ trả về khi cần thiết (ví dụ: pet đang bị thất lạc)
   },
 };
 @Injectable()
