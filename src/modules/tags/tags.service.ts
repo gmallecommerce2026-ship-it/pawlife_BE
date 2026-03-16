@@ -94,12 +94,12 @@ export class TagsService {
       status: isLost ? 'lost' : 'safe',
       image: pet.images && pet.images.length > 0 ? pet.images[0].url : 'https://via.placeholder.com/600',
       
-      // Chỉ trả về object owner nếu trạng thái là LOST (Đi lạc)
-      owner: isLost && pet.owner ? {
-        name: pet.owner.name || 'Người dùng ẩn danh',
-        phone: pet.owner.phone || 'Chưa cung cấp số điện thoại',
-        // Trong bảng User hiện không có trường address, có thể để mặc định hoặc thêm vào schema sau
-        address: 'Vui lòng gọi điện để biết vị trí', 
+      // Cập nhật phần owner: Ưu tiên contact info của Pet, fallback về User info
+      owner: isLost ? {
+        name: pet.contactName || pet.owner?.name || 'Người dùng ẩn danh',
+        phone: pet.contactPhone || pet.owner?.phone || 'Chưa cung cấp số điện thoại',
+        address: pet.contactAddress || 'Chưa cập nhật địa chỉ', 
+        avatarUrl: pet.owner?.avatarUrl || null,
       } : null,
     };
   }
