@@ -75,6 +75,16 @@ export class NotificationsService {
     // 2. Tùy thuộc vào type mà query bảng tương ứng bằng referenceId
     if (notification.referenceId) {
       switch (notification.type) {
+        case 'TAG_SCANNED': // ĐỔI TÊN CASE Ở ĐÂY (Từ 'TAG' thành 'TAG_SCANNED')
+          detailData = await this.prisma.tagReport.findUnique({
+            where: { id: notification.referenceId },
+            include: {
+              tag: {
+                include: { pet: true },
+              },
+            },
+          });
+          break;
         case 'TAG':
           detailData = await this.prisma.tagReport.findUnique({
             where: { id: notification.referenceId },

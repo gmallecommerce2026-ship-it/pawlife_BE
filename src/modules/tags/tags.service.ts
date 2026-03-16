@@ -39,9 +39,9 @@ export class TagsService {
         data: {
           userId: pet.ownerId,
           title: 'Thú cưng của bạn đã được tìm thấy!',
-          body: notificationContent, // Đổi từ 'content' thành 'body'
-          type: 'TAG',               // Cập nhật giá trị khớp với enum NotificationType
-          referenceId: report.id,    // Đổi từ 'relatedId' thành 'referenceId'
+          body: notificationContent, 
+          type: 'TAG_SCANNED',       // ĐỔI TYPE Ở ĐÂY (từ 'TAG' thành 'TAG_SCANNED')
+          referenceId: report.id,    
         },
       });
 
