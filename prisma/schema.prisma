@@ -195,6 +195,10 @@ model Pet {
   contactName      String?
   contactPhone     String?
   contactAddress   String?
+  
+  traits           String?  @db.Text // Đặc điểm tính cách chi tiết
+  idealHome        String?  @db.Text // Ngôi nhà lý tưởng
+  personalityTags  Json?
 
   vaccinationRecordUrl  String?
   vetVerificationStatus VerificationStatus @default(PENDING)

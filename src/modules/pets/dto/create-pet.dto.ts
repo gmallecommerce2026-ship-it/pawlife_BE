@@ -76,4 +76,17 @@ export class CreatePetDto {
   @IsString()
   @IsOptional()
   qrCodeUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  traits?: string;
+
+  @IsOptional()
+  @IsString()
+  idealHome?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  personalityTags?: string[];
 }
