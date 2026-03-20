@@ -39,6 +39,7 @@ export class PetsService {
           p.*, 
           s.name as shelterName, 
           s.avatarUrl as shelterAvatarUrl,
+          s.address as shelterAddress,
           (6371 * acos(
             cos(radians(${lat})) * cos(radians(s.latitude)) * cos(radians(s.longitude) - radians(${lng})) + 
             sin(radians(${lat})) * sin(radians(s.latitude))
@@ -63,6 +64,7 @@ export class PetsService {
             p.*, 
             s.name as shelterName, 
             s.avatarUrl as shelterAvatarUrl,
+            s.address as shelterAddress,
             (6371 * acos(
               cos(radians(${lat})) * cos(radians(s.latitude)) * cos(radians(s.longitude) - radians(${lng})) + 
               sin(radians(${lat})) * sin(radians(s.latitude))
@@ -97,7 +99,8 @@ export class PetsService {
           images: petImages,
           shelter: {
             name: pet.shelterName,
-            avatarUrl: pet.shelterAvatarUrl
+            avatarUrl: pet.shelterAvatarUrl,
+            address: pet.shelterAddress
           },
           distance: `${Number(pet.distance_km).toFixed(1)} km`,
           distance_km: undefined,
@@ -128,7 +131,7 @@ export class PetsService {
         images: {
           orderBy: { createdAt: 'asc' } 
         },
-        shelter: { select: { name: true, avatarUrl: true } }
+        shelter: { select: { name: true, avatarUrl: true, address: true } }
       }
   });
 
@@ -147,7 +150,7 @@ export class PetsService {
         take: limit,
         include: {
           images: { orderBy: { createdAt: 'asc' } }, // <--- THÊM DÒNG NÀY
-          shelter: { select: { name: true, avatarUrl: true } }
+          shelter: { select: { name: true, avatarUrl: true, address: true } }
         }
       });
     }
