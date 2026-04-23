@@ -358,14 +358,22 @@ export class PetsService {
         include: {
           images: {
             orderBy: { createdAt: 'asc' },
-          }
+          },
+          // 1. THÊM DÒNG NÀY ĐỂ LẤY THÔNG TIN VÒNG CỔ
+          tags: true, 
         },
       });
 
-      return pets.map((pet) => ({
-        ...pet,
-        avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null,
-      }));
+      return pets.map((pet) => {
+        // 2. KIỂM TRA XEM CÓ THẺ NÀO ĐANG BÁO LẠC KHÔNG
+        const isLost = pet.tags?.some((tag: any) => tag.status === 'LOST') || false;
+
+        return {
+          ...pet,
+          avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null,
+          isLost, // 3. TRẢ VỀ CỜ NÀY CHO FRONTEND
+        };
+      });
     } catch (error) {
       throw new InternalServerErrorException('Lỗi khi lấy danh sách thú cưng của người dùng');
     }
@@ -423,7 +431,7 @@ export class PetsService {
           orderBy: { createdAt: 'asc' } // <--- THÊM DÒNG NÀY
         },
         shelter: {
-          select: { id: true, name: true, avatarUrl: true }
+          select: { id: true, address: true, name: true, avatarUrl: true }
         }
       },
       orderBy: {  }
