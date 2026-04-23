@@ -9,7 +9,10 @@ async function main() {
   await prisma.eventImage.deleteMany();
   await prisma.eventInterest.deleteMany();
   await prisma.event.deleteMany();
-  
+  await prisma.tagReport.deleteMany(); // Phải xóa TagReport trước khi xóa Tag
+  await prisma.tag.deleteMany();  
+  await prisma.adoptionApplication.deleteMany();
+  await prisma.adoptionRequest.deleteMany();  
   await prisma.petImage.deleteMany();
   await prisma.petInteraction.deleteMany();
   await prisma.favoritePet.deleteMany();
