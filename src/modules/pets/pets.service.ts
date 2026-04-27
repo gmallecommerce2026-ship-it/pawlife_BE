@@ -288,22 +288,38 @@ export class PetsService {
   }
 
   async requestTransfer(petId: string, payload: { email?: string; phone?: string }, senderId: string) {
-    // 1. Tìm người nhận
+    // 1. Kiểm tra đầu vào hợp lệ
+    if (!payload.email && !payload.phone) {
+      throw new BadRequestException('Vui lòng cung cấp email hoặc số điện thoại người nhận');
+    }
+
+    // 2. Build điều kiện OR linh hoạt
+    const orConditions: any[] = [];
+    if (payload.email) orConditions.push({ email: payload.email });
+    if (payload.phone) orConditions.push({ phone: payload.phone });
+
+    // 3. Tìm người nhận
     const receiver = await this.prisma.user.findFirst({
       where: {
-        OR: [{ email: payload.email }, { phone: payload.phone }],
+        OR: orConditions,
       },
     });
 
-    if (!receiver) throw new NotFoundException('Không tìm thấy người dùng này');
-    if (receiver.id === senderId) throw new BadRequestException('Không thể tự chuyển nhượng cho mình');
+    if (!receiver) {
+      throw new NotFoundException('Hệ thống không tìm thấy người dùng với thông tin liên lạc này.');
+    }
+    
+    if (receiver.id === senderId) {
+      throw new BadRequestException('Không thể tự chuyển nhượng thú cưng cho chính mình.');
+    }
 
+    // Xóa các request PENDING cũ
     await this.prisma.transferRequest.updateMany({
       where: { petId, status: 'PENDING' },
       data: { status: 'CANCELED' },
     });
 
-    // 2. Tạo record Transfer Request trong DB
+    // 4. Tạo record Transfer Request trong DB
     const transferRequest = await this.prisma.transferRequest.create({
       data: { petId, senderId, receiverId: receiver.id, status: 'PENDING' },
     });
@@ -312,7 +328,7 @@ export class PetsService {
       userId: receiver.id,
       title: '🎁 Yêu cầu chuyển nhượng mới',
       body: `Bạn nhận được yêu cầu nhận nuôi từ chủ cũ của thú cưng.`,
-      type: NotificationType.SYSTEM, // Hoặc định nghĩa loại riêng
+      type: NotificationType.SYSTEM,
       referenceId: petId,
     });
 
