@@ -9,6 +9,31 @@ import { NotificationsGateway } from '../notifications/notifications.gateway';
 @Injectable()
 export class TagsService {
   constructor(private prisma: PrismaService, private notificationsService: NotificationsService, private readonly notificationsGateway: NotificationsGateway) {}
+  
+  async getTagReportDetail(id: string) {
+    const report = await this.prisma.tagReport.findUnique({
+      where: { id },
+      include: {
+        tag: {
+          include: {
+            pet: {
+              include: {
+                owner: true,
+                images: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!report) {
+      throw new NotFoundException('Không tìm thấy báo cáo quét thẻ này.');
+    }
+
+    return report;
+  }
+  
   async createTagReport(data: CreateTagReportDto) {
     const { tagId, ...reportData } = data;
 
