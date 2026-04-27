@@ -525,16 +525,14 @@ export class PetsService {
           where: { status: 'PENDING' },
           include: {
             receiver: {
-              select: { email: true, phone: true }
+              select: { id: true, name: true, email: true, phone: true, avatarUrl: true }
             }
           }
         }
       },
     });
 
-    if (!pet) {
-      throw new NotFoundException('Không tìm thấy thông tin thú cưng này!');
-    }
+    if (!pet) throw new NotFoundException('Không tìm thấy thông tin thú cưng này!');
 
     let formattedShelter: any = null;
     if (pet.shelter) {
@@ -561,6 +559,10 @@ export class PetsService {
       avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null,
       transferStatus: pendingTransfer ? pendingTransfer.status : null,
       pendingContact: pendingTransfer ? (pendingTransfer.receiver.email || pendingTransfer.receiver.phone) : null,
+      transferRequestId: pendingTransfer ? pendingTransfer.id : null,
+      receiverId: pendingTransfer ? pendingTransfer.receiverId : null,
+      senderId: pendingTransfer ? pendingTransfer.senderId : null,
+      receiver: pendingTransfer ? pendingTransfer.receiver : null,
     };
   }
   async getPetByTagId(tagId: string) {
@@ -609,7 +611,8 @@ export class PetsService {
       where: { 
         petId: petId, 
         senderId: userId, 
-        status: 'PENDING' 
+        status: 'PENDING',
+        OR: [{ senderId: userId }, { receiverId: userId }]
       },
     });
 
