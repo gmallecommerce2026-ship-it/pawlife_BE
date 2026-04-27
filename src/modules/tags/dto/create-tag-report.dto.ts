@@ -1,5 +1,5 @@
 // src/modules/tags/dto/create-tag-report.dto.ts
-import { IsString, IsOptional, IsNumber, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsNotEmpty } from 'class-validator';
 
 export class CreateTagReportDto {
   @IsString()
