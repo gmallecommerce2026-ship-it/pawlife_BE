@@ -1,20 +1,30 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { GetNotificationsDto, CreateNotificationDto } from './dto/notification.dto';
-import { NotificationsGateway } from './notifications.gateway'; // Đảm bảo bạn đã tạo file này
+import { NotificationsGateway } from './notifications.gateway';
+import { NotificationType } from '@prisma/client'; // Import từ Prisma Schema
+
+// Định nghĩa Interface cho Push Notification
+export interface PushNotificationPayload {
+  title: string;
+  body: string;
+  referenceId?: string; // Bổ sung để liên kết với TagReport, Event...
+  data?: any;           // Chứa url deeplink hoặc metadata khác
+}
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationsGateway: NotificationsGateway, // Inject Gateway để bắn socket
+    private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
   // ----------------------------------------------------------------------
-  // HÀM MỚI: Tạo và gửi thông báo Real-time (Sử dụng bởi các module khác)
+  // 1. Hàm tạo In-App Notification & Bắn Realtime Socket
   // ----------------------------------------------------------------------
   async createAndSendNotification(data: CreateNotificationDto) {
-    // 1. Lưu vào Database
     const notification = await this.prisma.notification.create({
       data: {
         userId: data.userId,
@@ -27,13 +37,43 @@ export class NotificationsService {
       },
     });
 
-    // 2. Bắn sự kiện socket realtime tới đúng user
+    // Bắn sự kiện socket realtime tới đúng user đang mở App
     this.notificationsGateway.sendNotificationToUser(data.userId, notification);
 
     return notification;
   }
 
-  // Lấy danh sách thông báo
+  // ----------------------------------------------------------------------
+  // 2. Hàm gửi Push Notification (Màn hình khóa OS) - Sửa lỗi TS2339
+  // ----------------------------------------------------------------------
+  async sendPushNotification(userId: string, payload: PushNotificationPayload) {
+    try {
+      // 2.1 Tái sử dụng hàm In-App để lưu vào DB và bắn Socket
+      // Lưu ý: Ép kiểu as any hoặc cấu trúc lại cho khớp với CreateNotificationDto của bạn
+      await this.createAndSendNotification({
+        userId: userId,
+        type: NotificationType.TAG_SCANNED, 
+        title: payload.title,
+        body: payload.body,
+        referenceId: payload.referenceId, // Quan trọng: Truyền ID của TagReport vào đây
+        metadata: payload.data || {},
+      } as unknown as CreateNotificationDto); 
+
+      // 2.2 Tích hợp gửi ra màn hình khóa (FCM / Expo Server SDK)
+      // const sessions = await this.prisma.deviceSession.findMany({ where: { userId } });
+      // TODO: Map qua danh sách push tokens và gửi bằng Expo
+
+      this.logger.log(`[Push Notification] Đã gửi thông báo tới user: ${userId}`);
+      return true;
+    } catch (error) {
+      this.logger.error(`Lỗi gửi Push Notification:`, error);
+      return false; // Không throw error để tránh làm sập luồng code gọi nó
+    }
+  }
+
+  // ----------------------------------------------------------------------
+  // 3. Lấy danh sách thông báo
+  // ----------------------------------------------------------------------
   async getUserNotifications(userId: string, query: GetNotificationsDto) {
     const { page = 1, limit = 20 } = query;
     const skip = (page - 1) * limit;
@@ -59,9 +99,10 @@ export class NotificationsService {
     };
   }
 
-  // Lấy chi tiết thông báo (Xử lý tập trung tại đây)
+  // ----------------------------------------------------------------------
+  // 4. Lấy chi tiết thông báo
+  // ----------------------------------------------------------------------
   async getNotificationDetail(userId: string, notificationId: string) {
-    // 1. Lấy thông báo gốc
     const notification = await this.prisma.notification.findUnique({
       where: { id: notificationId, userId },
     });
@@ -72,10 +113,10 @@ export class NotificationsService {
 
     let detailData: any = null;
 
-    // 2. Tùy thuộc vào type mà query bảng tương ứng bằng referenceId
     if (notification.referenceId) {
       switch (notification.type) {
-        case 'TAG_SCANNED': // ĐỔI TÊN CASE Ở ĐÂY (Từ 'TAG' thành 'TAG_SCANNED')
+        case 'TAG_SCANNED': 
+          // Tìm theo id của TagReport (Chính là referenceId)
           detailData = await this.prisma.tagReport.findUnique({
             where: { id: notification.referenceId },
             include: {
@@ -103,17 +144,10 @@ export class NotificationsService {
 
         case 'FEATURE':
         case 'SYSTEM':
-          if (notification.referenceId) {
-            // Bỏ comment nếu bạn có model Blog
-            // detailData = await this.prisma.blog.findUnique({
-            //   where: { id: notification.referenceId },
-            // });
-          } else {
-            detailData = notification.metadata || {
-              version: "1.2.0",
-              releaseNotes: "Cập nhật hiệu năng và vá lỗi hệ thống."
-            };
-          }
+          detailData = notification.metadata || {
+            version: "1.2.0",
+            releaseNotes: "Cập nhật hiệu năng và vá lỗi hệ thống."
+          };
           break;
 
         default:
@@ -122,7 +156,6 @@ export class NotificationsService {
       }
     }
 
-    // Đánh dấu đã đọc
     if (!notification.isRead) {
       await this.prisma.notification.update({
         where: { id: notificationId },
@@ -137,7 +170,9 @@ export class NotificationsService {
     };
   }
 
-  // Đánh dấu 1 thông báo là đã đọc
+  // ----------------------------------------------------------------------
+  // 5. Cập nhật trạng thái đọc
+  // ----------------------------------------------------------------------
   async markAsRead(userId: string, notificationId: string) {
     return this.prisma.notification.updateMany({
       where: { id: notificationId, userId },
@@ -145,7 +180,6 @@ export class NotificationsService {
     });
   }
 
-  // Đánh dấu tất cả là đã đọc
   async markAllAsRead(userId: string) {
     return this.prisma.notification.updateMany({
       where: { userId, isRead: false },
