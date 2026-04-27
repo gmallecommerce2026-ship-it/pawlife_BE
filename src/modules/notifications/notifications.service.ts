@@ -168,7 +168,46 @@ export class NotificationsService {
       detail: detailData,
     };
   }
+  // ----------------------------------------------------------------------
+  // 1.5. Hàm thông báo cho chủ sở hữu khi thú cưng được quét
+  // ----------------------------------------------------------------------
+  async notifyOwner(report: any) {
+    try {
+      // 1. Lấy thông tin chủ sở hữu từ report
+      // Giả định cấu trúc: report.tag.pet.ownerId
+      const ownerId = report.tag?.pet?.ownerId;
+      const petName = report.tag?.pet?.name || 'thú cưng';
 
+      if (!ownerId) {
+        this.logger.warn(`[notifyOwner] Không tìm thấy ownerId cho report: ${report.id}`);
+        return;
+      }
+
+      // 2. Tạo nội dung thông báo tùy theo bán kính (radius)
+      const isPrecise = report.radius <= 5;
+      const title = '📍 Vị trí mới của thú cưng!';
+      const body = isPrecise
+        ? `Ai đó vừa tìm thấy ${petName} tại vị trí chính xác của họ.`
+        : `Ai đó vừa chia sẻ khu vực nghi vấn của ${petName} trong bán kính ${report.radius}m.`;
+
+      // 3. Gọi hàm sendPushNotification đã có của bạn
+      // Hàm này sẽ tự động lưu vào DB và bắn Socket realtime
+      await this.sendPushNotification(ownerId, {
+        title,
+        body,
+        referenceId: report.id, // ID của TagReport để FE điều hướng
+        data: {
+          type: 'TAG_SCANNED',
+          reportId: report.id,
+          petName: petName,
+        }
+      });
+
+      this.logger.log(`[notifyOwner] Đã gửi thông báo cho chủ sở hữu ${ownerId} về report ${report.id}`);
+    } catch (error) {
+      this.logger.error(`[notifyOwner] Lỗi khi xử lý thông báo chủ sở hữu:`, error);
+    }
+  }
   // ----------------------------------------------------------------------
   // 5. Cập nhật trạng thái đọc
   // ----------------------------------------------------------------------
