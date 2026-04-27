@@ -21,7 +21,7 @@ export class TagsService {
       include: {
         tag: {
           include: {
-            pet: true, // Lấy thông tin thú cưng để biết ai là chủ
+            pet: true,
           },
         },
       },
@@ -34,18 +34,24 @@ export class TagsService {
         reportData.message ? `Lời nhắn: "${reportData.message}"` : ''
       }`;
 
-      // Lưu notification vào DB (Giả định có bảng Notification)
+      // Bổ sung metadata chứa tọa độ để khi nhấn vào thông báo có thể route chuẩn xác
       const notification = await this.prisma.notification.create({
         data: {
           userId: pet.ownerId,
           title: 'Thú cưng của bạn đã được tìm thấy!',
           body: notificationContent, 
-          type: 'TAG_SCANNED',       // ĐỔI TYPE Ở ĐÂY (từ 'TAG' thành 'TAG_SCANNED')
+          type: 'TAG_SCANNED',
           referenceId: report.id,    
+          metadata: {
+            lat: reportData.lat,
+            lng: reportData.lng,
+            radius: reportData.radius,
+            reportId: report.id
+          }
         },
       });
 
-      // Đẩy thông báo realtime qua Socket.io về app của người chủ
+      // Đẩy thông báo realtime
       this.notificationsGateway.sendNotificationToUser(pet.ownerId, notification);
     }
 

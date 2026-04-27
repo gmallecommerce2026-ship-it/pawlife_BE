@@ -14,6 +14,21 @@ export class CreateTagReportDto {
   @IsString()
   phoneNumber?: string;
 
+  // Đổi latitude thành lat
+  @IsOptional()
+  @IsNumber()
+  lat?: number; 
+
+  // Đổi longitude thành lng
+  @IsOptional()
+  @IsNumber()
+  lng?: number; 
+
+  // Bổ sung thêm radius
+  @IsOptional()
+  @IsNumber()
+  radius?: number;
+
   @IsOptional()
   @IsNumber()
   latitude?: number;
