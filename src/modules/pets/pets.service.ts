@@ -300,19 +300,21 @@ export class PetsService {
 
     // 2. Tạo record Transfer Request trong DB
     const transferRequest = await this.prisma.transferRequest.create({
-      data: {
-        petId,
-        senderId,
-        receiverId: receiver.id,
-        status: 'PENDING',
-      },
+      data: { petId, senderId, receiverId: receiver.id, status: 'PENDING' },
     });
 
-    // 3. Bắn Socket thông báo cho người nhận để hiện popup confirm
+    await this.notificationsService.createAndSendNotification({
+      userId: receiver.id,
+      title: '🎁 Yêu cầu chuyển nhượng mới',
+      body: `Bạn nhận được yêu cầu nhận nuôi từ chủ cũ của thú cưng.`,
+      type: NotificationType.SYSTEM, // Hoặc định nghĩa loại riêng
+      referenceId: petId,
+    });
+
+    // Bắn Socket real-time
     this.notificationsGateway.server.to(`user_${receiver.id}`).emit('transfer_requested', {
       transferId: transferRequest.id,
       petId,
-      senderId,
     });
 
     return { success: true, message: 'Đã gửi yêu cầu' };
