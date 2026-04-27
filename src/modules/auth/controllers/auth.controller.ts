@@ -25,6 +25,12 @@ export class AuthController {
     return this.authService.resetPassword(resetPasswordDto);
   }
 
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  async getProfile(@User() user: any) {
+    return user; 
+  }
+
   @Post('change-password')
   @UseGuards(JwtAuthGuard) // Bắt buộc phải có token đăng nhập
   @HttpCode(HttpStatus.OK)
