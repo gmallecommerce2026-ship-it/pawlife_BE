@@ -40,14 +40,17 @@ export class TagsService {
     // 1. Lưu report vào database
     const report = await this.prisma.tagReport.create({
       data: {
-        tagId,
-        ...reportData,
+        tagId: tagId,
+        latitude: reportData.lat ?? reportData.latitude,    // Đảm bảo lấy đúng lat
+        longitude: reportData.lng ?? reportData.longitude,  // Đảm bảo lấy đúng lng
+        radius: reportData.radius,                          // Lưu thẳng radius vào db
+        scannedBy: reportData.scannedBy,
+        phoneNumber: reportData.phoneNumber,
+        message: reportData.message,
       },
       include: {
         tag: {
-          include: {
-            pet: true,
-          },
+          include: { pet: true },
         },
       },
     });
@@ -59,7 +62,6 @@ export class TagsService {
         reportData.message ? `Lời nhắn: "${reportData.message}"` : ''
       }`;
 
-      // Bổ sung metadata chứa tọa độ để khi nhấn vào thông báo có thể route chuẩn xác
       const notification = await this.prisma.notification.create({
         data: {
           userId: pet.ownerId,
@@ -68,15 +70,14 @@ export class TagsService {
           type: 'TAG_SCANNED',
           referenceId: report.id,    
           metadata: {
-            lat: reportData.lat,
-            lng: reportData.lng,
+            lat: reportData.lat ?? reportData.latitude,
+            lng: reportData.lng ?? reportData.longitude,
             radius: reportData.radius,
             reportId: report.id
           }
         },
       });
 
-      // Đẩy thông báo realtime
       this.notificationsGateway.sendNotificationToUser(pet.ownerId, notification);
     }
 
