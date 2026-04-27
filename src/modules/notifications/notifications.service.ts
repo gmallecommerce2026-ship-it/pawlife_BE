@@ -116,16 +116,15 @@ export class NotificationsService {
     if (notification.referenceId) {
       switch (notification.type) {
         case 'TAG_SCANNED': 
-          // Tìm theo id của TagReport (Chính là referenceId)
           detailData = await this.prisma.tagReport.findUnique({
-            where: { id: notification.referenceId },
-            include: {
-              tag: {
-                include: { pet: true },
-              },
+          where: { id: notification.referenceId },
+          include: {
+            tag: {
+              include: { pet: { include: { owner: true, images: true } } },
             },
-          });
-          break;
+          },
+        });
+        break;
 
         case 'EVENT':
           detailData = await this.prisma.event.findUnique({
