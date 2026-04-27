@@ -2,7 +2,8 @@
 import { IsString, IsOptional, IsNumber, IsUUID } from 'class-validator';
 
 export class CreateTagReportDto {
-  @IsUUID()
+  @IsString()
+  @IsNotEmpty()
   tagId: string;
 
   @IsOptional()
