@@ -298,6 +298,11 @@ export class PetsService {
     if (!receiver) throw new NotFoundException('Không tìm thấy người dùng này');
     if (receiver.id === senderId) throw new BadRequestException('Không thể tự chuyển nhượng cho mình');
 
+    await this.prisma.transferRequest.updateMany({
+      where: { petId, status: 'PENDING' },
+      data: { status: 'CANCELED' },
+    });
+
     // 2. Tạo record Transfer Request trong DB
     const transferRequest = await this.prisma.transferRequest.create({
       data: { petId, senderId, receiverId: receiver.id, status: 'PENDING' },
@@ -332,7 +337,16 @@ export class PetsService {
     // 1. Cập nhật chủ mới cho thú cưng
     await this.prisma.pet.update({
       where: { id: transferReq.petId },
-      data: { ownerId: receiverId }, // Chuyển sang chủ mới
+      data: { ownerId: receiverId }, 
+    });
+
+    await this.prisma.transferRequest.updateMany({
+      where: { 
+        petId: transferReq.petId, 
+        status: 'PENDING',
+        id: { not: transferId } // Chừa lại cái đang được confirm
+      },
+      data: { status: 'CANCELED' },
     });
 
     // 2. Cập nhật trạng thái Request
