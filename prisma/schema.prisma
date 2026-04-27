@@ -332,6 +332,7 @@ model TagReport {
   phoneNumber String? // Số điện thoại người quét để liên hệ lại
   latitude    Float? // Tọa độ GPS
   longitude   Float?
+  radius      Float?
   message     String? // Lời nhắn từ người quét
   status      TagReportStatus @default(PENDING)
   scannedAt   DateTime @default(now())
