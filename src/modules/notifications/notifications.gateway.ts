@@ -7,42 +7,50 @@ import {
 import { Server, Socket } from 'socket.io';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
-
+import { JwtService } from '@nestjs/jwt';
+import { Logger } from '@nestjs/common';
 @WebSocketGateway({
   cors: { origin: '*' },
-  namespace: '/notifications',
+  namespace: '/notifications', 
 })
 export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
+  
+  private logger = new Logger('NotificationsGateway');
 
-  // Lưu trữ map socketId -> userId (trong hệ thống lớn có thể dùng Redis)
-  private userSockets = new Map<string, string[]>();
+  // <-- Inject JwtService vào constructor
+  constructor(private readonly jwtService: JwtService) {}
 
   async handleConnection(client: Socket) {
-    // Authenticate client qua token (lấy từ handshake)
-    const token = client.handshake.auth.token || client.handshake.headers['authorization'];
-    if (!token) {
-      client.disconnect();
-      return;
-    }
-
     try {
-      // Decode token để lấy userId (Giả sử bạn có hàm decode hoặc gọi Auth service)
-      const userId = this.extractUserIdFromToken(token); 
+      const authHeader = client.handshake.auth.token || client.handshake.headers['authorization'];
+      if (!authHeader) {
+        throw new Error('No token provided');
+      }
+
+      // Xử lý token (cắt bỏ chữ 'Bearer ' nếu có)
+      const token = authHeader.replace('Bearer ', '');
       
-      // Join room theo userId để dễ broadcast
+      // Decode token để lấy userId
+      const payload = this.jwtService.verify(token); 
+      // Tùy vào payload bạn thiết kế ở AuthModule, thường là payload.id hoặc payload.sub
+      const userId = payload.id || payload.sub; 
+
       client.join(`user_${userId}`);
-      
-      console.log(`Client connected: ${client.id} - User: ${userId}`);
-    } catch (error) {
+      this.logger.log(`Client connected: ${client.id} - Joined room: user_${userId}`);
+    } catch (error: any) {
+      this.logger.error(`Connection failed: ${error.message}`);
       client.disconnect();
     }
   }
 
   handleDisconnect(client: Socket) {
-    console.log(`Client disconnected: ${client.id}`);
+    this.logger.log(`Client disconnected: ${client.id}`);
   }
+
+  // Lưu trữ map socketId -> userId (trong hệ thống lớn có thể dùng Redis)
+  private userSockets = new Map<string, string[]>();
 
   // Hàm phát event tới 1 user cụ thể
   sendNotificationToUser(userId: string, notification: any) {
