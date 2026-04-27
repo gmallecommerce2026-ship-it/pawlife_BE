@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, ParseIntPipe, DefaultValuePipe, Patch } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, ParseIntPipe, DefaultValuePipe, Patch, Req } from '@nestjs/common';
 import { PetsService } from './pets.service';
 import { SwipePetDto } from './dto/swipe-pet.dto';
 import { GetFavoritesDto } from './dto/get-favorites.dto';
