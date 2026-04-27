@@ -521,6 +521,14 @@ export class PetsService {
         shelter: {
           select: { id: true, name: true, contactInfo: true, address: true, avatarUrl: true }
         },
+        transferRequests: {
+          where: { status: 'PENDING' },
+          include: {
+            receiver: {
+              select: { email: true, phone: true }
+            }
+          }
+        }
       },
     });
 
@@ -544,11 +552,15 @@ export class PetsService {
       };
     }
 
+    const pendingTransfer = pet.transferRequests && pet.transferRequests.length > 0 ? pet.transferRequests[0] : null;
+
     return {
       ...pet,
       shelter: formattedShelter,
       owner: formattedOwner,
       avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null,
+      transferStatus: pendingTransfer ? pendingTransfer.status : null,
+      pendingContact: pendingTransfer ? (pendingTransfer.receiver.email || pendingTransfer.receiver.phone) : null,
     };
   }
   async getPetByTagId(tagId: string) {
@@ -591,6 +603,27 @@ export class PetsService {
       ...pet,
       isLost: isLost, 
     };
+  }
+  async cancelTransfer(petId: string, userId: string) {
+    const transferReq = await this.prisma.transferRequest.findFirst({
+      where: { 
+        petId: petId, 
+        senderId: userId, 
+        status: 'PENDING' 
+      },
+    });
+
+    if (!transferReq) {
+      throw new BadRequestException('Không tìm thấy yêu cầu chuyển nhượng nào đang chờ xử lý.');
+    }
+
+    // Cập nhật trạng thái thành CANCELED hoặc xóa luôn record (tùy nghiệp vụ)
+    await this.prisma.transferRequest.update({
+      where: { id: transferReq.id },
+      data: { status: 'CANCELED' },
+    });
+
+    return { success: true, message: 'Đã hủy yêu cầu chuyển nhượng.' };
   }
   async updatePet(userId: string, petId: string, updateData: any) {
     const pet = await this.prisma.pet.findUnique({

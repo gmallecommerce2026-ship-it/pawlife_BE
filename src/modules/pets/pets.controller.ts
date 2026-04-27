@@ -22,6 +22,14 @@ export class PetsController {
     return this.petsService.requestTransfer(petId, body, req.user.id);
   }
 
+  @Post(':id/cancel-transfer')
+  async cancelTransfer(
+    @Param('id') petId: string,
+    @User('id') userId: string
+  ) {
+    return this.petsService.cancelTransfer(petId, userId);
+  }
+
   @Post('transfer-confirm/:transferId')
   async confirmTransfer(@Param('transferId') transferId: string, @Req() req: any) {
     return this.petsService.confirmTransfer(transferId, req.user.id);
