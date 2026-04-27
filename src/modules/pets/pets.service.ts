@@ -288,17 +288,36 @@ export class PetsService {
   }
 
   async requestTransfer(petId: string, payload: { email?: string; phone?: string }, senderId: string) {
-    // 1. Kiểm tra đầu vào hợp lệ
     if (!payload.email && !payload.phone) {
       throw new BadRequestException('Vui lòng cung cấp email hoặc số điện thoại người nhận');
     }
 
-    // 2. Build điều kiện OR linh hoạt
-    const orConditions: any[] = [];
-    if (payload.email) orConditions.push({ email: payload.email });
-    if (payload.phone) orConditions.push({ phone: payload.phone });
+    const orConditions: Prisma.UserWhereInput[] = [];
 
-    // 3. Tìm người nhận
+    // Xử lý Email
+    if (payload.email) {
+      orConditions.push({ email: payload.email.trim().toLowerCase() });
+    }
+
+    // Xử lý Số điện thoại (Tự động Normalize)
+    if (payload.phone) {
+      // 1. Xóa bỏ các khoảng trắng hoặc ký tự thừa (nếu user nhập 076 666 8602)
+      let rawPhone = payload.phone.replace(/[\s-]/g, '');
+      
+      // 2. Thêm số nguyên bản user nhập vào mảng tìm kiếm
+      orConditions.push({ phone: rawPhone });
+
+      // 3. Tự động sinh ra các biến thể để quét trong DB
+      if (rawPhone.startsWith('0')) {
+        // Nếu nhập '076...', tìm thêm '+8476...'
+        orConditions.push({ phone: '+84' + rawPhone.substring(1) });
+      } else if (rawPhone.startsWith('+84')) {
+        // Nếu nhập '+8476...', tìm thêm '076...'
+        orConditions.push({ phone: '0' + rawPhone.substring(3) });
+      }
+    }
+
+    // 4. Tìm người nhận với các điều kiện đã được mở rộng
     const receiver = await this.prisma.user.findFirst({
       where: {
         OR: orConditions,
@@ -319,15 +338,16 @@ export class PetsService {
       data: { status: 'CANCELED' },
     });
 
-    // 4. Tạo record Transfer Request trong DB
+    // Tạo record Transfer Request trong DB
     const transferRequest = await this.prisma.transferRequest.create({
       data: { petId, senderId, receiverId: receiver.id, status: 'PENDING' },
     });
 
+    // Gửi thông báo
     await this.notificationsService.createAndSendNotification({
       userId: receiver.id,
       title: '🎁 Yêu cầu chuyển nhượng mới',
-      body: `Bạn nhận được yêu cầu nhận nuôi từ chủ cũ của thú cưng.`,
+      body: 'Bạn nhận được yêu cầu nhận nuôi từ chủ cũ của thú cưng.',
       type: NotificationType.SYSTEM,
       referenceId: petId,
     });
