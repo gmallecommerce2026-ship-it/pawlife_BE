@@ -623,12 +623,15 @@ export class PetsService {
     };
   }
   async cancelTransfer(petId: string, userId: string) {
+    // 1. SỬA LỖI QUERY: Cho phép cả Sender HOẶC Receiver tìm thấy request
     const transferReq = await this.prisma.transferRequest.findFirst({
       where: { 
         petId: petId, 
-        senderId: userId, 
         status: 'PENDING',
-        OR: [{ senderId: userId }, { receiverId: userId }]
+        OR: [
+          { senderId: userId }, 
+          { receiverId: userId }
+        ]
       },
     });
 
@@ -636,10 +639,29 @@ export class PetsService {
       throw new BadRequestException('Không tìm thấy yêu cầu chuyển nhượng nào đang chờ xử lý.');
     }
 
-    // Cập nhật trạng thái thành CANCELED hoặc xóa luôn record (tùy nghiệp vụ)
+    // 2. Cập nhật trạng thái thành CANCELED
     await this.prisma.transferRequest.update({
       where: { id: transferReq.id },
       data: { status: 'CANCELED' },
+    });
+
+    // 3. THÊM MỚI: Bắn Socket Real-time cho CẢ HAI bên để cập nhật UI ngay lập tức
+    const payload = { petId: petId };
+    this.notificationsGateway.server.to(`user_${transferReq.senderId}`).emit('transfer_cancelled', payload);
+    this.notificationsGateway.server.to(`user_${transferReq.receiverId}`).emit('transfer_cancelled', payload);
+
+    // 4. (Tùy chọn thêm) Bắn Notification hệ thống cho người CÒN LẠI biết giao dịch đã bị hủy
+    const targetUserId = userId === transferReq.senderId ? transferReq.receiverId : transferReq.senderId;
+    const isSenderCanceling = userId === transferReq.senderId;
+    
+    await this.notificationsService.createAndSendNotification({
+      userId: targetUserId,
+      title: '❌ Hủy chuyển nhượng',
+      body: isSenderCanceling 
+        ? 'Chủ cũ đã hủy yêu cầu chuyển nhượng thú cưng cho bạn.' 
+        : 'Người nhận đã từ chối yêu cầu chuyển nhượng thú cưng của bạn.',
+      type: NotificationType.SYSTEM, 
+      referenceId: petId,
     });
 
     return { success: true, message: 'Đã hủy yêu cầu chuyển nhượng.' };
