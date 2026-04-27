@@ -38,6 +38,7 @@ export class UserInteractionsService {
         tagId: tag.id,            // SỬA: Dùng tagId thay vì petId
         latitude: dto.lat,
         longitude: dto.lng,
+        radius: dto.radius,
         scannedBy: dto.scannedBy, // Frontend: Tên người quét (Sarah John)
         phoneNumber: dto.phoneNumber,
         message: dto.message,
@@ -52,9 +53,10 @@ export class UserInteractionsService {
     const notificationPayload = {
       title: 'Vị trí thú cưng của bạn đã được chia sẻ!',
       body: dto.message ? `Lời nhắn: ${dto.message}` : 'Một người nào đó vừa cập nhật vị trí của thú cưng.',
-      referenceId: savedReport.id, // BẮT BUỘC THÊM DÒNG NÀY (Đóng vai trò là cầu nối)
+      referenceId: savedReport.id, 
       data: {
         type: 'SHARED_LOCATION',
+        // Dù đã lưu vào DB, vẫn truyền params lên url đề phòng frontend lấy từ params cho nhanh
         url: `/tag-report-detail?reportId=${savedReport.id}&lat=${dto.lat}&lng=${dto.lng}&radius=${dto.radius}`, 
       },
     };
