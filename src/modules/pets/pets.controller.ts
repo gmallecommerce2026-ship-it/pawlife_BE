@@ -13,6 +13,19 @@ import { UpdatePetDto } from './dto/update-pet.dto';
 export class PetsController {
   constructor(private readonly petsService: PetsService) {}
 
+  @Post(':id/transfer-request')
+  async requestTransfer(
+    @Param('id') petId: string,
+    @Body() body: { email?: string; phone?: string },
+    @Req() req: any
+  ) {
+    return this.petsService.requestTransfer(petId, body, req.user.id);
+  }
+
+  @Post('transfer-confirm/:transferId')
+  async confirmTransfer(@Param('transferId') transferId: string, @Req() req: any) {
+    return this.petsService.confirmTransfer(transferId, req.user.id);
+  }
   
 
   @Get('feed')

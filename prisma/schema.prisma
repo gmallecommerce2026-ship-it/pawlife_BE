@@ -101,6 +101,21 @@ model DeviceSession {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model TransferRequest {
+  id         String   @id @default(uuid())
+  petId      String
+  senderId   String
+  receiverId String
+  status     String   @default("PENDING") // Các trạng thái: PENDING, COMPLETED, REJECTED
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Quan hệ (Relations) - Hãy đảm bảo tên field trùng với schema Pet và User hiện tại của bạn
+  pet        Pet      @relation(fields: [petId], references: [id])
+  sender     User     @relation("SentTransfers", fields: [senderId], references: [id])
+  receiver   User     @relation("ReceivedTransfers", fields: [receiverId], references: [id])
+}
+
 model User {
   id        String  @id @default(uuid())
   email     String  @unique
@@ -120,6 +135,10 @@ model User {
   // Liên kết
   shelterId        String? // Nếu User này là chủ một Shelter
   shelter          Shelter?          @relation(fields: [shelterId], references: [id])
+
+  sentTransfers     TransferRequest[] @relation("SentTransfers")
+  receivedTransfers TransferRequest[] @relation("ReceivedTransfers")
+
   pets             Pet[]             @relation("UserPets")
   adoptionRequests AdoptionRequest[]
   messagesSent     Message[]         @relation("SenderMessages")
@@ -208,6 +227,7 @@ model Pet {
 
   interactions PetInteraction[]
   favoritedBy  FavoritePet[]    @relation("PetFavoritedBy")
+  transferRequests  TransferRequest[]
 
   ownerId String?
   owner   User?   @relation("UserPets", fields: [ownerId], references: [id])

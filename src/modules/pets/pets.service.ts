@@ -1,10 +1,11 @@
-import { Injectable, ConflictException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, InternalServerErrorException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { SwipePetDto } from './dto/swipe-pet.dto';
 import { PetGender, PetSize, Prisma, NotificationType } from '@prisma/client';
 import { CreatePetDto } from './dto/create-pet.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { TagStatus } from '@prisma/client';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 export interface FeedFilters {
   gender?: PetGender;
   size?: PetSize;
@@ -22,6 +23,7 @@ const ownerSelectQuery = {
 export class PetsService {
   constructor(
     private readonly prisma: PrismaService,
+    private notificationsGateway: NotificationsGateway,
     private readonly notificationsService: NotificationsService // Inject NotificationsService
   ) {}
 
@@ -283,6 +285,70 @@ export class PetsService {
       message: isLost ? 'Đã bật chế độ báo lạc!' : 'Đã tắt chế độ báo lạc, thú cưng an toàn.',
       isLost: isLost,
     };
+  }
+
+  async requestTransfer(petId: string, payload: { email?: string; phone?: string }, senderId: string) {
+    // 1. Tìm người nhận
+    const receiver = await this.prisma.user.findFirst({
+      where: {
+        OR: [{ email: payload.email }, { phone: payload.phone }],
+      },
+    });
+
+    if (!receiver) throw new NotFoundException('Không tìm thấy người dùng này');
+    if (receiver.id === senderId) throw new BadRequestException('Không thể tự chuyển nhượng cho mình');
+
+    // 2. Tạo record Transfer Request trong DB
+    const transferRequest = await this.prisma.transferRequest.create({
+      data: {
+        petId,
+        senderId,
+        receiverId: receiver.id,
+        status: 'PENDING',
+      },
+    });
+
+    // 3. Bắn Socket thông báo cho người nhận để hiện popup confirm
+    this.notificationsGateway.server.to(`user_${receiver.id}`).emit('transfer_requested', {
+      transferId: transferRequest.id,
+      petId,
+      senderId,
+    });
+
+    return { success: true, message: 'Đã gửi yêu cầu' };
+  }
+
+  async confirmTransfer(transferId: string, receiverId: string) {
+    const transferReq = await this.prisma.transferRequest.findUnique({
+      where: { id: transferId },
+    });
+
+    if (!transferReq || transferReq.status !== 'PENDING') {
+      throw new BadRequestException('Yêu cầu không hợp lệ hoặc đã được xử lý');
+    }
+
+    // 1. Cập nhật chủ mới cho thú cưng
+    await this.prisma.pet.update({
+      where: { id: transferReq.petId },
+      data: { ownerId: receiverId }, // Chuyển sang chủ mới
+    });
+
+    // 2. Cập nhật trạng thái Request
+    await this.prisma.transferRequest.update({
+      where: { id: transferId },
+      data: { status: 'COMPLETED' },
+    });
+
+    // 3. Bắn Socket cho CẢ HAI user để chuyển tab và hiển thị popup complete
+    const payload = { petId: transferReq.petId };
+    
+    // Bắn cho người gửi (chủ cũ)
+    this.notificationsGateway.server.to(`user_${transferReq.senderId}`).emit('transfer_completed', payload);
+    
+    // Bắn cho người nhận (chủ mới)
+    this.notificationsGateway.server.to(`user_${receiverId}`).emit('transfer_completed', payload);
+
+    return { success: true, message: 'Chuyển nhượng thành công' };
   }
 
   async removeFavorite(userId: string, petId: string) {
