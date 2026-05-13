@@ -130,7 +130,7 @@ export class PetsService {
       where: {
         status: 'AVAILABLE',
         // Prisma sẽ tự động build câu lệnh SQL "WHERE NOT EXISTS (SELECT ...)" thay vì "WHERE id NOT IN (...hàng nghìn ID...)"
-        petInteractions: { none: { userId: userId } }, 
+        interactions: { none: { userId: userId } },
         ...(gender && { gender }),
         ...(size && { size }),
         ...(species && { species }),
@@ -148,7 +148,7 @@ export class PetsService {
       dbPets = await this.prisma.pet.findMany({
         where: {
           status: 'AVAILABLE',
-          petInteractions: { some: { userId: userId, action: 'PASS' } },
+          interactions: { some: { userId: userId, action: 'PASS' } },
           ...(gender && { gender }),
           ...(size && { size }),
           ...(species && { species }),
