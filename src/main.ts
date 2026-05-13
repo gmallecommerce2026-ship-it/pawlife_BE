@@ -6,7 +6,7 @@ import compression from 'compression';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { ServerOptions } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
-import { createClient } from 'redis';
+import { Redis } from 'ioredis';
 import cookieParser from 'cookie-parser';
 import { json, urlencoded } from 'express';
 
@@ -25,8 +25,13 @@ export class RedisIoAdapter extends IoAdapter {
     });
     const subClient = pubClient.duplicate();
 
-    pubClient.on('error', (err) => console.error('Redis Pub Error:', err));
-    subClient.on('error', (err) => console.error('Redis Sub Error:', err));
+    // --- BỔ SUNG LOG KHI KẾT NỐI THÀNH CÔNG TẠI ĐÂY ---
+    pubClient.on('connect', () => console.log('🟢 Redis PubClient: Đã kết nối thành công!'));
+    subClient.on('connect', () => console.log('🟢 Redis SubClient: Đã kết nối thành công!'));
+
+    // Bắt lỗi
+    pubClient.on('error', (err) => console.error('🔴 Redis Pub Error:', err.message));
+    subClient.on('error', (err) => console.error('🔴 Redis Sub Error:', err.message));
 
     this.adapterConstructor = createAdapter(pubClient, subClient);
   }
