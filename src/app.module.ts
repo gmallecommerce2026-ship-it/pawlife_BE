@@ -1,4 +1,3 @@
-// src/app.module.ts
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -19,95 +18,81 @@ import { PawcareModule } from './modules/pawcare/pawcare.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ApplicationsModule } from './modules/applications/applications.module';
 
-// IMPORT THƯ VIỆN RATE LIMIT REDIS MỚI
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { Redis } from 'ioredis';
 import { APP_GUARD } from '@nestjs/core';
 
 @Module({
   imports: [
+    // 1. Config Module (Nên là module đầu tiên)
     ConfigModule.forRoot({ isGlobal: true }),
     
-    // 1. CẤU HÌNH RATE LIMIT BẰNG REDIS
+    // 2. Throttler (Rate Limit) - Đã làm sạch logic
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
-        const host = configService.get<string>('REDIS_HOST') || 'localhost';
+      useFactory: (config: ConfigService) => {
+        const host = config.get<string>('REDIS_HOST') || '127.0.0.1';
+        const port = config.get<number>('REDIS_PORT') || 6379;
+        const password = config.get<string>('REDIS_PASSWORD');
         const isLocal = host === 'localhost' || host === '127.0.0.1';
 
         return {
-          throttlers: [
-            {
-              name: 'default',
-              ttl: 60000, // 60 giây
-              limit: 50,  // Mặc định 30 request / 1 phút (Có thể override bằng @Throttle ở Controller)
-            },
-          ],
+          throttlers: [{ name: 'default', ttl: 60000, limit: 50 }],
           storage: new ThrottlerStorageRedisService(
             new Redis({
-              host: host,
-              port: Number(configService.get<number>('REDIS_PORT')) || 6379,
-              password: configService.get<string>('REDIS_PASSWORD'),
-              tls: isLocal ? undefined : { rejectUnauthorized: false }, // Xử lý bảo mật đồng nhất với BullMQ
-            })
+              host,
+              port,
+              password,
+              tls: isLocal ? undefined : { rejectUnauthorized: false },
+              // Thêm dòng này để ioredis không log lỗi linh tinh khi đang reconnect
+              retryStrategy: (times) => Math.min(times * 50, 2000), 
+            }),
           ),
         };
       },
     }),
 
-    // 2. CẤU HÌNH MAIL
+    // 3. Mailer - Giữ log kiểm tra để debug trên VPS
     MailerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => {
-        const mailHost = configService.get<string>('MAIL_HOST');
-        const mailUser = configService.get<string>('MAIL_USER');
-        const mailPass = configService.get<string>('MAIL_PASS');
-
-        console.log('--- KIỂM TRA MAIL CONFIG ---');
-        console.log('HOST:', mailHost);
-        console.log('USER:', mailUser); 
-        console.log('PASS:', mailPass ? '****** (Đã có pass)' : 'MISSING (Thiếu pass)');
-        console.log('----------------------------');
-
-        return {
-          transport: {
-            host: mailHost,
-            port: 587,
-            secure: false,
-            auth: {
-              user: mailUser,
-              pass: mailPass, 
-            },
+      useFactory: async (config: ConfigService) => ({
+        transport: {
+          host: config.get('MAIL_HOST'),
+          port: 587,
+          secure: false,
+          auth: {
+            user: config.get('MAIL_USER'),
+            pass: config.get('MAIL_PASS'), 
           },
-          defaults: {
-            from: `"PawLife" <${mailUser}>`,
-          },
-        };
-      },
+        },
+        defaults: {
+          from: `"PawLife" <${config.get('MAIL_USER')}>`,
+        },
+      }),
     }),
 
-    // 3. CẤU HÌNH BULLMQ CHO BACKGROUND JOBS
+    // 4. BullMQ - Đảm bảo Connection đồng nhất với Throttler
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => {
-        const host = configService.get<string>('REDIS_HOST');
+      inject: [ConfigService],
+      useFactory: async (config: ConfigService) => {
+        const host = config.get<string>('REDIS_HOST') || '127.0.0.1';
         const isLocal = host === 'localhost' || host === '127.0.0.1';
 
         return {
           connection: {
-            host: host,
-            port: configService.get<number>('REDIS_PORT'),
-            password: configService.get<string>('REDIS_PASSWORD'),
+            host,
+            port: config.get<number>('REDIS_PORT') || 6379,
+            password: config.get<string>('REDIS_PASSWORD'),
             tls: isLocal ? undefined : { rejectUnauthorized: false },
           },
         };
       },
-      inject: [ConfigService],
     }),
 
-    // 4. CÁC MODULE CỦA ỨNG DỤNG
+    // 5. App Modules
     DatabaseModule,
     RedisModule,
     AuthModule,
@@ -119,13 +104,15 @@ import { APP_GUARD } from '@nestjs/core';
     TagsModule,
     PawcareModule,
     NotificationsModule,
-    ApplicationsModule
+    ApplicationsModule,
   ],
   controllers: [AppController],
-  providers: [AppService,
+  providers: [
+    AppService,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
-    },],
+    },
+  ],
 })
 export class AppModule {}
