@@ -4,21 +4,26 @@ import { AuthService } from '../auth.service';
 import { RegisterDto, LoginDto, SocialLoginDto, SendOtpDto, ResetPasswordDto, ChangePasswordDto } from '../dto/auth.dto';
 import { User } from 'src/common/decorators/user.decorator';
 import { JwtAuthGuard } from '../guards/jwt.guard';
+import { Throttle } from '@nestjs/throttler'; // BỔ SUNG IMPORT
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // BỔ SUNG: Tối đa 3 lần / 1 phút
   @Post('send-otp')
   @HttpCode(HttpStatus.OK)
   async sendOtp(@Body() sendOtpDto: SendOtpDto) {
     return this.authService.sendOtp(sendOtpDto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // BỔ SUNG: Chống spam đăng ký
   @Post('register')
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
   }
 
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // BỔ SUNG: Chống spam reset pass
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
@@ -32,23 +37,24 @@ export class AuthController {
   }
 
   @Post('change-password')
-  @UseGuards(JwtAuthGuard) // Bắt buộc phải có token đăng nhập
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   async changePassword(
-    @User('id') userId: string, // Lấy userId từ token
+    @User('id') userId: string,
     @Body() changePasswordDto: ChangePasswordDto,
   ) {
     return this.authService.changePassword(userId, changePasswordDto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // BỔ SUNG: Chống Brute-force Login
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
     @Body() loginDto: LoginDto,
     @Headers('user-agent') userAgent: string,
-    @Headers('x-device-name') deviceNameHeader: string, // Thêm dòng này
-    @Headers('x-device-os') deviceOsHeader: string,     // Thêm dòng này
-    @Headers('x-forwarded-for') forwardedIp: string,    // Thêm dòng này để chuẩn bị cho deploy thật
+    @Headers('x-device-name') deviceNameHeader: string,
+    @Headers('x-device-os') deviceOsHeader: string,
+    @Headers('x-forwarded-for') forwardedIp: string,
     @Ip() ip: string,
   ) {
     const realIp = forwardedIp ? forwardedIp.split(',')[0] : ip;
@@ -73,6 +79,7 @@ export class AuthController {
     return this.authService.turnOffTwoFactorAuthentication(userId);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // BỔ SUNG
   @Post('login/2fa')
   @HttpCode(HttpStatus.OK)
   async loginWith2fa(
@@ -88,13 +95,14 @@ export class AuthController {
     return this.authService.loginWith2fa(tempToken, code, userAgent, realIp, deviceNameHeader, deviceOsHeader);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // BỔ SUNG
   @Post('social-login')
   @HttpCode(HttpStatus.OK)
   async socialLogin(
     @Body() socialLoginDto: SocialLoginDto,
     @Headers('user-agent') userAgent: string,
-    @Headers('x-device-name') deviceNameHeader: string, // Thêm dòng này
-    @Headers('x-device-os') deviceOsHeader: string,     // Thêm dòng này
+    @Headers('x-device-name') deviceNameHeader: string,
+    @Headers('x-device-os') deviceOsHeader: string,
     @Headers('x-forwarded-for') forwardedIp: string,
     @Ip() ip: string,
   ) {
@@ -102,10 +110,10 @@ export class AuthController {
     console.log("social login start debugging!");
     return this.authService.socialLogin(socialLoginDto, userAgent, realIp, deviceNameHeader, deviceOsHeader);
   }
+
   @Get('devices')
   @UseGuards(JwtAuthGuard)
   async getDevices(@User() user: any) {
-    // Lấy userId và sessionId từ token đã giải mã
     return this.authService.getDevices(user.id, user.sessionId);
   }
 

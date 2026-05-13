@@ -10,8 +10,12 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { DatabaseModule } from '../../database/database.module';
 import { StorageModule } from '../storage/storage.module';
 import { redisStore } from 'cache-manager-redis-store'; // Cách import mới tùy version, thường dùng require nếu lỗi
+import { RedisModule } from 'src/database/redis/redis.module';
+import { MailProcessor } from './mail.processor';
+import { BullModule } from '@nestjs/bullmq';
 @Module({
   imports: [
+    RedisModule,
     DatabaseModule,
     StorageModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
@@ -26,9 +30,12 @@ import { redisStore } from 'cache-manager-redis-store'; // Cách import mới t�
       }),
     }),
     CacheModule.register(),
+    BullModule.registerQueue({
+      name: 'mail', // Đăng ký một hàng đợi chuyên chứa việc gửi mail
+    }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, MailProcessor, JwtStrategy],
   // --- SỬA TẠI ĐÂY: Thêm JwtModule vào exports ---
   exports: [PassportModule, AuthService, JwtModule], 
 })

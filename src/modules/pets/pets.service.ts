@@ -6,6 +6,9 @@ import { CreatePetDto } from './dto/create-pet.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { TagStatus } from '@prisma/client';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
+import { RedisService } from 'src/database/redis/redis.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 export interface FeedFilters {
   gender?: PetGender;
   size?: PetSize;
@@ -23,172 +26,181 @@ const ownerSelectQuery = {
 export class PetsService {
   constructor(
     private readonly prisma: PrismaService,
+    @InjectQueue('swipe-queue') private readonly swipeQueue: Queue,
     private notificationsGateway: NotificationsGateway,
-    private readonly notificationsService: NotificationsService // Inject NotificationsService
+    private readonly notificationsService: NotificationsService, // Inject NotificationsService
+    private readonly redisService: RedisService // Inject RedisService
   ) {}
+  private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371; // Bán kính trái đất tính bằng km
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+  private async getAvailablePetsByShelterIds(shelterIds: string[]) {
+    const cacheKey = `pets:available:shelters:${shelterIds.sort().join('_')}`;
+    
+    const cached = await this.redisService.get<any[]>(cacheKey);
+    if (cached) return cached;
 
+    const pets = await this.prisma.pet.findMany({
+      where: { status: 'AVAILABLE', shelterId: { in: shelterIds } },
+      include: { images: true, shelter: true }
+    });
+
+    await this.redisService.set(cacheKey, pets, 300); // Cache 5 phút
+    return pets;
+  }
   async getFeed(userId: string, limit: number, filters?: FeedFilters, lat?: number, lng?: number) {
     const { gender, size, species } = filters || {};
 
-    if (lat && lng) {
-      const genderCondition = gender ? Prisma.sql`AND p.gender = ${gender}` : Prisma.empty;
-      const sizeCondition = size ? Prisma.sql`AND p.size = ${size}` : Prisma.empty;
-      const speciesCondition = species ? Prisma.sql`AND p.species = ${species}` : Prisma.empty;
-
-      // Bước 1: Tìm thú cưng CHƯA TỪNG tương tác
-      let pets: any[] = await this.prisma.$queryRaw`
-        SELECT 
-          p.*, 
-          s.name as shelterName, 
-          s.avatarUrl as shelterAvatarUrl,
-          s.address as shelterAddress,
-          (6371 * acos(
-            cos(radians(${lat})) * cos(radians(s.latitude)) * cos(radians(s.longitude) - radians(${lng})) + 
-            sin(radians(${lat})) * sin(radians(s.latitude))
-          )) AS distance_km
-        FROM Pet p
-        JOIN Shelter s ON p.shelterId = s.id
-        WHERE p.status = 'AVAILABLE'
-          AND p.id NOT IN (SELECT petId FROM PetInteraction WHERE userId = ${userId})
-          AND s.latitude IS NOT NULL 
-          AND s.longitude IS NOT NULL
-          ${genderCondition}
-          ${sizeCondition}
-          ${speciesCondition}
-        ORDER BY distance_km ASC
-        LIMIT ${limit};
-      `;
-
-      // Bước 2 (Fallback): Nếu đã hết thú cưng mới, lấy lại những thú cưng đã quẹt trái (PASS)
-      if (pets.length === 0) {
-        pets = await this.prisma.$queryRaw`
-          SELECT 
-            p.*, 
-            s.name as shelterName, 
-            s.avatarUrl as shelterAvatarUrl,
-            s.address as shelterAddress,
-            (6371 * acos(
-              cos(radians(${lat})) * cos(radians(s.latitude)) * cos(radians(s.longitude) - radians(${lng})) + 
-              sin(radians(${lat})) * sin(radians(s.latitude))
-            )) AS distance_km
-          FROM Pet p
-          JOIN Shelter s ON p.shelterId = s.id
-          WHERE p.status = 'AVAILABLE'
-            -- Chỉ lọc bỏ những bé đã thao tác khác 'PASS' (VD: đã 'LIKE')
-            AND p.id NOT IN (SELECT petId FROM PetInteraction WHERE userId = ${userId} AND action != 'PASS')
-            AND s.latitude IS NOT NULL 
-            AND s.longitude IS NOT NULL
-            ${genderCondition}
-            ${sizeCondition}
-            ${speciesCondition}
-          ORDER BY distance_km ASC
-          LIMIT ${limit};
-        `;
-      }
-
-      const petIds = pets.map(p => p.id);
-      const images = petIds.length > 0 
-      ? await this.prisma.petImage.findMany({ 
-          where: { petId: { in: petIds } },
-          orderBy: { createdAt: 'asc' } // <--- THÊM DÒNG NÀY ĐỂ ĐẢM BẢO THỨ TỰ ẢNH
-        })
-      : [];
-
-      const formattedData = pets.map(pet => {
-        const petImages = images.filter(img => img.petId === pet.id);
-        return {
-          ...pet,
-          images: petImages,
-          shelter: {
-            name: pet.shelterName,
-            avatarUrl: pet.shelterAvatarUrl,
-            address: pet.shelterAddress
-          },
-          distance: `${Number(pet.distance_km).toFixed(1)} km`,
-          distance_km: undefined,
-          shelterName: undefined,
-          shelterAvatarUrl: undefined
-        };
-      });
-
-      return { data: formattedData, meta: { limit, count: formattedData.length, filters } };
-    }
-
-    // Xử lý luồng tương tự cho trường hợp KHÔNG có lat/lng
-    const whereCondition: Prisma.PetWhereInput = {
-      status: 'AVAILABLE',
-      interactions: {
-        none: { userId: userId },
-      },
-      ...(gender && { gender }),
-      ...(size && { size }),
-      ...(species && { species }),
+    const matchesFilters = (pet: any) => {
+      if (gender && pet.gender !== gender) return false;
+      if (size && pet.size !== size) return false;
+      if (species && pet.species !== species) return false;
+      return true;
     };
 
-    let pets = await this.prisma.pet.findMany({
-      where: whereCondition,
+    // TRƯỜNG HỢP 1: CÓ TỌA ĐỘ (Xử lý trên RAM)
+    if (lat && lng) {
+      // Chỉ tải userInteractions từ Redis khi thực sự cần thiết (xử lý RAM)
+      const interactionCacheKey = `user:${userId}:swiped_pets`;
+      let userInteractions = await this.redisService.get<{petId: string, action: string}[]>(interactionCacheKey) || [];
+      const allSwipedIds = new Set(userInteractions.map(i => i.petId));
+      const passActionIds = new Set(userInteractions.filter(i => i.action === 'PASS').map(i => i.petId));
+
+      const REDIS_KEY = 'shelters:locations';
+      let nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, 50);
+
+      if (!nearbyShelterIds || nearbyShelterIds.length === 0) {
+        const allShelters = await this.prisma.shelter.findMany({
+          where: { latitude: { not: null }, longitude: { not: null } }
+        });
+        for (const s of allShelters) {
+          await this.redisService.addLocation(REDIS_KEY, s.longitude!, s.latitude!, s.id);
+        }
+        nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, 50);
+      }
+
+      const targetShelterIds = nearbyShelterIds.slice(0, 30);
+
+      if (targetShelterIds.length > 0) {
+        const allPetsInShelters = await this.getAvailablePetsByShelterIds(targetShelterIds);
+        let validPets = allPetsInShelters.filter(pet => !allSwipedIds.has(pet.id) && matchesFilters(pet));
+
+        if (validPets.length === 0) {
+          validPets = allPetsInShelters.filter(pet => passActionIds.has(pet.id) && matchesFilters(pet));
+        }
+
+        const formattedData = validPets.map(pet => {
+          const shelter = pet.shelter;
+          const distanceVal = (shelter?.latitude && shelter?.longitude)
+            ? this.calculateDistance(lat, lng, shelter.latitude, shelter.longitude) : 0;
+          return {
+            ...pet,
+            distance_val: distanceVal,
+            distance: `${distanceVal.toFixed(1)} km`,
+            shelter: {
+              name: shelter?.name || 'Trạm chưa đặt tên',
+              avatarUrl: shelter?.avatarUrl || null,
+              address: shelter?.address || 'Chưa cập nhật'
+            }
+          };
+        });
+
+        formattedData.sort((a, b) => a.distance_val - b.distance_val);
+        const finalData = formattedData.slice(0, limit).map(p => {
+          delete (p as any).distance_val;
+          return p;
+        });
+
+        return { data: finalData, meta: { limit, count: finalData.length, filters } };
+      }
+    }
+
+    // TRƯỜNG HỢP 2: KHÔNG CÓ GPS (Dùng DB Tối ưu)
+    // SỬA Ở ĐÂY: KHÔNG dùng `notIn: Array.from(allSwipedIds)`
+    // Thay vào đó dùng liên kết ngược (Relational Filter) của Prisma để tạo câu lệnh SQL tối ưu:
+    let dbPets = await this.prisma.pet.findMany({
+      where: {
+        status: 'AVAILABLE',
+        // Prisma sẽ tự động build câu lệnh SQL "WHERE NOT EXISTS (SELECT ...)" thay vì "WHERE id NOT IN (...hàng nghìn ID...)"
+        petInteractions: { none: { userId: userId } }, 
+        ...(gender && { gender }),
+        ...(size && { size }),
+        ...(species && { species }),
+      },
       take: limit,
-      orderBy: { createdAt: 'desc' }, // <--- THÊM DÒNG NÀY ĐỂ FIX THỨ TỰ
+      orderBy: { createdAt: 'desc' },
       include: {
-        images: {
-          orderBy: { createdAt: 'asc' } 
-        },
+        images: { orderBy: { createdAt: 'asc' } },
         shelter: { select: { name: true, avatarUrl: true, address: true } }
       }
-  });
+    });
 
-    // Fallback cho luồng Prisma query
-    if (pets.length === 0) {
-      pets = await this.prisma.pet.findMany({
+    if (dbPets.length === 0) {
+      // Fallback lấy thú cưng đã PASS bằng Join Table
+      dbPets = await this.prisma.pet.findMany({
         where: {
-          ...whereCondition,
-          interactions: {
-            none: { 
-              userId: userId, 
-              action: { not: 'PASS' } // Chỉ loại bỏ nếu action là 'LIKE' (cho phép 'PASS' đi qua)
-            },
-          },
+          status: 'AVAILABLE',
+          petInteractions: { some: { userId: userId, action: 'PASS' } },
+          ...(gender && { gender }),
+          ...(size && { size }),
+          ...(species && { species }),
         },
         take: limit,
         include: {
-          images: { orderBy: { createdAt: 'asc' } }, // <--- THÊM DÒNG NÀY
+          images: { orderBy: { createdAt: 'asc' } },
           shelter: { select: { name: true, avatarUrl: true, address: true } }
         }
       });
     }
 
-    return { data: pets, meta: { limit, count: pets.length, filters } };
+    return { data: dbPets, meta: { limit, count: dbPets.length, filters } };
   }
 
   async swipePet(userId: string, petId: string, swipePetDto: SwipePetDto) {
-    const pet = await this.prisma.pet.findUnique({
+    const petExists = await this.prisma.pet.findUnique({
       where: { id: petId },
+      select: { id: true } 
     });
 
-    if (!pet) {
+    if (!petExists) {
       throw new NotFoundException('Không tìm thấy thú cưng này!');
     }
 
-    const interaction = await this.prisma.petInteraction.upsert({
-      where: {
-        userId_petId: {
-          userId: userId,
-          petId: petId,
-        },
-      },
-      update: {
+    // XÓA CACHE SWIPE CỦA USER ĐỂ LẦN GET FEED TỚI SẼ LẤY DATA MỚI
+    // (Hoặc tối ưu hơn là đẩy trực tiếp petId vào mảng JSON trong Redis nếu bạn quen xử lý JSON array)
+    const interactionCacheKey = `user:${userId}:swiped_pets`;
+    await this.redisService.del(interactionCacheKey);
+
+    await this.swipeQueue.add(
+      'process-swipe', 
+      {
+        userId,
+        petId,
         action: swipePetDto.action,
       },
-      create: {
-        userId: userId,
-        petId: petId,
-        action: swipePetDto.action,
-      },
-    });
+      { 
+        removeOnComplete: true,
+        removeOnFail: 100,
+      }
+    );
 
     return {
       message: `Đã ${swipePetDto.action.toLowerCase()} thú cưng thành công!`,
-      data: interaction,
+      data: {
+        userId: userId,
+        petId: petId,
+        action: swipePetDto.action,
+        createdAt: new Date(), 
+        updatedAt: new Date(),
+      },
     };
   }
 
@@ -247,6 +259,9 @@ export class PetsService {
       where: { id: petId },
     });
 
+    // XÓA CACHE SAU KHI XÓA
+    await this.redisService.del(`pet:detail:${petId}`);
+
     return { message: 'Đã xóa thú cưng thành công!' };
   }
 
@@ -280,6 +295,8 @@ export class PetsService {
       type: NotificationType.TAG,
       referenceId: petId,
     });
+
+    await this.redisService.del(`pet:detail:${petId}`);
 
     return {
       message: isLost ? 'Đã bật chế độ báo lạc!' : 'Đã tắt chế độ báo lạc, thú cưng an toàn.',
@@ -375,6 +392,8 @@ export class PetsService {
       where: { id: transferReq.petId },
       data: { ownerId: receiverId }, 
     });
+
+    await this.redisService.del(`pet:detail:${transferReq.petId}`);
 
     await this.prisma.transferRequest.updateMany({
       where: { 
@@ -562,12 +581,21 @@ export class PetsService {
   }
 
   async getPetById(id: string) {
+    const cacheKey = `pet:detail:${id}`;
+    
+    // 1. Kiểm tra cache
+    const cachedPet = await this.redisService.get<any>(cacheKey);
+    if (cachedPet) {
+        return cachedPet;
+    }
+
+    // 2. Lấy từ DB nếu chưa có cache
     const pet = await this.prisma.pet.findUnique({
       where: { id },
       include: {
         owner: ownerSelectQuery,
         images: {
-          orderBy: { createdAt: 'asc' } // <--- THÊM DÒNG NÀY
+          orderBy: { createdAt: 'asc' } 
         },
         tags: true,
         shelter: {
@@ -604,7 +632,7 @@ export class PetsService {
 
     const pendingTransfer = pet.transferRequests && pet.transferRequests.length > 0 ? pet.transferRequests[0] : null;
 
-    return {
+    const result = {
       ...pet,
       shelter: formattedShelter,
       owner: formattedOwner,
@@ -616,6 +644,11 @@ export class PetsService {
       senderId: pendingTransfer ? pendingTransfer.senderId : null,
       receiver: pendingTransfer ? pendingTransfer.receiver : null,
     };
+
+    // 3. Set Cache (Lưu trong 10 phút = 600s)
+    await this.redisService.set(cacheKey, result, 600);
+
+    return result;
   }
   async getPetByTagId(tagId: string) {
     // 1. SỬA LỖI 1: Phải query từ bảng Tag, không query từ bảng Pet
@@ -731,6 +764,8 @@ export class PetsService {
         },
         include: { images: true }
       });
+
+      await this.redisService.del(`pet:detail:${petId}`);
 
       return {
         message: 'Cập nhật thông tin thú cưng thành công',

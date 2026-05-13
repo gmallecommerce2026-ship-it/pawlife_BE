@@ -1,5 +1,5 @@
 // src/modules/tags/tags.controller.ts
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { TagsService } from './tags.service';
 import { CreateTagReportDto } from './dto/create-tag-report.dto';
 
@@ -25,5 +25,14 @@ export class TagsController {
   @Patch('report/:id/resolve')
   async resolveReport(@Param('id') id: string) {
     return this.tagsService.resolveTagReport(id);
+  }
+
+  @Get('nearby')
+  async getNearbyLostPets(
+    @Query('lat') lat: string,
+    @Query('lng') lng: string,
+    @Query('radius') radius: string = '5'
+  ) {
+    return this.tagsService.getNearbyLostPets(Number(lat), Number(lng), Number(radius));
   }
 }

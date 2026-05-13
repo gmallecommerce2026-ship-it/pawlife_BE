@@ -2,7 +2,6 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { Request } from 'express';
-import { PrismaService } from '../../database/prisma/prisma.service';
 
 const extractJwtFromCookie = (req: Request) => {
   if (req.cookies && req.cookies.accessToken) {
@@ -13,7 +12,7 @@ const extractJwtFromCookie = (req: Request) => {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private readonly prisma: PrismaService) {
+  constructor() {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -25,29 +24,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    // [DEBUG] In ra để kiểm tra xem Token có đúng userId không
-    console.log(`[JwtStrategy] Validating userId: ${payload.userId}`);
-
     if (!payload.userId) {
         console.error('[JwtStrategy] Token invalid: missing userId');
         throw new UnauthorizedException('Token không hợp lệ');
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.userId },
-    });
-
-    if (!user) {
-      console.error(`[JwtStrategy] User not found in DB (ID: ${payload.userId})`);
-      // User trong token không khớp với DB (do reset DB hoặc user bị xóa)
-      throw new UnauthorizedException('Tài khoản không tồn tại hoặc đã bị xóa.');
-    }
-
-    // Trả về user để gắn vào req.user
+    // 1. TIN TƯỞNG HOÀN TOÀN VÀO PAYLOAD (KHÔNG GỌI REDIS/DB Ở ĐÂY)
+    // Cực kỳ nhẹ, tốc độ xử lý < 0.1ms cho mọi request
     return {
-        id: user.id,
-        email: user.email,
-        role: user.role,
+        id: payload.userId,
+        email: payload.email, // Cần đảm bảo lúc sign token có truyền email vào payload
+        role: payload.role || 'USER', 
         sessionId: payload.sessionId,
     };
   }

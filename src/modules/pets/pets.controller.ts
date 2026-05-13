@@ -1,3 +1,4 @@
+// src/modules/pets/pets.controller.ts
 import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, ParseIntPipe, DefaultValuePipe, Patch, Req } from '@nestjs/common';
 import { PetsService } from './pets.service';
 import { SwipePetDto } from './dto/swipe-pet.dto';
@@ -7,6 +8,7 @@ import { User } from '../../common/decorators/user.decorator';
 import { PetGender, PetSize } from '@prisma/client';
 import { CreatePetDto } from './dto/create-pet.dto';
 import { UpdatePetDto } from './dto/update-pet.dto';
+import { Throttle } from '@nestjs/throttler'; // BỔ SUNG IMPORT
 
 @Controller('pets')
 @UseGuards(JwtAuthGuard) 
@@ -35,7 +37,7 @@ export class PetsController {
     return this.petsService.confirmTransfer(transferId, req.user.id);
   }
   
-
+  @Throttle({ default: { limit: 120, ttl: 60000 } }) // BỔ SUNG: Cho phép lướt feed 120 lần/phút (tránh ddos db)
   @Get('feed')
   async getFeed(
     @User('id') userId: string,
@@ -43,15 +45,12 @@ export class PetsController {
     @Query('gender') gender?: PetGender,
     @Query('size') size?: PetSize,
     @Query('species') species?: string,
-    // THÊM 2 DÒNG NÀY ĐỂ HỨNG TỌA ĐỘ TỪ FRONTEND
     @Query('lat') lat?: string,
     @Query('lng') lng?: string,
   ) {
-    // Ép kiểu từ string sang number
     const latitude = lat ? parseFloat(lat) : undefined;
     const longitude = lng ? parseFloat(lng) : undefined;
 
-    // Truyền thêm latitude và longitude xuống Service
     return this.petsService.getFeed(
       userId, 
       limit, 
@@ -61,7 +60,6 @@ export class PetsController {
     );
   }
 
-  // Chú ý: Đặt /pets/favorites TẠI ĐÂY (trước các route chứa /pets/:id)
   @Get('favorites')
   async getFavorites(
     @User('id') userId: string,
@@ -72,7 +70,7 @@ export class PetsController {
     return this.petsService.getFavorites(userId, skip, take);
   }
 
-
+  @Throttle({ default: { limit: 150, ttl: 60000 } }) // BỔ SUNG: Cho phép quẹt tay tốc độ cao (150 lần/phút)
   @Post(':id/swipe')
   async swipePet(
     @User('id') userId: string,
@@ -103,8 +101,7 @@ export class PetsController {
     return this.petsService.getMyPets(userId);
   }
 
-
-  @Post() // Định tuyến POST /pets
+  @Post()
   @UseGuards(JwtAuthGuard)
   async createPet(
     @User('id') userId: string, 
@@ -112,7 +109,6 @@ export class PetsController {
   ) {
     return this.petsService.createPet(userId, createPetDto);
   }
-
   
   @Get(':id')
   async getPetById(@Param('id') id: string) {
