@@ -9,6 +9,7 @@ import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { RedisService } from 'src/database/redis/redis.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { ConfigService } from '@nestjs/config';
 export interface FeedFilters {
   gender?: PetGender;
   size?: PetSize;
@@ -29,7 +30,8 @@ export class PetsService {
     @InjectQueue('swipe-queue') private readonly swipeQueue: Queue,
     private notificationsGateway: NotificationsGateway,
     private readonly notificationsService: NotificationsService, // Inject NotificationsService
-    private readonly redisService: RedisService // Inject RedisService
+    private readonly redisService: RedisService, // Inject RedisService
+    private configService: ConfigService,
   ) {}
   private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371; // Bán kính trái đất tính bằng km
@@ -562,7 +564,7 @@ export class PetsService {
 
   async createPet(userId: string, createPetDto: CreatePetDto) {
     const { images, tagId, ...petData } = createPetDto;
-
+    const publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN');
     try {
       // NẾU CÓ TRUYỀN MÃ QR TỪ FRONTEND XUỐNG
       if (tagId) {
@@ -585,7 +587,7 @@ export class PetsService {
               ownerId: userId,
               status: 'ADOPTED',
               qrVerificationStatus: 'VERIFIED',
-              qrCodeUrl: createPetDto.qrCodeUrl || `https://pawcare.app/tag/${tagId}`,
+              qrCodeUrl: `${publicDomain}/qr-codes/${tagId}.svg`,
               ...(images && images.length > 0 && {
                 images: { create: images.map(url => ({ url })) }
               })
