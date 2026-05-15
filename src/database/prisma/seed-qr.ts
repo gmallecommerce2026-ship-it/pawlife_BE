@@ -10,7 +10,7 @@ async function main() {
 
   // 1. Chỉ định đường dẫn tới folder chứa 10,000 file .svg của bạn
   // Thay đổi đường dẫn này trỏ đúng vào thư mục của bạn trên máy tính
-  const qrFolderPath = path.join(__dirname, '../QR_CODES'); // Ví dụ: src/QR_CODES chứa 10,000 file .svg
+  const qrFolderPath = path.join(process.cwd(), 'src/database/QR_Codes'); // Ví dụ: src/QR_CODES chứa 10,000 file .svg
 
   // 2. Đọc toàn bộ tên file trong thư mục
   let files: string[] = [];
