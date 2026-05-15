@@ -89,4 +89,8 @@ export class CreatePetDto {
   @IsArray()
   @IsString({ each: true })
   personalityTags?: string[];
+
+  @IsString()
+  @IsOptional()
+  tagId?: string;
 }

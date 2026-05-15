@@ -82,14 +82,15 @@ export class PetsService {
         where: { id: tagId },
         data: { 
           petId: petId, 
-          status: 'ACTIVE' // Chuyển status thành ACTIVE
+          status: 'ACTIVE' 
         }
       }),
       this.prisma.pet.update({
         where: { id: petId },
         data: { 
           qrVerificationStatus: 'VERIFIED',
-          qrCodeUrl: tagId // Lưu mã Tag vào URL hoặc bạn có thể lưu link ảnh thật tuỳ logic
+          // Nên lưu Full URL để sau này API trả về là frontend dùng được ngay không cần ghép chuỗi
+          qrCodeUrl: `https://pawcare.app/tag/${tagId}` 
         }
       })
     ]);
@@ -560,28 +561,71 @@ export class PetsService {
   }
 
   async createPet(userId: string, createPetDto: CreatePetDto) {
-    const { images, ...petData } = createPetDto;
+    const { images, tagId, ...petData } = createPetDto;
 
     try {
+      // NẾU CÓ TRUYỀN MÃ QR TỪ FRONTEND XUỐNG
+      if (tagId) {
+        // 1. Kiểm tra Tag có hợp lệ không trước khi làm gì khác
+        const tag = await this.prisma.tag.findUnique({ where: { id: tagId } });
+        if (!tag) {
+          throw new BadRequestException('Mã QR này không tồn tại trong hệ thống!');
+        }
+        if (tag.petId) {
+          throw new BadRequestException('Mã QR này đã được sử dụng cho một bé khác!');
+        }
+
+        // 2. Gom 2 hành động vào Transaction: Tạo Pet + Update Tag
+        // Nếu 1 trong 2 thất bại, Prisma sẽ tự động rollback (hủy) cả 2
+        const result = await this.prisma.$transaction(async (prisma) => {
+          // 2.1 Tạo Pet trước
+          const newPet = await prisma.pet.create({
+            data: {
+              ...petData,
+              ownerId: userId,
+              status: 'ADOPTED',
+              qrVerificationStatus: 'VERIFIED',
+              qrCodeUrl: createPetDto.qrCodeUrl || `https://pawcare.app/tag/${tagId}`,
+              ...(images && images.length > 0 && {
+                images: { create: images.map(url => ({ url })) }
+              })
+            },
+            include: { images: true }
+          });
+
+          // 2.2 Update Tag với ID của Pet vừa tạo
+          await prisma.tag.update({
+            where: { id: tagId },
+            data: { 
+              petId: newPet.id, 
+              status: 'ACTIVE' 
+            }
+          });
+
+          return newPet;
+        });
+
+        return result;
+      } 
+      
+      // TRƯỜNG HỢP 2: TẠO PET BÌNH THƯỜNG (KHÔNG CÓ QUÉT QR)
       const newPet = await this.prisma.pet.create({
         data: {
           ...petData,
           ownerId: userId,
           status: 'ADOPTED', 
           ...(images && images.length > 0 && {
-            images: {
-              create: images.map(url => ({ url }))
-            }
+            images: { create: images.map(url => ({ url })) }
           })
         },
-        include: {
-          images: true,
-        }
+        include: { images: true }
       });
 
       return newPet;
+
     } catch (error) {
-      throw new InternalServerErrorException('Lỗi khi thêm thú cưng');
+      if (error instanceof BadRequestException) throw error;
+      throw new InternalServerErrorException('Lỗi hệ thống khi thêm thú cưng');
     }
   }
 
