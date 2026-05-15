@@ -1,69 +1,91 @@
-// prisma/seed-qr.ts
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const prisma = new PrismaClient();
 
+// 1. Cấu hình Cloudflare R2 Client
+const s3Client = new S3Client({
+  region: 'auto',
+  endpoint: 'https://c9d5f5eea00514a9996556bae3e098d8.r2.cloudflarestorage.com', // Endpoint bạn đã cung cấp
+  credentials: {
+    accessKeyId: 'ĐIỀN_ACCESS_KEY_ID_CỦA_BẠN_VÀO_ĐÂY',
+    secretAccessKey: 'ĐIỀN_SECRET_ACCESS_KEY_CỦA_BẠN_VÀO_ĐÂY',
+  },
+});
+
+const BUCKET_NAME = 'pawcare';
+
 async function main() {
-  console.log('Bắt đầu quá trình seed 10,000 mã QR...');
+  console.log('🚀 Bắt đầu quá trình đồng bộ 10,000 mã QR lên R2 và DB...');
 
-  // 1. Chỉ định đường dẫn tới folder chứa 10,000 file .svg của bạn
-  // Thay đổi đường dẫn này trỏ đúng vào thư mục của bạn trên máy tính
-  const qrFolderPath = path.join(process.cwd(), 'src/database/QR_Codes'); // Ví dụ: src/QR_CODES chứa 10,000 file .svg
-
-  // 2. Đọc toàn bộ tên file trong thư mục
+  const qrFolderPath = path.join(process.cwd(), 'src/database/QR_Codes');
   let files: string[] = [];
+
   try {
-    files = fs.readdirSync(qrFolderPath);
+    files = fs.readdirSync(qrFolderPath).filter(f => f.endsWith('.svg'));
   } catch (error: any) {
-    console.error('Lỗi khi đọc thư mục QR:', error.message);
+    console.error('❌ Lỗi khi đọc thư mục QR:', error.message);
     return;
   }
 
-  // 3. Lọc ra các file .svg và tạo mảng data
-  const tagsToInsert: any = [];
-  
-  for (const file of files) {
-    if (file.endsWith('.svg')) {
-      // Tách đuôi .svg để lấy ID. Ví dụ: "123-abc.svg" -> "123-abc"
-      const tagId = file.replace('.svg', '');
+  console.log(`📦 Tìm thấy ${files.length} file SVG. Bắt đầu xử lý...`);
 
-      tagsToInsert.push({
-        id: tagId,
-        status: 'INACTIVE', // Mặc định thẻ mới chưa gán cho pet nào sẽ là INACTIVE
-        // petId sẽ để trống (null) mặc định theo schema
+  let successCount = 0;
+
+  // Xử lý từng file một (hoặc chia nhỏ theo batch nếu muốn nhanh hơn)
+  for (let i = 0; i < files.length; i++) {
+    const fileName = files[i];
+    const tagId = fileName.replace('.svg', '').trim();
+    const filePath = path.join(qrFolderPath, fileName);
+
+    try {
+      // A. ĐỌC NỘI DUNG FILE
+      const fileContent = fs.readFileSync(filePath);
+
+      // B. UPLOAD LÊN CLOUDFLARE R2
+      // Lưu vào thư mục 'qr-codes' trên R2
+      await s3Client.send(new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: `qr-codes/${fileName}`,
+        Body: fileContent,
+        ContentType: 'image/svg+xml',
+        // Cấu hình để file có thể truy cập công khai nếu cần
+        ACL: 'public-read',
+      }));
+
+      // C. LƯU VÀO DATABASE PRISMA
+      // Dùng upsert để nếu ID đã tồn tại thì nó chỉ cập nhật, không bị lỗi crash
+      await prisma.tag.upsert({
+        where: { id: tagId },
+        update: { status: 'INACTIVE' },
+        create: {
+          id: tagId,
+          status: 'INACTIVE',
+        },
       });
+
+      successCount++;
+      
+      // Log tiến độ mỗi 100 file để tránh làm rối màn hình console
+      if (successCount % 100 === 0) {
+        console.log(`✅ Đã xong: ${successCount}/${files.length} mã.`);
+      }
+
+    } catch (err: any) {
+      console.error(`⚠️ Lỗi tại file ${fileName}:`, err.message);
     }
   }
 
-  console.log(`Đã tìm thấy ${tagsToInsert.length} mã QR hợp lệ. Bắt đầu lưu vào DB...`);
-
-  // 4. Chunking (Chia nhỏ data để insert)
-  // Insert 10,000 record 1 lúc có thể làm quá tải DB, ta nên chia nhỏ ra (ví dụ: 1000 records/lần)
-  const chunkSize = 1000;
-  let insertedCount = 0;
-
-  for (let i = 0; i < tagsToInsert.length; i += chunkSize) {
-    const chunk = tagsToInsert.slice(i, i + chunkSize);
-    
-    // Sử dụng createMany với skipDuplicates: true để nếu bạn chạy lại script, 
-    // nó sẽ không bị lỗi crash do trùng lặp (trùng ID).
-    const result = await prisma.tag.createMany({
-      data: chunk,
-      skipDuplicates: true, 
-    });
-
-    insertedCount += result.count;
-    console.log(`Đã insert thành công: ${i + chunk.length} / ${tagsToInsert.length}`);
-  }
-
-  console.log(`🎉 Hoàn tất! Đã thêm mới ${insertedCount} mã QR vào hệ thống.`);
+  console.log(`\n🎉 HOÀN TẤT!`);
+  console.log(`- Tổng số file xử lý: ${successCount}`);
+  console.log(`- Địa chỉ Public: https://pub-35c6d59c9e96467b9783df2a4e890a09.r2.dev/qr-codes/{tagId}.svg`);
 }
 
 main()
   .catch((e) => {
-    console.error('Lỗi trong quá trình seed:', e);
+    console.error('❌ Lỗi nghiêm trọng trong quá trình seed:', e);
     process.exit(1);
   })
   .finally(async () => {
