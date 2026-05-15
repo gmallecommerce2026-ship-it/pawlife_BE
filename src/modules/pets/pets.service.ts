@@ -56,6 +56,49 @@ export class PetsService {
     await this.redisService.set(cacheKey, pets, 300); // Cache 5 phút
     return pets;
   }
+  async linkQrCode(userId: string, petId: string, tagId: string) {
+    // 1. Kiểm tra Pet có tồn tại và thuộc quyền sở hữu của user không
+    const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
+    if (!pet) throw new NotFoundException('Không tìm thấy thú cưng này!');
+    if (pet.ownerId !== userId && pet.shelterId !== userId) {
+      throw new ConflictException('Bạn không có quyền thao tác trên thú cưng này!');
+    }
+
+    // 2. Kiểm tra Tag (Mã QR) có tồn tại trong hệ thống không
+    const tag = await this.prisma.tag.findUnique({ where: { id: tagId } });
+    if (!tag) {
+      throw new BadRequestException('Mã QR này không thuộc hệ thống PawLife hoặc không tồn tại!');
+    }
+
+    // 3. Kiểm tra xem Tag này đã được gán cho con pet nào chưa
+    if (tag.petId) {
+      if (tag.petId === petId) throw new BadRequestException('Mã QR này đã được gán cho bé này rồi!');
+      throw new BadRequestException('Mã QR này đã được sử dụng cho một thú cưng khác!');
+    }
+
+    // 4. Thực hiện gán Tag vào Pet (Dùng Transaction để đảm bảo tính toàn vẹn)
+    await this.prisma.$transaction([
+      this.prisma.tag.update({
+        where: { id: tagId },
+        data: { 
+          petId: petId, 
+          status: 'ACTIVE' // Chuyển status thành ACTIVE
+        }
+      }),
+      this.prisma.pet.update({
+        where: { id: petId },
+        data: { 
+          qrVerificationStatus: 'VERIFIED',
+          qrCodeUrl: tagId // Lưu mã Tag vào URL hoặc bạn có thể lưu link ảnh thật tuỳ logic
+        }
+      })
+    ]);
+
+    // 5. Xóa cache
+    await this.redisService.del(`pet:detail:${petId}`);
+
+    return { success: true, message: 'Liên kết vòng cổ thành công!' };
+  }
   async getFeed(userId: string, limit: number, filters?: FeedFilters, lat?: number, lng?: number) {
     const { gender, size, species } = filters || {};
 
