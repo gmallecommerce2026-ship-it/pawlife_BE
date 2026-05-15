@@ -15,6 +15,15 @@ import { Throttle } from '@nestjs/throttler'; // BỔ SUNG IMPORT
 export class PetsController {
   constructor(private readonly petsService: PetsService) {}
 
+  @Post(':id/link-qr')
+  async linkQrCode(
+    @User('id') userId: string,
+    @Param('id') petId: string,
+    @Body('tagId') tagId: string,
+  ) {
+    return this.petsService.linkQrCode(userId, petId, tagId);
+  }
+
   @Post(':id/transfer-request')
   async requestTransfer(
     @Param('id') petId: string,
