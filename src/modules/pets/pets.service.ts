@@ -316,33 +316,50 @@ export class PetsService {
       where: { id: petId },
     });
 
-    if (!pet) {
-      throw new NotFoundException('Không tìm thấy thú cưng này!');
-    }
-
+    if (!pet) throw new NotFoundException('Không tìm thấy thú cưng này!');
     if (pet.ownerId !== userId && pet.shelterId !== userId) {
-      throw new ConflictException('Bạn không có quyền thay đổi trạng thái thú cưng này!');
+      throw new ConflictException('Bạn không có quyền thay đổi trạng thái!');
     }
 
     const newStatus = isLost ? 'LOST' : 'ACTIVE';
     
+    // 1. Cập nhật DB
     await this.prisma.tag.updateMany({
       where: { petId: petId },
       data: { status: newStatus },
     });
 
-    // Bắn thông báo xác nhận đã Bật / Tắt chế độ báo lạc
+    // Lấy danh sách tag để xử lý Geo Redis
+    const tags = await this.prisma.tag.findMany({ where: { petId: petId } });
+
+    // 2. Xóa Cache chi tiết Pet
+    await this.redisService.del(`pet:detail:${petId}`);
+
+    // 3. ĐỒNG BỘ REDIS GEO MAP DÀNH CHO HỆ THỐNG LỚN
+    const LOST_TAGS_KEY = 'tags:locations:lost'; // Key này phải khớp với bên TagsService
+    
+    if (!isLost) {
+      // NẾU TẮT BÁO LẠC: Xóa ngay tọa độ khỏi Redis Geo
+      for (const tag of tags) {
+        await this.redisService.removeLocation(LOST_TAGS_KEY, tag.id);
+      }
+      
+      // LƯU Ý SCALE: Khi bạn có cache `tags:nearby:lat_xxx...` (600s) ở TagsService,
+      // Khi tắt lost mode, user khác query xung quanh vẫn có thể thấy data cũ.
+      // Giải pháp tối ưu: Xóa toàn bộ cache list nearby (Scan matching pattern)
+      // await this.clearNearbyCache(); 
+    }
+
+    // 4. Bắn Notification
     await this.notificationsService.createAndSendNotification({
       userId: userId,
       title: isLost ? '🚨 Báo động đi lạc!' : '✅ Thú cưng an toàn',
       body: isLost 
-        ? `Bạn đã BẬT chế độ báo lạc cho bé ${pet.name}. Hệ thống sẽ thông báo ngay nếu có người quét mã vòng cổ!` 
-        : `Bạn đã TẮT chế độ báo lạc cho bé ${pet.name}. Chúc mừng bé đã về nhà an toàn.`,
+        ? `Bạn đã BẬT chế độ báo lạc cho bé ${pet.name}.` 
+        : `Bạn đã TẮT chế độ báo lạc cho bé ${pet.name}.`,
       type: NotificationType.TAG,
       referenceId: petId,
     });
-
-    await this.redisService.del(`pet:detail:${petId}`);
 
     return {
       message: isLost ? 'Đã bật chế độ báo lạc!' : 'Đã tắt chế độ báo lạc, thú cưng an toàn.',
