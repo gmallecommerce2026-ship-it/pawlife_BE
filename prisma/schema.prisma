@@ -200,7 +200,7 @@ model Pet {
   breed       String?
   dob         DateTime?
   microchipNumber  String?
-  description String?
+  description String?    @db.Text
   images      PetImage[] // Lưu URL từ Cloudflare R2
   status      PetStatus @default(AVAILABLE)
   gender      PetGender?
