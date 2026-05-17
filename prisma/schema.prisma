@@ -238,6 +238,13 @@ model Pet {
   tags             Tag[]
   adoptionRequests AdoptionRequest[]
   adoptionApplications AdoptionApplication[]
+  
+  lostContactName    String?  // Tên người liên hệ khẩn cấp khi thất lạc
+  lostContactPhone   String?  // SĐT khẩn cấp khi thất lạc
+  lostContactAddress String?  // Địa chỉ khẩn cấp khi thất lạc
+  lostLocation       String?  // Địa điểm thất lạc
+  lostDateTime       String?  // Thời gian thất lạc
+  lostDetails        String?  // Đặc điểm nhận dạng / Lời nhắn
 }
 
 model AdoptionApplication {

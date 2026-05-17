@@ -10,6 +10,7 @@ import { RedisService } from 'src/database/redis/redis.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
+import { ToggleLostModeDto } from './dto/toggle-lost-mode.dto';
 export interface FeedFilters {
   gender?: PetGender;
   size?: PetSize;
@@ -23,6 +24,7 @@ const ownerSelectQuery = {
     phone: true,// Chỉ trả về khi cần thiết (ví dụ: pet đang bị thất lạc)
   },
 };
+
 @Injectable()
 export class PetsService {
   constructor(
@@ -310,8 +312,10 @@ export class PetsService {
 
     return { message: 'Đã xóa thú cưng thành công!' };
   }
+  
+  async toggleLostMode(userId: string, petId: string, dto: ToggleLostModeDto) {
+    const { isLost, location, dateTime, details, ownerName, ownerPhone, ownerAddress, note } = dto;
 
-  async toggleLostMode(userId: string, petId: string, isLost: boolean) {
     const pet = await this.prisma.pet.findUnique({
       where: { id: petId },
     });
@@ -323,11 +327,26 @@ export class PetsService {
 
     const newStatus = isLost ? 'LOST' : 'ACTIVE';
     
-    // 1. Cập nhật DB
-    await this.prisma.tag.updateMany({
-      where: { petId: petId },
-      data: { status: newStatus },
-    });
+    // 1. Cập nhật DB (Dùng Transaction để đảm bảo tính toàn vẹn dữ liệu)
+    await this.prisma.$transaction([
+      this.prisma.tag.updateMany({
+        where: { petId: petId },
+        data: { status: newStatus },
+      }),
+      this.prisma.pet.update({
+        where: { id: petId },
+        data: {
+          // Lưu dữ liệu khi BẬT báo lạc, reset về null khi TẮT báo lạc
+          lostContactName: isLost ? ownerName : null,
+          lostContactPhone: isLost ? ownerPhone : null,
+          lostContactAddress: isLost ? ownerAddress : null,
+          lostLocation: isLost ? location : null,
+          lostDateTime: isLost ? dateTime : null,
+          // Gộp chi tiết (details) và lời nhắn (note) vào cùng một trường
+          lostDetails: isLost ? `${details || ''}${note ? `\n\nGhi chú: ${note}` : ''}`.trim() : null,
+        }
+      })
+    ]);
 
     // Lấy danh sách tag để xử lý Geo Redis
     const tags = await this.prisma.tag.findMany({ where: { petId: petId } });
@@ -336,18 +355,14 @@ export class PetsService {
     await this.redisService.del(`pet:detail:${petId}`);
 
     // 3. ĐỒNG BỘ REDIS GEO MAP DÀNH CHO HỆ THỐNG LỚN
-    const LOST_TAGS_KEY = 'tags:locations:lost'; // Key này phải khớp với bên TagsService
+    const LOST_TAGS_KEY = 'tags:locations:lost'; 
     
     if (!isLost) {
       // NẾU TẮT BÁO LẠC: Xóa ngay tọa độ khỏi Redis Geo
       for (const tag of tags) {
         await this.redisService.removeLocation(LOST_TAGS_KEY, tag.id);
       }
-      
-      // LƯU Ý SCALE: Khi bạn có cache `tags:nearby:lat_xxx...` (600s) ở TagsService,
-      // Khi tắt lost mode, user khác query xung quanh vẫn có thể thấy data cũ.
-      // Giải pháp tối ưu: Xóa toàn bộ cache list nearby (Scan matching pattern)
-      // await this.clearNearbyCache(); 
+      // Bạn có thể mở comment await this.clearNearbyCache(); nếu đã định nghĩa
     }
 
     // 4. Bắn Notification
@@ -365,7 +380,7 @@ export class PetsService {
       message: isLost ? 'Đã bật chế độ báo lạc!' : 'Đã tắt chế độ báo lạc, thú cưng an toàn.',
       isLost: isLost,
     };
-  }
+}
 
   async requestTransfer(petId: string, payload: { email?: string; phone?: string }, senderId: string) {
     if (!payload.email && !payload.phone) {

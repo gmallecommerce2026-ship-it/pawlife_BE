@@ -9,6 +9,7 @@ import { PetGender, PetSize } from '@prisma/client';
 import { CreatePetDto } from './dto/create-pet.dto';
 import { UpdatePetDto } from './dto/update-pet.dto';
 import { Throttle } from '@nestjs/throttler'; // BỔ SUNG IMPORT
+import { ToggleLostModeDto } from './dto/toggle-lost-mode.dto';
 
 @Controller('pets')
 @UseGuards(JwtAuthGuard) 
@@ -155,10 +156,10 @@ export class PetsController {
   @Patch(':id/lost-mode')
   @UseGuards(JwtAuthGuard)
   async toggleLostMode(
-    @User('id') userId: string,
-    @Param('id') petId: string,
-    @Body('isLost') isLost: boolean,
+    @Req() req: any, 
+    @Param('id') id: string, 
+    @Body() dto: ToggleLostModeDto // Lấy toàn bộ payload frontend gửi lên
   ) {
-    return this.petsService.toggleLostMode(userId, petId, isLost);
+    return this.petsService.toggleLostMode(req.user.id, id, dto);
   }
 }
