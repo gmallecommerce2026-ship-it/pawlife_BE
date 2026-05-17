@@ -343,7 +343,7 @@ export class PetsService {
           lostLocation: isLost ? location : null,
           lostDateTime: isLost ? dateTime : null,
           // Gộp chi tiết (details) và lời nhắn (note) vào cùng một trường
-          lostDetails: isLost ? `${details || ''}${note ? `\n\nGhi chú: ${note}` : ''}`.trim() : null,
+          lostDetails: isLost ? `${note || ''}`.trim() : null,
         }
       })
     ]);
