@@ -6,7 +6,6 @@ import { google } from 'googleapis';
 const prisma = new PrismaClient();
 
 // CẤU HÌNH DRIVE API Ở ĐÂY
-// Thay 'API_KEY_CUA_BAN_O_DAY' bằng key bạn vừa tạo trên Google Cloud
 const GOOGLE_DRIVE_API_KEY = process.env.GOOGLE_DRIVE_API_KEY || 'API_KEY_CUA_BAN_O_DAY';
 
 const drive = google.drive({
@@ -14,7 +13,6 @@ const drive = google.drive({
   auth: GOOGLE_DRIVE_API_KEY,
 });
 
-// Helper 1 & 2 & 3 giữ nguyên như cũ
 function parseAgeToDob(ageStr: any): Date | null {
   if (!ageStr) return null;
   const str = String(ageStr).toLowerCase().trim();
@@ -40,13 +38,12 @@ function parseStatus(statusStr: any): PetStatus {
   return PetStatus.AVAILABLE;
 }
 
-// MỚI: Helper gọi API lấy danh sách ID ảnh trong 1 Folder Drive
 async function getImagesFromFolder(folderId: string): Promise<string[]> {
   try {
     const res = await drive.files.list({
       q: `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
       fields: 'files(id)',
-      pageSize: 5, // Lấy tối đa 5 ảnh mỗi con vật để tránh nhồi nhét quá nhiều vào DB
+      pageSize: 5, 
     });
     return res.data.files?.map((f) => f.id as string).filter(Boolean) || [];
   } catch (error: any) {
@@ -55,41 +52,34 @@ async function getImagesFromFolder(folderId: string): Promise<string[]> {
   }
 }
 
-// ĐÃ NÂNG CẤP: Helper 4 chuyển thành async và xử lý thông minh hơn
 async function extractImages(imageStr: any): Promise<{ url: string }[]> {
   if (!imageStr) return [{ url: 'https://loremflickr.com/400/400/dog' }];
   
-  // Tách bằng dấu phẩy, chấm phẩy hoặc xuống dòng
   const parts = String(imageStr).split(/[\n,;]+/).map(s => s.trim()).filter(s => s);
   if (parts.length === 0) return [{ url: 'https://loremflickr.com/400/400/dog' }];
 
   let results: { url: string }[] = [];
 
   for (const part of parts) {
-    // Trường hợp 1: Link Folder Drive
     if (part.includes('drive.google.com') && (part.includes('/folders/') || part.includes('id='))) {
       let folderId = '';
       const matchFolder = part.match(/\/folders\/([a-zA-Z0-9_-]+)/);
       if (matchFolder && matchFolder[1]) folderId = matchFolder[1];
       
-      // Nếu không match được đường dẫn /folders/ nhưng vẫn có khả năng là folder qua id=
       if (!folderId && part.includes('id=')) {
         const matchId = part.match(/id=([a-zA-Z0-9_-]+)/);
         if (matchId && matchId[1]) folderId = matchId[1];
       }
 
-      // Quét folder nếu phát hiện
       if (part.includes('/folders/')) {
         const imageIds = await getImagesFromFolder(folderId);
         if (imageIds.length > 0) {
-          // Dùng endpoint thumbnail để ảnh load ổn định trên App/Web, không bị dính lỗi CORS
           results.push(...imageIds.map(id => ({ url: `https://drive.google.com/thumbnail?id=${id}&sz=w1000` })));
           continue; 
         }
       }
     }
 
-    // Trường hợp 2: Link File Drive đơn lẻ
     if (part.includes('drive.google.com') && (part.includes('/file/d/') || part.includes('id='))) {
       let fileId = '';
       const matchD = part.match(/\/d\/([a-zA-Z0-9_-]+)/);
@@ -106,17 +96,14 @@ async function extractImages(imageStr: any): Promise<{ url: string }[]> {
       }
     }
 
-    // Trường hợp 3: Tên file thuần túy (VD: xyz.png)
     if (!part.startsWith('http')) {
       results.push({ url: `https://pub-your-r2-domain.com/pet-images/${part}` });
       continue;
     }
 
-    // Trường hợp 4: Link http/https bình thường
     results.push({ url: part });
   }
 
-  // Fallback nếu mọi parse đều thất bại
   if (results.length === 0) {
     results.push({ url: 'https://loremflickr.com/400/400/dog' });
   }
@@ -178,13 +165,16 @@ export async function seedPets() {
   const records = xlsx.utils.sheet_to_json(sheet);
   let count = 0;
 
-  for (const row of records as any[]) {
+  console.log(`Tổng số bản ghi cần xử lý: ${records.length}`);
+
+  // ĐÃ SỬA: Chuyển sang vòng lặp for truyền thống để kiểm soát tiến trình và giải phóng bộ nhớ
+  for (let i = 0; i < records.length; i++) {
+    const row = records[i] as any;
     const name = row['Tên thú cưng'] || row['Tên'] || row['Name'] || row['ID'] || 'Bé Không Tên';
     const status = parseStatus(row['Tình trạng']);
     const description = [row['Lưu ý'], row['Ghi chú'], row['Cột 1']].filter(Boolean).join('. ');
     const shelterId = await getOrCreateShelter(row['Khu']);
     
-    // LƯU Ý Ở ĐÂY: Đã thêm await do hàm hiện tại là async
     const imagesData = await extractImages(row['Ảnh']);
 
     try {
@@ -211,6 +201,17 @@ export async function seedPets() {
       count++;
     } catch (error: any) {
       console.error(`❌ Lỗi khi seed ID ${row['ID']}:`, error.message);
+    }
+
+    // XỬ LÝ OOM: Dọn rác bộ nhớ sau mỗi 20 bản ghi
+    if (i > 0 && i % 20 === 0) {
+      console.log(`Đã xử lý ${i}/${records.length} bé. Đang dọn dẹp bộ nhớ...`);
+      // Nhường Event Loop 100ms cho Garbage Collector chạy
+      await new Promise(resolve => setTimeout(resolve, 100));
+      // Ép Node.js dọn rác ngay lập tức
+      if (global.gc) {
+        global.gc();
+      }
     }
   }
   
