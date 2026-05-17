@@ -47,7 +47,6 @@ async function getImagesFromFolder(folderId: string): Promise<string[]> {
     });
     return res.data.files?.map((f) => f.id as string).filter(Boolean) || [];
   } catch (error: any) {
-    console.error(`⚠️ Lỗi quét folder Drive ${folderId}:`, error.message);
     return [];
   }
 }
@@ -97,7 +96,6 @@ async function extractImages(imageStr: any): Promise<{ url: string }[]> {
       results.push({ url: `https://pub-your-r2-domain.com/pet-images/${part}` });
       continue;
     }
-
     results.push({ url: part });
   }
 
@@ -107,7 +105,6 @@ async function extractImages(imageStr: any): Promise<{ url: string }[]> {
   return results;
 }
 
-// Bộ đệm lưu trữ ID của các khu (Shelter) để tối ưu truy vấn
 const shelterCache = new Map<string, string>();
 
 async function getOrCreateShelter(khuName: any): Promise<string | null> {
@@ -134,61 +131,79 @@ async function getOrCreateShelter(khuName: any): Promise<string | null> {
   return shelter.id;
 }
 
-// Hàm seed riêng rẽ cho từng file CSV
+// HÀM MỚI: Đọc toàn bộ CSV lưu vào mảng, sau đó xử lý từng cụm (Batch)
 async function seedFromCsv(filePath: string, speciesType: 'DOG' | 'CAT') {
-  console.log(`\n⏳ Đang xử lý file CSV: ${path.basename(filePath)}...`);
-  
+  console.log(`\n⏳ Đang nạp dữ liệu từ file: ${path.basename(filePath)}...`);
   if (!fs.existsSync(filePath)) {
     console.error(`❌ Không tìm thấy file: ${filePath}`);
     return;
   }
 
-  const stream = fs.createReadStream(filePath).pipe(csv());
-  let count = 0;
+  // 1. Nạp file CSV vào bộ nhớ (file text tốn rất ít RAM, an toàn tuyệt đối)
+  const allRecords: any[] = [];
+  await new Promise((resolve, reject) => {
+    fs.createReadStream(filePath)
+      .pipe(csv())
+      .on('data', (data) => allRecords.push(data))
+      .on('end', resolve)
+      .on('error', reject);
+  });
 
-  // for await: Đọc dòng nào xử lý xong dòng đó, không lưu vào RAM
-  for await (const row of stream) {
-    count++;
-    
-    // Lưu ý: Key ở row[] phải khớp với Tên Cột (Header) ở dòng 1 trong file CSV
-    const name = row['Tên thú cưng'] || row['Tên'] || row['Name'] || row['ID'] || 'Bé Không Tên';
-    const status = parseStatus(row['Tình trạng']);
-    const description = [row['Lưu ý'], row['Ghi chú'], row['Cột 1']].filter(Boolean).join('. ');
-    const shelterId = await getOrCreateShelter(row['Khu']);
-    
-    const imagesData = await extractImages(row['Ảnh']);
+  console.log(`✅ Đã nạp thành công ${allRecords.length} dòng. Bắt đầu seed từng lô 10 bé...`);
 
-    try {
-      await prisma.pet.create({
-        data: {
-          name: String(name),
-          species: speciesType,
-          breed: String(row['Giống'] || 'Chưa rõ'),
-          dob: parseAgeToDob(row['Độ tuổi']),
-          color: String(row['Màu lông'] || 'Đang cập nhật'),
-          gender: parseGender(row['Giới tính']),
-          size: PetSize.MEDIUM, 
-          isSpayedNeutered: String(row['Triệt sản'] || '').toLowerCase().includes('đã triệt sản'),
-          isVaccinated: String(row['Tiêm phòng'] || '').toLowerCase().includes('đã tiêm đủ'),
-          status,
-          vetVerificationStatus: 'VERIFIED', 
-          description,
-          shelterId,
-          images: {
-            create: imagesData
+  // 2. Chia lô 10 item một lần
+  const BATCH_SIZE = 10;
+  let successCount = 0;
+
+  for (let i = 0; i < allRecords.length; i += BATCH_SIZE) {
+    const batch = allRecords.slice(i, i + BATCH_SIZE);
+    console.log(`\n📦 Đang xử lý lô từ ${i + 1} đến ${Math.min(i + BATCH_SIZE, allRecords.length)} / ${allRecords.length}`);
+    
+    // Xử lý từng dòng trong cụm (Chạy tuần tự để Google Drive không chặn API do gọi quá nhanh)
+    for (const row of batch) {
+      const name = row['Tên thú cưng'] || row['Tên'] || row['Name'] || row['ID'] || 'Bé Không Tên';
+      try {
+        const status = parseStatus(row['Tình trạng']);
+        const description = [row['Lưu ý'], row['Ghi chú'], row['Cột 1']].filter(Boolean).join('. ');
+        const shelterId = await getOrCreateShelter(row['Khu']);
+        const imagesData = await extractImages(row['Ảnh']); // Gọi API Google Drive ở đây
+
+        await prisma.pet.create({
+          data: {
+            name: String(name),
+            species: speciesType,
+            breed: String(row['Giống'] || 'Chưa rõ'),
+            dob: parseAgeToDob(row['Độ tuổi']),
+            color: String(row['Màu lông'] || 'Đang cập nhật'),
+            gender: parseGender(row['Giới tính']),
+            size: PetSize.MEDIUM, 
+            isSpayedNeutered: String(row['Triệt sản'] || '').toLowerCase().includes('đã triệt sản'),
+            isVaccinated: String(row['Tiêm phòng'] || '').toLowerCase().includes('đã tiêm đủ'),
+            status,
+            vetVerificationStatus: 'VERIFIED', 
+            description,
+            shelterId,
+            images: { create: imagesData }
           }
-        }
-      });
-    } catch (error: any) {
-      console.error(`❌ Lỗi khi seed ID ${row['ID'] || name}:`, error.message);
+        });
+        successCount++;
+        process.stdout.write(`✅ Đã thêm: ${name} | `); // Báo cáo trực tiếp từng bé một
+      } catch (error: any) {
+        process.stdout.write(`❌ Lỗi: ${name} | `);
+      }
     }
 
-    if (count % 10 === 0) {
-      process.stdout.write(`\rĐã seed: ${count} bản ghi... `); // Cập nhật log trên cùng 1 dòng
+    // 3. Cho server nghỉ ngơi 3 giây để làm trống RAM và mạng
+    console.log(`\n💤 Đã xong lô. Nghỉ 3 giây để VPS nhả RAM...`);
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    // Ép Nodejs dọn rác
+    if (global.gc) {
+      global.gc();
     }
   }
   
-  console.log(`\n✅ Hoàn tất file. Đã seed thành công ${count} bé ${speciesType}.`);
+  console.log(`\n🎉 Hoàn tất file. Đã seed thành công ${successCount} bé ${speciesType}.`);
 }
 
 export async function seedPets() {
@@ -212,7 +227,6 @@ export async function seedPets() {
   
   console.log('Đã xóa xong dữ liệu cũ!');
 
-  // Tách thành 2 file riêng biệt và seed lần lượt để đảm bảo RAM luôn rảnh rỗi
   const dogCsvPath = path.join(process.cwd(), 'prisma/data/cho_meo.xlsx - TT chó lụm.csv');
   const catCsvPath = path.join(process.cwd(), 'prisma/data/cho_meo.xlsx - TT mèo.csv');
 
