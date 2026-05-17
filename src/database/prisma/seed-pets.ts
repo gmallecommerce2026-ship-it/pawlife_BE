@@ -1,63 +1,131 @@
 import { PrismaClient, PetGender, PetSize, PetStatus } from '@prisma/client';
+import * as xlsx from 'xlsx';
+import * as path from 'path';
+
+const prisma = new PrismaClient();
+
+// Helper 1: Chuyển đổi "3 tuổi", "5 tháng" thành DateTime (dob)
+function parseAgeToDob(ageStr: any): Date | null {
+  if (!ageStr) return null;
+  const str = String(ageStr).toLowerCase().trim();
+  const now = new Date();
+
+  const matchNum = str.match(/(\d+)/);
+  if (!matchNum) return null;
+  const num = parseInt(matchNum[1], 10);
+
+  if (str.includes('tuổi') || str.includes('năm')) {
+    now.setFullYear(now.getFullYear() - num);
+    return now;
+  }
+  if (str.includes('tháng')) {
+    now.setMonth(now.getMonth() - num);
+    return now;
+  }
+  return null;
+}
+
+// Helper 2: Chuyển đổi giới tính sang Enum
+function parseGender(genderStr: any): PetGender {
+  const str = String(genderStr || '').toLowerCase().trim();
+  if (str === 'đực') return PetGender.MALE;
+  if (str === 'cái') return PetGender.FEMALE;
+  return PetGender.UNKNOWN;
+}
+
+// Helper 3: Parse trạng thái nhận nuôi
+function parseStatus(statusStr: any): PetStatus {
+  const str = String(statusStr || '').toLowerCase().trim();
+  if (str.includes('đã được nhận nuôi')) return PetStatus.ADOPTED;
+  return PetStatus.AVAILABLE;
+}
+
+// Helper 4: Xử lý link ảnh (Drive, Folder, hoặc Filename)
+function extractImages(imageStr: any): { url: string }[] {
+  if (!imageStr) return [];
+  const parts = String(imageStr).split(',').map(s => s.trim()).filter(s => s);
+  return parts.map(part => ({ url: part }));
+}
 
 export async function seedPets(prisma: PrismaClient) {
-  console.log('Đang tạo Pets...');
+  console.log('Bắt đầu quá trình seed dữ liệu từ file Excel...');
 
-  // 1. Lấy danh sách Shelter từ DB (Thay vì nhận từ tham số)
-  const shelters = await prisma.shelter.findMany();
-  if (shelters.length === 0) {
-    throw new Error('❌ Không tìm thấy Shelter nào! Vui lòng chạy seed Shelters trước.');
+  const shelterCache = new Map<string, string>();
+
+  async function getOrCreateShelter(khuName: any): Promise<string | null> {
+    if (!khuName) return null;
+    const name = String(khuName).trim();
+    if (shelterCache.has(name)) return shelterCache.get(name)!;
+
+    let shelter = await prisma.shelter.findFirst({ where: { name } });
+    if (!shelter) {
+      shelter = await prisma.shelter.create({
+        data: {
+          name: name,
+          address: 'Đang cập nhật',
+          contactInfo: 'Đang cập nhật',
+        }
+      });
+    }
+    shelterCache.set(name, shelter.id);
+    return shelter.id;
   }
 
-  // Lấy ra id của các shelter để dùng
-  const shelter1Id = shelters[0].id;
-  const shelter2Id = shelters.length > 1 ? shelters[1].id : shelter1Id;
-  const shelter3Id = shelters.length > 2 ? shelters[2].id : shelter1Id;
+  // Đọc file Excel trực tiếp
+  const excelPath = path.join(__dirname, '../data/cho_meo.xlsx');
+  const workbook = xlsx.readFile(excelPath);
   
-  const petData = [
-    // Shelter 1: Hà Nội Pet Rescue
-    { name: 'Milo', species: 'Dog', breed: 'Golden Retriever', age: 2, gender: PetGender.MALE, size: PetSize.LARGE, color: 'Vàng', shelterId: shelters[0].id, imageUrl: 'https://loremflickr.com/400/400/dog' },
-    { name: 'Miu', species: 'Cat', breed: 'Mèo mướp', age: 1, gender: PetGender.FEMALE, size: PetSize.SMALL, color: 'Vằn', shelterId: shelters[0].id, imageUrl: 'https://loremflickr.com/400/400/cat' },
-    { name: 'Ki', species: 'Dog', breed: 'Corgi', age: 3, gender: PetGender.MALE, size: PetSize.MEDIUM, color: 'Trắng Vàng', shelterId: shelters[0].id, imageUrl: 'https://loremflickr.com/400/400/corgi' },
-    { name: 'Bông', species: 'Cat', breed: 'Mèo Anh Lông Dài', age: 2, gender: PetGender.FEMALE, size: PetSize.MEDIUM, color: 'Trắng', shelterId: shelters[0].id, imageUrl: 'https://loremflickr.com/400/400/kitten' },
-    { name: 'Lu', species: 'Dog', breed: 'Chó cỏ', age: 4, gender: PetGender.UNKNOWN, size: PetSize.MEDIUM, color: 'Đen', shelterId: shelters[0].id, imageUrl: 'https://loremflickr.com/400/400/puppy' },
+  // Chỉ lấy Sheet đầu tiên (vì bạn đề cập file hiện tại toàn chó)
+  const firstSheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[firstSheetName];
+  
+  // Chuyển đổi dữ liệu sheet thành mảng JSON
+  const records = xlsx.utils.sheet_to_json(sheet);
 
-    // Shelter 2: Sài Gòn Animal Rescue
-    { name: 'Tomy', species: 'Cat', breed: 'Mèo Anh Lông Ngắn', age: 1, gender: PetGender.MALE, size: PetSize.MEDIUM, color: 'Xám', shelterId: shelters[1].id, imageUrl: 'https://loremflickr.com/400/400/cat,grey' },
-    { name: 'Rex', species: 'Dog', breed: 'Becgie', age: 5, gender: PetGender.MALE, size: PetSize.LARGE, color: 'Đen Vàng', shelterId: shelters[1].id, imageUrl: 'https://loremflickr.com/400/400/germanshepherd' },
-    { name: 'Na', species: 'Cat', breed: 'Mèo Xiêm', age: 3, gender: PetGender.FEMALE, size: PetSize.SMALL, color: 'Trắng Đen', shelterId: shelters[1].id, imageUrl: 'https://loremflickr.com/400/400/siamese' },
-    { name: 'Bull', species: 'Dog', breed: 'Bulldog', age: 2, gender: PetGender.MALE, size: PetSize.MEDIUM, color: 'Trắng', shelterId: shelters[1].id, imageUrl: 'https://loremflickr.com/400/400/bulldog' },
-    { name: 'Đốm', species: 'Dog', breed: 'Dalmatian', age: 1, gender: PetGender.FEMALE, size: PetSize.LARGE, color: 'Trắng Đen', shelterId: shelters[1].id, imageUrl: 'https://loremflickr.com/400/400/dalmatian' },
+  let count = 0;
 
-    // Shelter 3: Đà Nẵng Furry Friends
-    { name: 'Cam', species: 'Cat', breed: 'Mèo vàng', age: 2, gender: PetGender.MALE, size: PetSize.SMALL, color: 'Cam', shelterId: shelters[2].id, imageUrl: 'https://loremflickr.com/400/400/orange,cat' },
-    { name: 'Husky', species: 'Dog', breed: 'Husky Sibir', age: 3, gender: PetGender.MALE, size: PetSize.LARGE, color: 'Xám Trắng', shelterId: shelters[2].id, imageUrl: 'https://loremflickr.com/400/400/husky' },
-    { name: 'Mika', species: 'Cat', breed: 'Mèo Ba Tư', age: 4, gender: PetGender.FEMALE, size: PetSize.MEDIUM, color: 'Trắng', shelterId: shelters[2].id, imageUrl: 'https://loremflickr.com/400/400/persian,cat' },
-    { name: 'Gấu', species: 'Dog', breed: 'Poodle', age: 1, gender: PetGender.FEMALE, size: PetSize.SMALL, color: 'Nâu', shelterId: shelters[2].id, imageUrl: 'https://loremflickr.com/400/400/poodle' },
-    { name: 'Béo', species: 'Cat', breed: 'Mèo Anh Lông Ngắn', age: 5, gender: PetGender.UNKNOWN, size: PetSize.LARGE, color: 'Xanh xám', shelterId: shelters[2].id, imageUrl: 'https://loremflickr.com/400/400/fat,cat' },
-  ];
+  for (const row of records as any[]) {
+    const name = row['ID'] || 'Bé Chó Không Tên';
+    const species = 'Dog'; // Mặc định là chó theo dữ liệu hiện tại của bạn
+    const breed = row['Giống'] || 'Chưa rõ';
+    const color = row['Màu lông'] || '';
+    const dob = parseAgeToDob(row['Độ tuổi']);
+    const gender = parseGender(row['Giới tính']);
+    
+    const isSpayedNeutered = String(row['Triệt sản'] || '').toLowerCase().includes('đã triệt sản');
+    const isVaccinated = String(row['Tiêm phòng'] || '').toLowerCase().includes('đã tiêm đủ');
+    
+    const status = parseStatus(row['Tình trạng']);
+    
+    const description = [row['Lưu ý'], row['Ghi chú'], row['Cột 1']].filter(Boolean).join('. ');
+    
+    const imagesData = extractImages(row['Ảnh']);
+    const shelterId = await getOrCreateShelter(row['Khu']);
 
-  for (const pet of petData) {
-    await prisma.pet.create({
-      data: {
-        name: pet.name,
-        species: pet.species,
-        breed: pet.breed,
-        gender: pet.gender,
-        size: pet.size,
-        color: pet.color,
-        status: PetStatus.AVAILABLE,
-        isVaccinated: true,
-        isSpayedNeutered: false,
-        shelterId: pet.shelterId,
-        images: {
-          create: [
-            { url: pet.imageUrl },
-            { url: `${pet.imageUrl}?random=1` },
-            { url: `${pet.imageUrl}?random=2` }
-          ],
-        },
-      },
-    });
+    try {
+      await prisma.pet.create({
+        data: {
+          name: String(name),
+          species,
+          breed: String(breed),
+          dob,
+          color: String(color),
+          gender,
+          isSpayedNeutered,
+          isVaccinated,
+          status,
+          description,
+          shelterId,
+          images: {
+            create: imagesData
+          }
+        }
+      });
+      count++;
+    } catch (error: any) {
+      console.error(`❌ Lỗi khi seed ID ${row['ID']}:`, error.message);
+    }
   }
+  
+  console.log(`✅ Đã seed thành công ${count} bé chó từ file Excel.`);
 }
