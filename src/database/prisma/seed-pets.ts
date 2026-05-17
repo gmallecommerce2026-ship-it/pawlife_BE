@@ -44,17 +44,29 @@ function parseStatus(statusStr: any): PetStatus {
 function extractImages(imageStr: any): { url: string }[] {
   if (!imageStr) return [];
   const parts = String(imageStr).split(',').map(s => s.trim()).filter(s => s);
+  // Đảm bảo luôn có URL hợp lệ nếu file rỗng
+  if (parts.length === 0) return [{ url: 'https://loremflickr.com/400/400/dog' }];
   return parts.map(part => ({ url: part }));
 }
 
-export async function seedPets(prisma: PrismaClient) {
+export async function seedPets() {
   console.log('Bắt đầu quá trình seed dữ liệu từ file Excel...');
 
-  // Bổ sung dòng này để XÓA TOÀN BỘ dữ liệu Pet cũ trong database
-  console.log('Đang xóa dữ liệu thú cưng cũ...');
   console.log('Đang dọn dẹp dữ liệu cũ (Xóa các bản ghi liên quan để tránh lỗi khóa ngoại)...');
   
-  // 1. Xóa các dữ liệu phụ thuộc vào Pet
+  // 1. Dọn dẹp an toàn tuyệt đối theo thứ tự (Tránh lỗi Foreign Key)
+  await prisma.eventImage.deleteMany();
+  await prisma.eventInterest.deleteMany();
+  await prisma.event.deleteMany();
+  await prisma.tagReport.deleteMany(); 
+  
+  // Gỡ liên kết Tag trước khi xóa Pet
+  await prisma.tag.updateMany({
+    where: { petId: { not: null } },
+    data: { petId: null },
+  });
+  await prisma.tag.deleteMany();
+  
   await prisma.transferRequest.deleteMany();
   await prisma.adoptionApplication.deleteMany();
   await prisma.adoptionRequest.deleteMany();
@@ -62,19 +74,15 @@ export async function seedPets(prisma: PrismaClient) {
   await prisma.favoritePet.deleteMany();
   await prisma.petImage.deleteMany();
 
-  // 2. Gỡ liên kết của Pet trong bảng Tag (vì Tag.petId là optional)
-  await prisma.tag.updateMany({
-    where: { petId: { not: null } },
-    data: { petId: null },
-  });
-
-  // 3. Xóa dữ liệu thú cưng
-  console.log('Đang xóa dữ liệu Pet...');
+  console.log('Đang xóa dữ liệu Pet và Shelter...');
   await prisma.pet.deleteMany(); 
+  await prisma.followedShelter.deleteMany();
+  await prisma.shelter.deleteMany();
   console.log('Đã xóa xong dữ liệu cũ!');
 
   const shelterCache = new Map<string, string>();
 
+  // 2. Tạo Shelter với TỌA ĐỘ MẶC ĐỊNH (Rất quan trọng cho App)
   async function getOrCreateShelter(khuName: any): Promise<string | null> {
     if (!khuName) return null;
     const name = String(khuName).trim();
@@ -85,8 +93,14 @@ export async function seedPets(prisma: PrismaClient) {
       shelter = await prisma.shelter.create({
         data: {
           name: name,
-          address: 'Đang cập nhật',
-          contactInfo: 'Đang cập nhật',
+          address: 'Đang cập nhật từ Excel',
+          contactInfo: '0999999999',
+          description: 'Trạm cứu hộ được tạo tự động từ hệ thống Excel.',
+          policy: '1. Liên hệ trực tiếp trạm để nhận nuôi.\n2. Cần chuẩn bị đủ điều kiện kinh tế.',
+          avatarUrl: 'https://loremflickr.com/200/200/house',
+          // Tọa độ mặc định (Hà Nội) để thuật toán GPS trên App không bị văng lỗi hoặc ẩn trạm
+          latitude: 21.028511, 
+          longitude: 105.804817,
         }
       });
     }
@@ -98,20 +112,17 @@ export async function seedPets(prisma: PrismaClient) {
   const excelPath = path.join(process.cwd(), 'prisma/data/cho_meo.xlsx');
   const workbook = xlsx.readFile(excelPath);
   
-  // Chỉ lấy Sheet đầu tiên (vì bạn đề cập file hiện tại toàn chó)
   const firstSheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[firstSheetName];
   
-  // Chuyển đổi dữ liệu sheet thành mảng JSON
   const records = xlsx.utils.sheet_to_json(sheet);
-
   let count = 0;
 
   for (const row of records as any[]) {
     const name = row['ID'] || 'Bé Chó Không Tên';
-    const species = 'Dog'; // Mặc định là chó theo dữ liệu hiện tại của bạn
+    const species = 'DOG'; // Ép kiểu in hoa khớp với Enum nếu có
     const breed = row['Giống'] || 'Chưa rõ';
-    const color = row['Màu lông'] || '';
+    const color = row['Màu lông'] || 'Đang cập nhật';
     const dob = parseAgeToDob(row['Độ tuổi']);
     const gender = parseGender(row['Giới tính']);
     
@@ -119,7 +130,6 @@ export async function seedPets(prisma: PrismaClient) {
     const isVaccinated = String(row['Tiêm phòng'] || '').toLowerCase().includes('đã tiêm đủ');
     
     const status = parseStatus(row['Tình trạng']);
-    
     const description = [row['Lưu ý'], row['Ghi chú'], row['Cột 1']].filter(Boolean).join('. ');
     
     const imagesData = extractImages(row['Ảnh']);
@@ -134,9 +144,11 @@ export async function seedPets(prisma: PrismaClient) {
           dob,
           color: String(color),
           gender,
+          size: PetSize.MEDIUM, // BỔ SUNG: Tránh lỗi thiếu size khi App dùng bộ lọc
           isSpayedNeutered,
           isVaccinated,
           status,
+          vetVerificationStatus: 'VERIFIED', // BỔ SUNG: Chặn triệt để lỗi bị kẹt ở PENDING
           description,
           shelterId,
           images: {
@@ -153,7 +165,7 @@ export async function seedPets(prisma: PrismaClient) {
   console.log(`✅ Đã seed thành công ${count} bé chó từ file Excel.`);
 }
 
-seedPets(prisma)
+seedPets()
   .then(async () => {
     console.log('🏁 Tiến trình seed hoàn tất không có lỗi.');
     await prisma.$disconnect();
