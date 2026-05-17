@@ -129,3 +129,14 @@ export async function seedPets(prisma: PrismaClient) {
   
   console.log(`✅ Đã seed thành công ${count} bé chó từ file Excel.`);
 }
+
+seedPets(prisma)
+  .then(async () => {
+    console.log('🏁 Tiến trình seed hoàn tất không có lỗi.');
+    await prisma.$disconnect();
+  })
+  .catch(async (e) => {
+    console.error('❌ Tiến trình seed thất bại dữ dội:', e);
+    await prisma.$disconnect();
+    process.exit(1);
+  });
