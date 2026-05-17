@@ -52,6 +52,24 @@ export async function seedPets(prisma: PrismaClient) {
 
   // Bổ sung dòng này để XÓA TOÀN BỘ dữ liệu Pet cũ trong database
   console.log('Đang xóa dữ liệu thú cưng cũ...');
+  console.log('Đang dọn dẹp dữ liệu cũ (Xóa các bản ghi liên quan để tránh lỗi khóa ngoại)...');
+  
+  // 1. Xóa các dữ liệu phụ thuộc vào Pet
+  await prisma.transferRequest.deleteMany();
+  await prisma.adoptionApplication.deleteMany();
+  await prisma.adoptionRequest.deleteMany();
+  await prisma.petInteraction.deleteMany();
+  await prisma.favoritePet.deleteMany();
+  await prisma.petImage.deleteMany();
+
+  // 2. Gỡ liên kết của Pet trong bảng Tag (vì Tag.petId là optional)
+  await prisma.tag.updateMany({
+    where: { petId: { not: null } },
+    data: { petId: null },
+  });
+
+  // 3. Xóa dữ liệu thú cưng
+  console.log('Đang xóa dữ liệu Pet...');
   await prisma.pet.deleteMany(); 
   console.log('Đã xóa xong dữ liệu cũ!');
 
