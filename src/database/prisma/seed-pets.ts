@@ -1,11 +1,11 @@
 import { PrismaClient, PetGender, PetSize, PetStatus } from '@prisma/client';
-import * as xlsx from 'xlsx';
+import * as fs from 'fs';
 import * as path from 'path';
+import csv from 'csv-parser';
 import { google } from 'googleapis';
 
 const prisma = new PrismaClient();
 
-// CẤU HÌNH DRIVE API Ở ĐÂY
 const GOOGLE_DRIVE_API_KEY = process.env.GOOGLE_DRIVE_API_KEY || 'API_KEY_CUA_BAN_O_DAY';
 
 const drive = google.drive({
@@ -47,7 +47,7 @@ async function getImagesFromFolder(folderId: string): Promise<string[]> {
     });
     return res.data.files?.map((f) => f.id as string).filter(Boolean) || [];
   } catch (error: any) {
-    console.error(`⚠️ Lỗi quét folder Drive ${folderId} (Có thể chưa share public hoặc sai API Key):`, error.message);
+    console.error(`⚠️ Lỗi quét folder Drive ${folderId}:`, error.message);
     return [];
   }
 }
@@ -65,12 +65,10 @@ async function extractImages(imageStr: any): Promise<{ url: string }[]> {
       let folderId = '';
       const matchFolder = part.match(/\/folders\/([a-zA-Z0-9_-]+)/);
       if (matchFolder && matchFolder[1]) folderId = matchFolder[1];
-      
       if (!folderId && part.includes('id=')) {
         const matchId = part.match(/id=([a-zA-Z0-9_-]+)/);
         if (matchId && matchId[1]) folderId = matchId[1];
       }
-
       if (part.includes('/folders/')) {
         const imageIds = await getImagesFromFolder(folderId);
         if (imageIds.length > 0) {
@@ -89,7 +87,6 @@ async function extractImages(imageStr: any): Promise<{ url: string }[]> {
         const matchId = part.match(/id=([a-zA-Z0-9_-]+)/);
         if (matchId && matchId[1]) fileId = matchId[1];
       }
-
       if (fileId) {
         results.push({ url: `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000` });
         continue;
@@ -107,69 +104,53 @@ async function extractImages(imageStr: any): Promise<{ url: string }[]> {
   if (results.length === 0) {
     results.push({ url: 'https://loremflickr.com/400/400/dog' });
   }
-
   return results;
 }
 
-export async function seedPets() {
-  console.log('Bắt đầu quá trình seed dữ liệu từ file Excel...');
-  console.log('Đang dọn dẹp dữ liệu cũ...');
+// Bộ đệm lưu trữ ID của các khu (Shelter) để tối ưu truy vấn
+const shelterCache = new Map<string, string>();
+
+async function getOrCreateShelter(khuName: any): Promise<string | null> {
+  if (!khuName) return null;
+  const name = String(khuName).trim();
+  if (shelterCache.has(name)) return shelterCache.get(name)!;
+
+  let shelter = await prisma.shelter.findFirst({ where: { name } });
+  if (!shelter) {
+    shelter = await prisma.shelter.create({
+      data: {
+        name: name,
+        address: 'Đang cập nhật',
+        contactInfo: '0999999999',
+        description: 'Trạm cứu hộ tự động',
+        policy: 'Liên hệ trực tiếp để nhận nuôi.',
+        avatarUrl: 'https://loremflickr.com/200/200/house',
+        latitude: 21.028511, 
+        longitude: 105.804817,
+      }
+    });
+  }
+  shelterCache.set(name, shelter.id);
+  return shelter.id;
+}
+
+// Hàm seed riêng rẽ cho từng file CSV
+async function seedFromCsv(filePath: string, speciesType: 'DOG' | 'CAT') {
+  console.log(`\n⏳ Đang xử lý file CSV: ${path.basename(filePath)}...`);
   
-  await prisma.eventImage.deleteMany();
-  await prisma.eventInterest.deleteMany();
-  await prisma.event.deleteMany();
-  await prisma.tagReport.deleteMany(); 
-  await prisma.tag.updateMany({ where: { petId: { not: null } }, data: { petId: null } });
-  await prisma.tag.deleteMany();
-  await prisma.transferRequest.deleteMany();
-  await prisma.adoptionApplication.deleteMany();
-  await prisma.adoptionRequest.deleteMany();
-  await prisma.petInteraction.deleteMany();
-  await prisma.favoritePet.deleteMany();
-  await prisma.petImage.deleteMany();
-  console.log('Đang xóa dữ liệu Pet và Shelter...');
-  await prisma.pet.deleteMany(); 
-  await prisma.followedShelter.deleteMany();
-  await prisma.shelter.deleteMany();
-  console.log('Đã xóa xong dữ liệu cũ!');
-
-  const shelterCache = new Map<string, string>();
-
-  async function getOrCreateShelter(khuName: any): Promise<string | null> {
-    if (!khuName) return null;
-    const name = String(khuName).trim();
-    if (shelterCache.has(name)) return shelterCache.get(name)!;
-
-    let shelter = await prisma.shelter.findFirst({ where: { name } });
-    if (!shelter) {
-      shelter = await prisma.shelter.create({
-        data: {
-          name: name,
-          address: 'Đang cập nhật từ Excel',
-          contactInfo: '0999999999',
-          description: 'Trạm cứu hộ được tạo tự động từ hệ thống Excel.',
-          policy: '1. Liên hệ trực tiếp trạm để nhận nuôi.',
-          avatarUrl: 'https://loremflickr.com/200/200/house',
-          latitude: 21.028511, 
-          longitude: 105.804817,
-        }
-      });
-    }
-    shelterCache.set(name, shelter.id);
-    return shelter.id;
+  if (!fs.existsSync(filePath)) {
+    console.error(`❌ Không tìm thấy file: ${filePath}`);
+    return;
   }
 
-  const excelPath = path.join(process.cwd(), 'prisma/data/cho_meo.xlsx');
-  const workbook = xlsx.readFile(excelPath);
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const records = xlsx.utils.sheet_to_json(sheet);
+  const stream = fs.createReadStream(filePath).pipe(csv());
   let count = 0;
 
-  console.log(`Tổng số bản ghi cần xử lý: ${records.length}`);
-
-  // ĐÃ SỬA: Chuyển sang vòng lặp for truyền thống để kiểm soát tiến trình và giải phóng bộ nhớ
-  for (let i = 0; i < records.length; i++) {
-    const row = records[i] as any;
+  // for await: Đọc dòng nào xử lý xong dòng đó, không lưu vào RAM
+  for await (const row of stream) {
+    count++;
+    
+    // Lưu ý: Key ở row[] phải khớp với Tên Cột (Header) ở dòng 1 trong file CSV
     const name = row['Tên thú cưng'] || row['Tên'] || row['Name'] || row['ID'] || 'Bé Không Tên';
     const status = parseStatus(row['Tình trạng']);
     const description = [row['Lưu ý'], row['Ghi chú'], row['Cột 1']].filter(Boolean).join('. ');
@@ -181,7 +162,7 @@ export async function seedPets() {
       await prisma.pet.create({
         data: {
           name: String(name),
-          species: 'DOG',
+          species: speciesType,
           breed: String(row['Giống'] || 'Chưa rõ'),
           dob: parseAgeToDob(row['Độ tuổi']),
           color: String(row['Màu lông'] || 'Đang cập nhật'),
@@ -198,33 +179,54 @@ export async function seedPets() {
           }
         }
       });
-      count++;
     } catch (error: any) {
-      console.error(`❌ Lỗi khi seed ID ${row['ID']}:`, error.message);
+      console.error(`❌ Lỗi khi seed ID ${row['ID'] || name}:`, error.message);
     }
 
-    // XỬ LÝ OOM: Dọn rác bộ nhớ sau mỗi 20 bản ghi
-    if (i > 0 && i % 20 === 0) {
-      console.log(`Đã xử lý ${i}/${records.length} bé. Đang dọn dẹp bộ nhớ...`);
-      // Nhường Event Loop 100ms cho Garbage Collector chạy
-      await new Promise(resolve => setTimeout(resolve, 100));
-      // Ép Node.js dọn rác ngay lập tức
-      if (global.gc) {
-        global.gc();
-      }
+    if (count % 10 === 0) {
+      process.stdout.write(`\rĐã seed: ${count} bản ghi... `); // Cập nhật log trên cùng 1 dòng
     }
   }
   
-  console.log(`✅ Đã seed thành công ${count} bé từ file Excel.`);
+  console.log(`\n✅ Hoàn tất file. Đã seed thành công ${count} bé ${speciesType}.`);
+}
+
+export async function seedPets() {
+  console.log('Bắt đầu dọn dẹp dữ liệu cũ (Xóa Database)...');
+  
+  await prisma.eventImage.deleteMany();
+  await prisma.eventInterest.deleteMany();
+  await prisma.event.deleteMany();
+  await prisma.tagReport.deleteMany(); 
+  await prisma.tag.updateMany({ where: { petId: { not: null } }, data: { petId: null } });
+  await prisma.tag.deleteMany();
+  await prisma.transferRequest.deleteMany();
+  await prisma.adoptionApplication.deleteMany();
+  await prisma.adoptionRequest.deleteMany();
+  await prisma.petInteraction.deleteMany();
+  await prisma.favoritePet.deleteMany();
+  await prisma.petImage.deleteMany();
+  await prisma.pet.deleteMany(); 
+  await prisma.followedShelter.deleteMany();
+  await prisma.shelter.deleteMany();
+  
+  console.log('Đã xóa xong dữ liệu cũ!');
+
+  // Tách thành 2 file riêng biệt và seed lần lượt để đảm bảo RAM luôn rảnh rỗi
+  const dogCsvPath = path.join(process.cwd(), 'prisma/data/cho_meo.xlsx - TT chó lụm.csv');
+  const catCsvPath = path.join(process.cwd(), 'prisma/data/cho_meo.xlsx - TT mèo.csv');
+
+  await seedFromCsv(dogCsvPath, 'DOG');
+  await seedFromCsv(catCsvPath, 'CAT');
 }
 
 seedPets()
   .then(async () => {
-    console.log('🏁 Tiến trình seed hoàn tất.');
+    console.log('\n🏁 TẤT CẢ TIẾN TRÌNH SEED HOÀN TẤT!');
     await prisma.$disconnect();
   })
   .catch(async (e) => {
-    console.error('❌ Tiến trình seed thất bại dữ dội:', e);
+    console.error('\n❌ Tiến trình seed thất bại:', e);
     await prisma.$disconnect();
     process.exit(1);
   });
