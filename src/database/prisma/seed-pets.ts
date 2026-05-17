@@ -72,7 +72,7 @@ export async function seedPets(prisma: PrismaClient) {
   }
 
   // Đọc file Excel trực tiếp
-  const excelPath = path.join(__dirname, '../data/cho_meo.xlsx');
+  const excelPath = path.join(process.cwd(), 'prisma/data/cho_meo.xlsx');
   const workbook = xlsx.readFile(excelPath);
   
   // Chỉ lấy Sheet đầu tiên (vì bạn đề cập file hiện tại toàn chó)
