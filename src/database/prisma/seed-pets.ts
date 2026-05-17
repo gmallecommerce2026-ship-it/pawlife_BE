@@ -50,6 +50,11 @@ function extractImages(imageStr: any): { url: string }[] {
 export async function seedPets(prisma: PrismaClient) {
   console.log('Bắt đầu quá trình seed dữ liệu từ file Excel...');
 
+  // Bổ sung dòng này để XÓA TOÀN BỘ dữ liệu Pet cũ trong database
+  console.log('Đang xóa dữ liệu thú cưng cũ...');
+  await prisma.pet.deleteMany(); 
+  console.log('Đã xóa xong dữ liệu cũ!');
+
   const shelterCache = new Map<string, string>();
 
   async function getOrCreateShelter(khuName: any): Promise<string | null> {
