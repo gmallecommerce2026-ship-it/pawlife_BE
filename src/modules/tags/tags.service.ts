@@ -130,12 +130,17 @@ export class TagsService {
       color: pet.color || 'Chưa cập nhật',
       status: isLost ? 'lost' : 'safe',
       image: pet.images && pet.images.length > 0 ? pet.images[0].url : 'https://via.placeholder.com/600',
+      
+      // SỬA Ở ĐÂY: Gọi đúng các trường lostContactName, lostContactPhone, lostContactAddress
       owner: isLost ? {
-        name: pet.contactName || pet.owner?.name || 'Người dùng ẩn danh',
-        phone: pet.contactPhone || pet.owner?.phone || 'Chưa cung cấp số điện thoại',
-        address: pet.contactAddress || 'Chưa cập nhật địa chỉ', 
+        name: pet.lostContactName || pet.owner?.name || 'Người dùng ẩn danh',
+        phone: pet.lostContactPhone || pet.owner?.phone || 'Chưa cung cấp số điện thoại',
+        address: pet.lostContactAddress || 'Chưa cập nhật địa chỉ', 
         avatarUrl: pet.owner?.avatarUrl || null,
       } : null,
+      
+      // SỬA Ở ĐÂY: Trả về trường note từ lostDetails trong DB để Frontend hứng được
+      note: pet.lostDetails || "Please contact me ASAP",
     };
   }
 }
