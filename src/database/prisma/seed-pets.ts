@@ -44,7 +44,7 @@ function getLocalImages(petId: any): { url: string }[] {
       for (const file of files) {
         if (file.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
           // Tạm thời dùng link pub r2 dev, bạn đổi thành domain thật sau
-          const imageUrl = `https://pub-your-r2-domain.com/pet-images/${safeId}/${file}`;
+          const imageUrl = `https://pub-35c6d59c9e96467b9783df2a4e890a09.r2.dev/pet-images/${safeId}/${file}`;
           results.push({ url: imageUrl });
         }
       }
