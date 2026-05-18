@@ -95,7 +95,7 @@ async function extractImages(imageStr: any): Promise<{ url: string }[]> {
     }
 
     if (!part.startsWith('http')) {
-      results.push({ url: `https://pub-your-r2-domain.com/pet-images/${part}` });
+      results.push({ url: `https://pub-35c6d59c9e96467b9783df2a4e890a09.r2.dev/pet-images/${part}` });
       continue;
     }
     results.push({ url: part });
