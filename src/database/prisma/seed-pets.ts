@@ -1,9 +1,31 @@
 import { PrismaClient, PetGender, PetSize, PetStatus } from '@prisma/client';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import * as xlsx from 'xlsx';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as dotenv from 'dotenv';
+
+// 1. Nạp biến môi trường từ file .env
+dotenv.config();
 
 const prisma = new PrismaClient();
+
+// 2. Khởi tạo S3 Client ngay trong file Seed để có quyền upload
+const s3Client = new S3Client({
+  region: 'auto',
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
+  },
+  forcePathStyle: true,
+  requestChecksumCalculation: 'WHEN_REQUIRED',
+  responseChecksumValidation: 'WHEN_REQUIRED',
+});
+
+const bucketName = process.env.R2_BUCKET_NAME || '';
+// Lấy domain từ env, nếu không có thì lấy domain cũ của bạn làm fallback
+const publicDomain = process.env.R2_PUBLIC_DOMAIN || 'https://pub-35c6d59c9e96467b9783df2a4e890a09.r2.dev';
 
 function parseAgeToDob(ageStr: any): Date | null {
   if (!ageStr) return null;
@@ -30,15 +52,13 @@ function parseStatus(statusStr: any): PetStatus {
   return PetStatus.AVAILABLE;
 }
 
-// Hàm quét ảnh cục bộ từ ổ cứng VPS
-function getLocalImages(petId: any): { url: string }[] {
+// 3. ĐỔI HÀM NÀY THÀNH ASYNC ĐỂ THỰC SỰ UPLOAD ẢNH LÊN R2
+async function getLocalImagesAndUpload(petId: any): Promise<{ url: string }[]> {
   const safeId = String(petId || '').trim();
   if (!safeId) return [{ url: 'https://loremflickr.com/400/400/dog' }];
 
   const folderPath = path.join(process.cwd(), 'prisma/data/images', safeId);
-  
-  // Log ra đường dẫn để kiểm chứng trực tiếp trên Terminal
-  console.log(`\n🔍 Đang quét ảnh tại: ${folderPath}`);
+  console.log(`\n🔍 Đang xử lý và UPLOAD ảnh cho ID: ${safeId}`);
 
   let results: { url: string }[] = [];
 
@@ -47,14 +67,34 @@ function getLocalImages(petId: any): { url: string }[] {
       const files = fs.readdirSync(folderPath);
       for (const file of files) {
         if (file.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
-          // Tạm thời dùng link pub r2 dev, bạn đổi thành domain thật sau
-          const imageUrl = `https://pub-35c6d59c9e96467b9783df2a4e890a09.r2.dev/pet-images/${safeId}/${file}`;
+          const filePath = path.join(folderPath, file);
+          
+          // Đọc file thật từ ổ cứng
+          const fileBuffer = fs.readFileSync(filePath);
+          const r2Key = `pet-images/${safeId}/${file}`;
+          
+          let contentType = 'image/jpeg';
+          if (file.toLowerCase().endsWith('.png')) contentType = 'image/png';
+          else if (file.toLowerCase().endsWith('.webp')) contentType = 'image/webp';
+          else if (file.toLowerCase().endsWith('.gif')) contentType = 'image/gif';
+
+          // Bắn lệnh Upload lên R2
+          await s3Client.send(new PutObjectCommand({
+            Bucket: bucketName,
+            Key: r2Key,
+            Body: fileBuffer,
+            ContentType: contentType
+          }));
+
+          // Ghi nhận URL thành công
+          const imageUrl = `${publicDomain}/${r2Key}`;
           results.push({ url: imageUrl });
+          process.stdout.write(' ⬆️(Đã up) ');
         }
       }
     }
   } catch (error) {
-    console.log(`\n⚠️ Lỗi quét thư mục ảnh của ${safeId}: ${error}`);
+    console.log(`\n⚠️ Lỗi upload ảnh của ${safeId} lên R2: ${error}`);
   }
 
   if (results.length === 0) {
@@ -92,7 +132,6 @@ async function getOrCreateShelter(khuName: any): Promise<string | null> {
 
 async function processBatch(batch: any[]) {
   for (const row of batch) {
-    // 1. KHAI BÁO BIẾN Ở NGOÀI TRY..CATCH ĐỂ DÙNG ĐƯỢC Ở MỌI NƠI
     const rawId = row['ID'] || row['ID '] || row[' ID'];
     const fallbackId = String(row['Ảnh'] || '').split('.')[0].trim();
     const petId = rawId ? String(rawId).trim() : fallbackId;
@@ -103,13 +142,12 @@ async function processBatch(batch: any[]) {
     const speciesType = loaiStr.includes('mèo') ? 'CAT' : 'DOG';
 
     try {
-      // 2. CHỈ ĐỂ CÁC THAO TÁC XỬ LÝ DỮ LIỆU VÀ GỌI DATABASE TRONG NÀY
       const status = parseStatus(row['Tình trạng']);
       const description = [row['Lưu ý'], row['Ghi chú'], row['Cột 1']].filter(Boolean).join('. ');
       const shelterId = await getOrCreateShelter(row['Khu']);
       
-      // Quét thư mục ảnh offline
-      const imagesData = getLocalImages(petId);
+      // 4. GỌI HÀM ASYNC MỚI ĐỂ ĐỢI UPLOAD XONG MỚI GHI DATABASE
+      const imagesData = await getLocalImagesAndUpload(petId);
 
       await prisma.pet.create({
         data: {
@@ -132,7 +170,6 @@ async function processBatch(batch: any[]) {
       process.stdout.write(`✅ ${name} | `);
       
     } catch (error: any) {
-      // 3. VÌ BIẾN name ĐƯỢC KHAI BÁO Ở NGOÀI CÙNG NÊN BÂY GIỜ GỌI SẼ KHÔNG BỊ LỖI
       console.log(`\n❌ [LỖI DB - Tên: ${name}]: ${error.message}`);
     }
   }
@@ -179,15 +216,12 @@ export async function seedPets() {
     global.gc();
   }
 
-  // TỐI QUAN TRỌNG: Chỉ lấy đúng 15 bé đầu tiên
   const limitRecords = allRecords.slice(0, 15);
-
   console.log(`✅ Sẽ tiến hành seed đúng ${limitRecords.length} bé đầu tiên!`);
 
-  // Chạy luôn 1 cục 15 bé vì làm offline nên tốc độ cực nhanh, không cần băm nhỏ quá
   await processBatch(limitRecords);
   
-  console.log(`\n🎉 HOÀN TẤT! Đã lấy ảnh và seed thành công 15 bé đầu.`);
+  console.log(`\n🎉 HOÀN TẤT! Đã upload ảnh lên R2 và seed thành công.`);
 }
 
 seedPets()
@@ -198,4 +232,4 @@ seedPets()
     console.error('\n❌ Tiến trình seed thất bại:', e);
     await prisma.$disconnect();
     process.exit(1);
-  })
+  });
