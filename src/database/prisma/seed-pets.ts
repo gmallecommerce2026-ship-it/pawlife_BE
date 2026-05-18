@@ -48,7 +48,8 @@ async function getImagesFromFolder(folderId: string): Promise<string[]> {
     });
     return res.data.files?.map((f) => f.id as string).filter(Boolean) || [];
   } catch (error: any) {
-    console.error(`❌ Lỗi khi lấy ảnh từ folder ${folderId}:`, error.message);
+    // THÊM LOG LỖI DRIVE API CHI TIẾT
+    console.log(`\n❌ [LỖI DRIVE API - Folder ${folderId}]:`, error.message);
     return [];
   }
 }
@@ -62,43 +63,50 @@ async function extractImages(imageStr: any): Promise<{ url: string }[]> {
   let results: { url: string }[] = [];
 
   for (const part of parts) {
-    if (part.includes('drive.google.com') && (part.includes('/folders/') || part.includes('id='))) {
-      let folderId = '';
-      const matchFolder = part.match(/\/folders\/([a-zA-Z0-9_-]+)/);
-      if (matchFolder && matchFolder[1]) folderId = matchFolder[1];
-      if (!folderId && part.includes('id=')) {
-        const matchId = part.match(/id=([a-zA-Z0-9_-]+)/);
-        if (matchId && matchId[1]) folderId = matchId[1];
-      }
-      if (part.includes('/folders/')) {
-        const imageIds = await getImagesFromFolder(folderId);
-        if (imageIds.length > 0) {
-          results.push(...imageIds.map(id => ({ url: `https://drive.google.com/thumbnail?id=${id}&sz=w1000` })));
-          continue; 
+    try {
+      if (part.includes('drive.google.com') && (part.includes('/folders/') || part.includes('id='))) {
+        let folderId = '';
+        const matchFolder = part.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+        if (matchFolder && matchFolder[1]) folderId = matchFolder[1];
+        if (!folderId && part.includes('id=')) {
+          const matchId = part.match(/id=([a-zA-Z0-9_-]+)/);
+          if (matchId && matchId[1]) folderId = matchId[1];
+        }
+        if (part.includes('/folders/')) {
+          const imageIds = await getImagesFromFolder(folderId);
+          if (imageIds.length > 0) {
+            results.push(...imageIds.map(id => ({ url: `https://drive.google.com/thumbnail?id=${id}&sz=w1000` })));
+            continue; 
+          } else {
+             console.log(`\n⚠️ [ẢNH] Tìm thấy link thư mục nhưng không lấy được ảnh bên trong: ${part}`);
+          }
         }
       }
-    }
 
-    if (part.includes('drive.google.com') && (part.includes('/file/d/') || part.includes('id='))) {
-      let fileId = '';
-      const matchD = part.match(/\/d\/([a-zA-Z0-9_-]+)/);
-      if (matchD && matchD[1]) {
-        fileId = matchD[1];
-      } else {
-        const matchId = part.match(/id=([a-zA-Z0-9_-]+)/);
-        if (matchId && matchId[1]) fileId = matchId[1];
+      if (part.includes('drive.google.com') && (part.includes('/file/d/') || part.includes('id='))) {
+        let fileId = '';
+        const matchD = part.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (matchD && matchD[1]) {
+          fileId = matchD[1];
+        } else {
+          const matchId = part.match(/id=([a-zA-Z0-9_-]+)/);
+          if (matchId && matchId[1]) fileId = matchId[1];
+        }
+        if (fileId) {
+          results.push({ url: `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000` });
+          continue;
+        }
       }
-      if (fileId) {
-        results.push({ url: `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000` });
+
+      if (!part.startsWith('http')) {
+        results.push({ url: `https://pub-35c6d59c9e96467b9783df2a4e890a09.r2.dev/pet-images/${part}` });
         continue;
       }
+      
+      results.push({ url: part });
+    } catch (error: any) {
+      console.log(`\n❌ [LỖI PARSE LINK ẢNH] Link: ${part} | Lỗi:`, error.message);
     }
-
-    if (!part.startsWith('http')) {
-      results.push({ url: `https://pub-35c6d59c9e96467b9783df2a4e890a09.r2.dev/pet-images/${part}` });
-      continue;
-    }
-    results.push({ url: part });
   }
 
   if (results.length === 0) {
@@ -133,12 +141,9 @@ async function getOrCreateShelter(khuName: any): Promise<string | null> {
   return shelter.id;
 }
 
-// Xử lý 10 bản ghi cùng lúc
 async function processBatch(batch: any[]) {
   for (const row of batch) {
     const name = row['Tên thú cưng'] || row['Tên'] || row['Name'] || row['ID'] || 'Bé Không Tên';
-    
-    // Tự động phân loại Mèo/Chó dựa theo từ khóa trong Excel, mặc định là DOG
     const loaiStr = String(row['Loài'] || row['Giống'] || '').toLowerCase();
     const speciesType = loaiStr.includes('mèo') ? 'CAT' : 'DOG';
 
@@ -146,6 +151,8 @@ async function processBatch(batch: any[]) {
       const status = parseStatus(row['Tình trạng']);
       const description = [row['Lưu ý'], row['Ghi chú'], row['Cột 1']].filter(Boolean).join('. ');
       const shelterId = await getOrCreateShelter(row['Khu']);
+      
+      // Lấy data ảnh
       const imagesData = await extractImages(row['Ảnh']);
 
       await prisma.pet.create({
@@ -167,8 +174,10 @@ async function processBatch(batch: any[]) {
         }
       });
       process.stdout.write(`✅ ${name} | `);
+      
     } catch (error: any) {
-      process.stdout.write(`❌ Lỗi ${name} | `);
+      // IN RA CHI TIẾT LỖI DATABASE HOẶC LỖI TẠO RECORD ĐỂ BẮT BỆNH
+      console.log(`\n❌ [LỖI DB - Tên: ${name}]: ${error.message}`);
     }
   }
 }
@@ -206,7 +215,6 @@ export async function seedPets() {
   const sheetName = workbook.SheetNames[0];
   const allRecords = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
   
-  // TỐI QUAN TRỌNG: Giải phóng file Excel khổng lồ khỏi RAM ngay sau khi lấy được data
   workbook = null; 
   if (global.gc) {
     global.gc();
@@ -217,7 +225,6 @@ export async function seedPets() {
   const BATCH_SIZE = 10;
   let successCount = 0;
 
-  // Chạy vòng lặp chia nhỏ lô
   for (let i = 0; i < allRecords.length; i += BATCH_SIZE) {
     const batch = allRecords.slice(i, i + BATCH_SIZE);
     console.log(`\n📦 Đang xử lý lô từ ${i + 1} đến ${Math.min(i + BATCH_SIZE, allRecords.length)} / ${allRecords.length}`);
@@ -228,7 +235,6 @@ export async function seedPets() {
     console.log(`\n💤 Đã xong lô. Nghỉ 3 giây để VPS nhả RAM...`);
     await new Promise(resolve => setTimeout(resolve, 3000));
     
-    // Ép Nodejs dọn rác thủ công sau mỗi 10 bé
     if (global.gc) {
       global.gc();
     }
