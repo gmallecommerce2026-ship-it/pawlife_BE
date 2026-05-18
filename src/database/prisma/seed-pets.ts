@@ -48,6 +48,7 @@ async function getImagesFromFolder(folderId: string): Promise<string[]> {
     });
     return res.data.files?.map((f) => f.id as string).filter(Boolean) || [];
   } catch (error: any) {
+    console.error(`❌ Lỗi khi lấy ảnh từ folder ${folderId}:`, error.message);
     return [];
   }
 }
