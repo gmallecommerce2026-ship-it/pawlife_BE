@@ -131,79 +131,83 @@ async function getOrCreateShelter(khuName: any): Promise<string | null> {
   return shelter.id;
 }
 
-// HÀM MỚI: Đọc toàn bộ CSV lưu vào mảng, sau đó xử lý từng cụm (Batch)
+// Hàm phụ trợ xử lý mảng lô (batch)
+async function processBatch(batch: any[], speciesType: 'DOG' | 'CAT') {
+  for (const row of batch) {
+    const name = row['Tên thú cưng'] || row['Tên'] || row['Name'] || row['ID'] || 'Bé Không Tên';
+    try {
+      const status = parseStatus(row['Tình trạng']);
+      const description = [row['Lưu ý'], row['Ghi chú'], row['Cột 1']].filter(Boolean).join('. ');
+      const shelterId = await getOrCreateShelter(row['Khu']);
+      const imagesData = await extractImages(row['Ảnh']);
+
+      await prisma.pet.create({
+        data: {
+          name: String(name),
+          species: speciesType,
+          breed: String(row['Giống'] || 'Chưa rõ'),
+          dob: parseAgeToDob(row['Độ tuổi']),
+          color: String(row['Màu lông'] || 'Đang cập nhật'),
+          gender: parseGender(row['Giới tính']),
+          size: PetSize.MEDIUM, 
+          isSpayedNeutered: String(row['Triệt sản'] || '').toLowerCase().includes('đã triệt sản'),
+          isVaccinated: String(row['Tiêm phòng'] || '').toLowerCase().includes('đã tiêm đủ'),
+          status,
+          vetVerificationStatus: 'VERIFIED', 
+          description,
+          shelterId,
+          images: { create: imagesData }
+        }
+      });
+      process.stdout.write(`✅ ${name} | `);
+    } catch (error: any) {
+      process.stdout.write(`❌ Lỗi ${name} | `);
+    }
+  }
+}
+
 async function seedFromCsv(filePath: string, speciesType: 'DOG' | 'CAT') {
-  console.log(`\n⏳ Đang nạp dữ liệu từ file: ${path.basename(filePath)}...`);
+  console.log(`\n⏳ Đang tiến hành đọc Stream file: ${path.basename(filePath)}...`);
   if (!fs.existsSync(filePath)) {
     console.error(`❌ Không tìm thấy file: ${filePath}`);
     return;
   }
 
-  // 1. Nạp file CSV vào bộ nhớ (file text tốn rất ít RAM, an toàn tuyệt đối)
-  const allRecords: any[] = [];
-  await new Promise((resolve, reject) => {
-    fs.createReadStream(filePath)
-      .pipe(csv())
-      .on('data', (data) => allRecords.push(data))
-      .on('end', resolve)
-      .on('error', reject);
-  });
+  const stream = fs.createReadStream(filePath).pipe(csv());
+  let batch: any[] = [];
+  let totalCount = 0;
 
-  console.log(`✅ Đã nạp thành công ${allRecords.length} dòng. Bắt đầu seed từng lô 10 bé...`);
+  // for await: Đọc dòng nào sinh ra dòng đó, không tốn RAM
+  for await (const row of stream) {
+    batch.push(row);
+    totalCount++;
 
-  // 2. Chia lô 10 item một lần
-  const BATCH_SIZE = 10;
-  let successCount = 0;
-
-  for (let i = 0; i < allRecords.length; i += BATCH_SIZE) {
-    const batch = allRecords.slice(i, i + BATCH_SIZE);
-    console.log(`\n📦 Đang xử lý lô từ ${i + 1} đến ${Math.min(i + BATCH_SIZE, allRecords.length)} / ${allRecords.length}`);
-    
-    // Xử lý từng dòng trong cụm (Chạy tuần tự để Google Drive không chặn API do gọi quá nhanh)
-    for (const row of batch) {
-      const name = row['Tên thú cưng'] || row['Tên'] || row['Name'] || row['ID'] || 'Bé Không Tên';
-      try {
-        const status = parseStatus(row['Tình trạng']);
-        const description = [row['Lưu ý'], row['Ghi chú'], row['Cột 1']].filter(Boolean).join('. ');
-        const shelterId = await getOrCreateShelter(row['Khu']);
-        const imagesData = await extractImages(row['Ảnh']); // Gọi API Google Drive ở đây
-
-        await prisma.pet.create({
-          data: {
-            name: String(name),
-            species: speciesType,
-            breed: String(row['Giống'] || 'Chưa rõ'),
-            dob: parseAgeToDob(row['Độ tuổi']),
-            color: String(row['Màu lông'] || 'Đang cập nhật'),
-            gender: parseGender(row['Giới tính']),
-            size: PetSize.MEDIUM, 
-            isSpayedNeutered: String(row['Triệt sản'] || '').toLowerCase().includes('đã triệt sản'),
-            isVaccinated: String(row['Tiêm phòng'] || '').toLowerCase().includes('đã tiêm đủ'),
-            status,
-            vetVerificationStatus: 'VERIFIED', 
-            description,
-            shelterId,
-            images: { create: imagesData }
-          }
-        });
-        successCount++;
-        process.stdout.write(`✅ Đã thêm: ${name} | `); // Báo cáo trực tiếp từng bé một
-      } catch (error: any) {
-        process.stdout.write(`❌ Lỗi: ${name} | `);
+    if (batch.length >= 10) {
+      console.log(`\n📦 Đang xử lý lô 10 bé (Tổng đã đọc: ${totalCount})...`);
+      
+      // Xử lý 10 bản ghi
+      await processBatch(batch, speciesType);
+      
+      // Xoá trắng mảng để lấy lại RAM ngay lập tức
+      batch = []; 
+      
+      console.log(`\n💤 Nghỉ 3 giây cho VPS thở...`);
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Ép Garbage Collector thu hồi RAM ngay
+      if (global.gc) {
+        global.gc();
       }
     }
+  }
 
-    // 3. Cho server nghỉ ngơi 3 giây để làm trống RAM và mạng
-    console.log(`\n💤 Đã xong lô. Nghỉ 3 giây để VPS nhả RAM...`);
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    // Ép Nodejs dọn rác
-    if (global.gc) {
-      global.gc();
-    }
+  // Xử lý nốt các bản ghi bị dư ở lô cuối cùng
+  if (batch.length > 0) {
+    console.log(`\n📦 Đang xử lý lô cuối gồm ${batch.length} bé...`);
+    await processBatch(batch, speciesType);
   }
   
-  console.log(`\n🎉 Hoàn tất file. Đã seed thành công ${successCount} bé ${speciesType}.`);
+  console.log(`\n🎉 Hoàn tất file ${speciesType}. Đã đọc tổng cộng ${totalCount} dòng.`);
 }
 
 export async function seedPets() {
