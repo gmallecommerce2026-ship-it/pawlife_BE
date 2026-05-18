@@ -2,17 +2,8 @@ import { PrismaClient, PetGender, PetSize, PetStatus } from '@prisma/client';
 import * as xlsx from 'xlsx';
 import * as path from 'path';
 import * as fs from 'fs';
-import { google } from 'googleapis';
 
 const prisma = new PrismaClient();
-
-// CẤU HÌNH DRIVE API Ở ĐÂY
-const GOOGLE_DRIVE_API_KEY = process.env.GOOGLE_DRIVE_API_KEY || 'API_KEY_CUA_BAN_O_DAY';
-
-const drive = google.drive({
-  version: 'v3',
-  auth: GOOGLE_DRIVE_API_KEY,
-});
 
 function parseAgeToDob(ageStr: any): Date | null {
   if (!ageStr) return null;
@@ -39,79 +30,33 @@ function parseStatus(statusStr: any): PetStatus {
   return PetStatus.AVAILABLE;
 }
 
-async function getImagesFromFolder(folderId: string): Promise<string[]> {
-  try {
-    const res = await drive.files.list({
-      q: `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
-      fields: 'files(id)',
-      pageSize: 5, 
-    });
-    return res.data.files?.map((f) => f.id as string).filter(Boolean) || [];
-  } catch (error: any) {
-    // THÊM LOG LỖI DRIVE API CHI TIẾT
-    console.log(`\n❌ [LỖI DRIVE API - Folder ${folderId}]:`, error.message);
-    return [];
-  }
-}
+// Hàm quét ảnh cục bộ từ ổ cứng VPS
+function getLocalImages(petId: any): { url: string }[] {
+  const safeId = String(petId || '').trim();
+  if (!safeId) return [{ url: 'https://loremflickr.com/400/400/dog' }];
 
-async function extractImages(imageStr: any): Promise<{ url: string }[]> {
-  if (!imageStr) return [{ url: 'https://loremflickr.com/400/400/dog' }];
-  
-  const parts = String(imageStr).split(/[\n,;]+/).map(s => s.trim()).filter(s => s);
-  if (parts.length === 0) return [{ url: 'https://loremflickr.com/400/400/dog' }];
-
+  const folderPath = path.join(process.cwd(), 'prisma/data/images', safeId);
   let results: { url: string }[] = [];
 
-  for (const part of parts) {
-    try {
-      if (part.includes('drive.google.com') && (part.includes('/folders/') || part.includes('id='))) {
-        let folderId = '';
-        const matchFolder = part.match(/\/folders\/([a-zA-Z0-9_-]+)/);
-        if (matchFolder && matchFolder[1]) folderId = matchFolder[1];
-        if (!folderId && part.includes('id=')) {
-          const matchId = part.match(/id=([a-zA-Z0-9_-]+)/);
-          if (matchId && matchId[1]) folderId = matchId[1];
-        }
-        if (part.includes('/folders/')) {
-          const imageIds = await getImagesFromFolder(folderId);
-          if (imageIds.length > 0) {
-            results.push(...imageIds.map(id => ({ url: `https://drive.google.com/thumbnail?id=${id}&sz=w1000` })));
-            continue; 
-          } else {
-             console.log(`\n⚠️ [ẢNH] Tìm thấy link thư mục nhưng không lấy được ảnh bên trong: ${part}`);
-          }
+  try {
+    if (fs.existsSync(folderPath)) {
+      const files = fs.readdirSync(folderPath);
+      for (const file of files) {
+        if (file.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+          // Tạm thời dùng link pub r2 dev, bạn đổi thành domain thật sau
+          const imageUrl = `https://pub-your-r2-domain.com/pet-images/${safeId}/${file}`;
+          results.push({ url: imageUrl });
         }
       }
-
-      if (part.includes('drive.google.com') && (part.includes('/file/d/') || part.includes('id='))) {
-        let fileId = '';
-        const matchD = part.match(/\/d\/([a-zA-Z0-9_-]+)/);
-        if (matchD && matchD[1]) {
-          fileId = matchD[1];
-        } else {
-          const matchId = part.match(/id=([a-zA-Z0-9_-]+)/);
-          if (matchId && matchId[1]) fileId = matchId[1];
-        }
-        if (fileId) {
-          results.push({ url: `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000` });
-          continue;
-        }
-      }
-
-      if (!part.startsWith('http')) {
-        results.push({ url: `https://pub-35c6d59c9e96467b9783df2a4e890a09.r2.dev/pet-images/${part}` });
-        continue;
-      }
-      
-      results.push({ url: part });
-    } catch (error: any) {
-      console.log(`\n❌ [LỖI PARSE LINK ẢNH] Link: ${part} | Lỗi:`, error.message);
     }
+  } catch (error) {
+    console.log(`\n⚠️ Lỗi quét thư mục ảnh của ${safeId}: ${error}`);
   }
 
   if (results.length === 0) {
     results.push({ url: 'https://loremflickr.com/400/400/dog' });
   }
+
   return results;
 }
 
@@ -144,6 +89,8 @@ async function getOrCreateShelter(khuName: any): Promise<string | null> {
 async function processBatch(batch: any[]) {
   for (const row of batch) {
     const name = row['Tên thú cưng'] || row['Tên'] || row['Name'] || row['ID'] || 'Bé Không Tên';
+    const petId = row['ID']; 
+    
     const loaiStr = String(row['Loài'] || row['Giống'] || '').toLowerCase();
     const speciesType = loaiStr.includes('mèo') ? 'CAT' : 'DOG';
 
@@ -152,8 +99,8 @@ async function processBatch(batch: any[]) {
       const description = [row['Lưu ý'], row['Ghi chú'], row['Cột 1']].filter(Boolean).join('. ');
       const shelterId = await getOrCreateShelter(row['Khu']);
       
-      // Lấy data ảnh
-      const imagesData = await extractImages(row['Ảnh']);
+      // Quét thư mục ảnh offline
+      const imagesData = getLocalImages(petId);
 
       await prisma.pet.create({
         data: {
@@ -176,7 +123,6 @@ async function processBatch(batch: any[]) {
       process.stdout.write(`✅ ${name} | `);
       
     } catch (error: any) {
-      // IN RA CHI TIẾT LỖI DATABASE HOẶC LỖI TẠO RECORD ĐỂ BẮT BỆNH
       console.log(`\n❌ [LỖI DB - Tên: ${name}]: ${error.message}`);
     }
   }
@@ -210,7 +156,7 @@ export async function seedPets() {
     return;
   }
 
-  console.log(`\n⏳ Đang đọc file Excel (có thể mất vài giây)...`);
+  console.log(`\n⏳ Đang nạp file Excel...`);
   let workbook: any = xlsx.readFile(excelPath);
   const sheetName = workbook.SheetNames[0];
   const allRecords = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
@@ -220,27 +166,15 @@ export async function seedPets() {
     global.gc();
   }
 
-  console.log(`✅ Đã nạp thành công ${allRecords.length} dòng. Bắt đầu seed từng lô 10 bé...`);
+  // TỐI QUAN TRỌNG: Chỉ lấy đúng 15 bé đầu tiên
+  const limitRecords = allRecords.slice(0, 15);
 
-  const BATCH_SIZE = 10;
-  let successCount = 0;
+  console.log(`✅ Sẽ tiến hành seed đúng ${limitRecords.length} bé đầu tiên!`);
 
-  for (let i = 0; i < allRecords.length; i += BATCH_SIZE) {
-    const batch = allRecords.slice(i, i + BATCH_SIZE);
-    console.log(`\n📦 Đang xử lý lô từ ${i + 1} đến ${Math.min(i + BATCH_SIZE, allRecords.length)} / ${allRecords.length}`);
-    
-    await processBatch(batch);
-    successCount += batch.length;
-
-    console.log(`\n💤 Đã xong lô. Nghỉ 3 giây để VPS nhả RAM...`);
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    if (global.gc) {
-      global.gc();
-    }
-  }
+  // Chạy luôn 1 cục 15 bé vì làm offline nên tốc độ cực nhanh, không cần băm nhỏ quá
+  await processBatch(limitRecords);
   
-  console.log(`\n🎉 HOÀN TẤT TOÀN BỘ! Đã seed thành công ${successCount} bé.`);
+  console.log(`\n🎉 HOÀN TẤT! Đã lấy ảnh và seed thành công 15 bé đầu.`);
 }
 
 seedPets()
@@ -251,4 +185,4 @@ seedPets()
     console.error('\n❌ Tiến trình seed thất bại:', e);
     await prisma.$disconnect();
     process.exit(1);
-  });
+  })
