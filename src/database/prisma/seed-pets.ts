@@ -92,16 +92,18 @@ async function getOrCreateShelter(khuName: any): Promise<string | null> {
 
 async function processBatch(batch: any[]) {
   for (const row of batch) {
-    // Bắt các case cột có khoảng trắng vô tình
+    // 1. KHAI BÁO BIẾN Ở NGOÀI TRY..CATCH ĐỂ DÙNG ĐƯỢC Ở MỌI NƠI
     const rawId = row['ID'] || row['ID '] || row[' ID'];
-    
-    // Fallback: Nếu không lấy được ID, ta lấy từ tên ảnh (Vd: 900263003834569.jpg -> 900263003834569)
     const fallbackId = String(row['Ảnh'] || '').split('.')[0].trim();
+    const petId = rawId ? String(rawId).trim() : fallbackId;
+    
+    const name = row['Tên thú cưng'] || row['Tên'] || row['Name'] || petId || 'Bé Không Tên';
     
     const loaiStr = String(row['Loài'] || row['Giống'] || '').toLowerCase();
     const speciesType = loaiStr.includes('mèo') ? 'CAT' : 'DOG';
 
     try {
+      // 2. CHỈ ĐỂ CÁC THAO TÁC XỬ LÝ DỮ LIỆU VÀ GỌI DATABASE TRONG NÀY
       const status = parseStatus(row['Tình trạng']);
       const description = [row['Lưu ý'], row['Ghi chú'], row['Cột 1']].filter(Boolean).join('. ');
       const shelterId = await getOrCreateShelter(row['Khu']);
@@ -130,6 +132,7 @@ async function processBatch(batch: any[]) {
       process.stdout.write(`✅ ${name} | `);
       
     } catch (error: any) {
+      // 3. VÌ BIẾN name ĐƯỢC KHAI BÁO Ở NGOÀI CÙNG NÊN BÂY GIỜ GỌI SẼ KHÔNG BỊ LỖI
       console.log(`\n❌ [LỖI DB - Tên: ${name}]: ${error.message}`);
     }
   }
