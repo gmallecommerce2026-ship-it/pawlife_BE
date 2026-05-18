@@ -24,30 +24,7 @@ const ownerSelectQuery = {
     phone: true,// Chỉ trả về khi cần thiết (ví dụ: pet đang bị thất lạc)
   },
 };
-function calculateAge(dobString: string | Date | null | undefined): string {
-  // Nếu không có dữ liệu ngày sinh (null hoặc undefined), trả về 'N/A' lập tức
-  if (!dobString) return 'N/A';
-  
-  const dob = new Date(dobString);
-  const now = new Date();
-  
-  let years = now.getFullYear() - dob.getFullYear();
-  let months = now.getMonth() - dob.getMonth();
-  
-  // Hiệu chỉnh nếu ngày hiện tại chưa vượt qua ngày sinh nhật trong năm
-  if (months < 0 || (months === 0 && now.getDate() < dob.getDate())) {
-    years--;
-    months += 12;
-  }
-  
-  if (years > 0) {
-    return `${years}t`; // Dạng ngắn gọn "2t" cho vừa UI Card di động
-  } else if (months > 0) {
-    return `${months}th`; // "6th" (6 tháng)
-  } else {
-    return 'Mới sinh';
-  }
-}
+
 @Injectable()
 export class PetsService {
   constructor(
@@ -130,6 +107,7 @@ export class PetsService {
   async getFeed(userId: string, limit: number, filters?: FeedFilters, lat?: number, lng?: number) {
     const { gender, size, species } = filters || {};
 
+    // CHUẨN HÓA DỮ LIỆU ĐỂ SO SÁNH KHÔNG BỊ LỆCH CHỮ HOA / CHỮ THƯỜNG
     const searchGender = gender ? gender.toUpperCase() : undefined;
     const searchSize = size ? size.toUpperCase() : undefined;
     const searchSpecies = species ? species.toUpperCase() : undefined;
@@ -141,7 +119,7 @@ export class PetsService {
       return true;
     };
 
-    // TRƯỜNG HỢP 1: CÓ TỌA ĐỘ GPS (Xử lý trên RAM)
+    // TRƯỜNG HỢP 1: CÓ TỌA ĐỘ (Xử lý trên RAM)
     if (lat && lng) {
       const interactionCacheKey = `user:${userId}:swiped_pets`;
       let userInteractions = await this.redisService.get<{petId: string, action: string}[]>(interactionCacheKey) || [];
@@ -177,7 +155,6 @@ export class PetsService {
             ? this.calculateDistance(lat, lng, shelter.latitude, shelter.longitude) : 0;
           return {
             ...pet,
-            age: calculateAge(pet.dob), // Cập nhật tính tuổi động từ DB
             distance_val: distanceVal,
             distance: `${distanceVal.toFixed(1)} km`,
             shelter: {
@@ -198,7 +175,7 @@ export class PetsService {
       }
     }
 
-    // TRƯỜNG HỢP 2: KHÔNG CÓ GPS (Quét trực tiếp từ DB)
+    // TRƯỜNG HỢP 2: KHÔNG CÓ GPS (Dùng DB Tối ưu)
     let dbPets = await this.prisma.pet.findMany({
       where: {
         status: 'AVAILABLE',
@@ -232,13 +209,7 @@ export class PetsService {
       });
     }
 
-    // Map thêm trường age động trước khi return kết quả không có GPS
-    const finalDbPets = dbPets.map(pet => ({
-      ...pet,
-      age: calculateAge(pet.dob),
-    }));
-
-    return { data: finalDbPets, meta: { limit, count: finalDbPets.length, filters } };
+    return { data: dbPets, meta: { limit, count: dbPets.length, filters } };
   }
 
   async swipePet(userId: string, petId: string, swipePetDto: SwipePetDto) {
