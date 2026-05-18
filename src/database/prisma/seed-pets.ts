@@ -36,6 +36,10 @@ function getLocalImages(petId: any): { url: string }[] {
   if (!safeId) return [{ url: 'https://loremflickr.com/400/400/dog' }];
 
   const folderPath = path.join(process.cwd(), 'prisma/data/images', safeId);
+  
+  // Log ra đường dẫn để kiểm chứng trực tiếp trên Terminal
+  console.log(`\n🔍 Đang quét ảnh tại: ${folderPath}`);
+
   let results: { url: string }[] = [];
 
   try {
@@ -88,8 +92,11 @@ async function getOrCreateShelter(khuName: any): Promise<string | null> {
 
 async function processBatch(batch: any[]) {
   for (const row of batch) {
-    const name = row['Tên thú cưng'] || row['Tên'] || row['Name'] || row['ID'] || 'Bé Không Tên';
-    const petId = row['ID']; 
+    // Bắt các case cột có khoảng trắng vô tình
+    const rawId = row['ID'] || row['ID '] || row[' ID'];
+    
+    // Fallback: Nếu không lấy được ID, ta lấy từ tên ảnh (Vd: 900263003834569.jpg -> 900263003834569)
+    const fallbackId = String(row['Ảnh'] || '').split('.')[0].trim();
     
     const loaiStr = String(row['Loài'] || row['Giống'] || '').toLowerCase();
     const speciesType = loaiStr.includes('mèo') ? 'CAT' : 'DOG';
@@ -159,7 +166,10 @@ export async function seedPets() {
   console.log(`\n⏳ Đang nạp file Excel...`);
   let workbook: any = xlsx.readFile(excelPath);
   const sheetName = workbook.SheetNames[0];
-  const allRecords = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+  const allRecords = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { 
+    raw: false, 
+    defval: '' 
+  });
   
   workbook = null; 
   if (global.gc) {
