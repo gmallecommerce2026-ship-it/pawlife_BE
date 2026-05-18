@@ -107,20 +107,16 @@ export class PetsService {
   async getFeed(userId: string, limit: number, filters?: FeedFilters, lat?: number, lng?: number) {
     const { gender, size, species } = filters || {};
 
-    // CHUẨN HÓA DỮ LIỆU ĐỂ SO SÁNH KHÔNG BỊ LỆCH CHỮ HOA / CHỮ THƯỜNG
-    const searchGender = gender ? gender.toUpperCase() : undefined;
-    const searchSize = size ? size.toUpperCase() : undefined;
-    const searchSpecies = species ? species.toUpperCase() : undefined;
-
     const matchesFilters = (pet: any) => {
-      if (searchGender && pet.gender?.toUpperCase() !== searchGender) return false;
-      if (searchSize && pet.size?.toUpperCase() !== searchSize) return false;
-      if (searchSpecies && pet.species?.toUpperCase() !== searchSpecies) return false;
+      if (gender && pet.gender !== gender) return false;
+      if (size && pet.size !== size) return false;
+      if (species && pet.species !== species) return false;
       return true;
     };
 
     // TRƯỜNG HỢP 1: CÓ TỌA ĐỘ (Xử lý trên RAM)
     if (lat && lng) {
+      // Chỉ tải userInteractions từ Redis khi thực sự cần thiết (xử lý RAM)
       const interactionCacheKey = `user:${userId}:swiped_pets`;
       let userInteractions = await this.redisService.get<{petId: string, action: string}[]>(interactionCacheKey) || [];
       const allSwipedIds = new Set(userInteractions.map(i => i.petId));
@@ -176,13 +172,16 @@ export class PetsService {
     }
 
     // TRƯỜNG HỢP 2: KHÔNG CÓ GPS (Dùng DB Tối ưu)
+    // SỬA Ở ĐÂY: KHÔNG dùng `notIn: Array.from(allSwipedIds)`
+    // Thay vào đó dùng liên kết ngược (Relational Filter) của Prisma để tạo câu lệnh SQL tối ưu:
     let dbPets = await this.prisma.pet.findMany({
       where: {
         status: 'AVAILABLE',
+        // Prisma sẽ tự động build câu lệnh SQL "WHERE NOT EXISTS (SELECT ...)" thay vì "WHERE id NOT IN (...hàng nghìn ID...)"
         interactions: { none: { userId: userId } },
-        ...(searchGender && { gender: searchGender as any }),
-        ...(searchSize && { size: searchSize as any }),
-        ...(searchSpecies && { species: searchSpecies as any }),
+        ...(gender && { gender }),
+        ...(size && { size }),
+        ...(species && { species }),
       },
       take: limit,
       orderBy: { createdAt: 'desc' },
@@ -193,13 +192,14 @@ export class PetsService {
     });
 
     if (dbPets.length === 0) {
+      // Fallback lấy thú cưng đã PASS bằng Join Table
       dbPets = await this.prisma.pet.findMany({
         where: {
           status: 'AVAILABLE',
           interactions: { some: { userId: userId, action: 'PASS' } },
-          ...(searchGender && { gender: searchGender as any }),
-          ...(searchSize && { size: searchSize as any }),
-          ...(searchSpecies && { species: searchSpecies as any }),
+          ...(gender && { gender }),
+          ...(size && { size }),
+          ...(species && { species }),
         },
         take: limit,
         include: {
