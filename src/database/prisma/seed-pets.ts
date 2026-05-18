@@ -1,11 +1,12 @@
 import { PrismaClient, PetGender, PetSize, PetStatus } from '@prisma/client';
-import * as fs from 'fs';
+import * as xlsx from 'xlsx';
 import * as path from 'path';
-import csv from 'csv-parser';
+import * as fs from 'fs';
 import { google } from 'googleapis';
 
 const prisma = new PrismaClient();
 
+// CẤU HÌNH DRIVE API Ở ĐÂY
 const GOOGLE_DRIVE_API_KEY = process.env.GOOGLE_DRIVE_API_KEY || 'API_KEY_CUA_BAN_O_DAY';
 
 const drive = google.drive({
@@ -131,10 +132,15 @@ async function getOrCreateShelter(khuName: any): Promise<string | null> {
   return shelter.id;
 }
 
-// Hàm phụ trợ xử lý mảng lô (batch)
-async function processBatch(batch: any[], speciesType: 'DOG' | 'CAT') {
+// Xử lý 10 bản ghi cùng lúc
+async function processBatch(batch: any[]) {
   for (const row of batch) {
     const name = row['Tên thú cưng'] || row['Tên'] || row['Name'] || row['ID'] || 'Bé Không Tên';
+    
+    // Tự động phân loại Mèo/Chó dựa theo từ khóa trong Excel, mặc định là DOG
+    const loaiStr = String(row['Loài'] || row['Giống'] || '').toLowerCase();
+    const speciesType = loaiStr.includes('mèo') ? 'CAT' : 'DOG';
+
     try {
       const status = parseStatus(row['Tình trạng']);
       const description = [row['Lưu ý'], row['Ghi chú'], row['Cột 1']].filter(Boolean).join('. ');
@@ -166,50 +172,6 @@ async function processBatch(batch: any[], speciesType: 'DOG' | 'CAT') {
   }
 }
 
-async function seedFromCsv(filePath: string, speciesType: 'DOG' | 'CAT') {
-  console.log(`\n⏳ Đang tiến hành đọc Stream file: ${path.basename(filePath)}...`);
-  if (!fs.existsSync(filePath)) {
-    console.error(`❌ Không tìm thấy file: ${filePath}`);
-    return;
-  }
-
-  const stream = fs.createReadStream(filePath).pipe(csv());
-  let batch: any[] = [];
-  let totalCount = 0;
-
-  // for await: Đọc dòng nào sinh ra dòng đó, không tốn RAM
-  for await (const row of stream) {
-    batch.push(row);
-    totalCount++;
-
-    if (batch.length >= 10) {
-      console.log(`\n📦 Đang xử lý lô 10 bé (Tổng đã đọc: ${totalCount})...`);
-      
-      // Xử lý 10 bản ghi
-      await processBatch(batch, speciesType);
-      
-      // Xoá trắng mảng để lấy lại RAM ngay lập tức
-      batch = []; 
-      
-      console.log(`\n💤 Nghỉ 3 giây cho VPS thở...`);
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // Ép Garbage Collector thu hồi RAM ngay
-      if (global.gc) {
-        global.gc();
-      }
-    }
-  }
-
-  // Xử lý nốt các bản ghi bị dư ở lô cuối cùng
-  if (batch.length > 0) {
-    console.log(`\n📦 Đang xử lý lô cuối gồm ${batch.length} bé...`);
-    await processBatch(batch, speciesType);
-  }
-  
-  console.log(`\n🎉 Hoàn tất file ${speciesType}. Đã đọc tổng cộng ${totalCount} dòng.`);
-}
-
 export async function seedPets() {
   console.log('Bắt đầu dọn dẹp dữ liệu cũ (Xóa Database)...');
   
@@ -231,16 +193,51 @@ export async function seedPets() {
   
   console.log('Đã xóa xong dữ liệu cũ!');
 
-  const dogCsvPath = path.join(process.cwd(), 'prisma/data/cho_meo.xlsx - TT chó lụm.csv');
-  const catCsvPath = path.join(process.cwd(), 'prisma/data/cho_meo.xlsx - TT mèo.csv');
+  const excelPath = path.join(process.cwd(), 'prisma/data/cho_meo.xlsx');
 
-  await seedFromCsv(dogCsvPath, 'DOG');
-  await seedFromCsv(catCsvPath, 'CAT');
+  if (!fs.existsSync(excelPath)) {
+    console.error(`❌ Không tìm thấy file Excel tại: ${excelPath}`);
+    return;
+  }
+
+  console.log(`\n⏳ Đang đọc file Excel (có thể mất vài giây)...`);
+  let workbook: any = xlsx.readFile(excelPath);
+  const sheetName = workbook.SheetNames[0];
+  const allRecords = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+  
+  // TỐI QUAN TRỌNG: Giải phóng file Excel khổng lồ khỏi RAM ngay sau khi lấy được data
+  workbook = null; 
+  if (global.gc) {
+    global.gc();
+  }
+
+  console.log(`✅ Đã nạp thành công ${allRecords.length} dòng. Bắt đầu seed từng lô 10 bé...`);
+
+  const BATCH_SIZE = 10;
+  let successCount = 0;
+
+  // Chạy vòng lặp chia nhỏ lô
+  for (let i = 0; i < allRecords.length; i += BATCH_SIZE) {
+    const batch = allRecords.slice(i, i + BATCH_SIZE);
+    console.log(`\n📦 Đang xử lý lô từ ${i + 1} đến ${Math.min(i + BATCH_SIZE, allRecords.length)} / ${allRecords.length}`);
+    
+    await processBatch(batch);
+    successCount += batch.length;
+
+    console.log(`\n💤 Đã xong lô. Nghỉ 3 giây để VPS nhả RAM...`);
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    // Ép Nodejs dọn rác thủ công sau mỗi 10 bé
+    if (global.gc) {
+      global.gc();
+    }
+  }
+  
+  console.log(`\n🎉 HOÀN TẤT TOÀN BỘ! Đã seed thành công ${successCount} bé.`);
 }
 
 seedPets()
   .then(async () => {
-    console.log('\n🏁 TẤT CẢ TIẾN TRÌNH SEED HOÀN TẤT!');
     await prisma.$disconnect();
   })
   .catch(async (e) => {
