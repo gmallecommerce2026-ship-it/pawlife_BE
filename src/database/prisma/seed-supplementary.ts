@@ -1,10 +1,19 @@
-// prisma/seed-supplementary.ts
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+// Danh sách tọa độ và địa chỉ giả định (Khu vực Hà Nội) để thuật toán tìm kiếm Nearby hoạt động tốt
+const mockLocations = [
+  { address: "123 Đường Láng, Đống Đa, Hà Nội", lat: 21.0166, lng: 105.8115 },
+  { address: "456 Nguyễn Trãi, Thanh Xuân, Hà Nội", lat: 20.9937, lng: 105.8083 },
+  { address: "789 Cầu Giấy, Quan Hoa, Hà Nội", lat: 21.0333, lng: 105.7958 },
+  { address: "101 Kim Mã, Ba Đình, Hà Nội", lat: 21.0311, lng: 105.8197 },
+  { address: "202 Hai Bà Trưng, Hoàn Kiếm, Hà Nội", lat: 21.0254, lng: 105.8512 },
+  { address: "55 Lê Lợi, Hà Đông, Hà Nội", lat: 20.9702, lng: 105.7725 },
+];
+
 async function main() {
-  console.log('🚀 Bắt đầu bổ sung dữ liệu (Contact Info, Verified, Organizer)...');
+  console.log('🚀 Bắt đầu bổ sung dữ liệu (Contact Info, Verified, Location, Organizer)...');
 
   // 1. Lấy tất cả Shelter hiện tại
   const shelters = await prisma.shelter.findMany();
@@ -14,18 +23,22 @@ async function main() {
     return;
   }
 
-  // Cập nhật từng Shelter để đổ dữ liệu cho tab Contact
-  for (const shelter of shelters) {
-    // Tạo data giả định có vẻ "thật" dựa trên tên của trạm
+  // Cập nhật từng Shelter để đổ dữ liệu
+  for (let i = 0; i < shelters.length; i++) {
+    const shelter = shelters[i];
+    
+    // Tạo data giả định cho email
     const emailDomain = shelter.name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'pawlife';
     const isVerified = Math.random() > 0.3; // 70% cơ hội được verify
 
     // Random ngày tham gia trong khoảng 1-2 năm trước
     const joinDate = new Date();
     joinDate.setFullYear(joinDate.getFullYear() - 1 - Math.floor(Math.random() * 2));
-    
     const verifyDate = new Date(joinDate);
-    verifyDate.setMonth(verifyDate.getMonth() + 1); // Verify sau khi join 1 tháng
+    verifyDate.setMonth(verifyDate.getMonth() + 1);
+
+    // Lấy một location ngẫu nhiên (xoay vòng theo index để đảm bảo đa dạng)
+    const location = mockLocations[i % mockLocations.length];
 
     await prisma.shelter.update({
       where: { id: shelter.id },
@@ -34,13 +47,16 @@ async function main() {
         isVerified: isVerified,
         createdAt: joinDate,
         verifiedAt: isVerified ? verifyDate : null,
+        // BỔ SUNG LOCATION VÀ TỌA ĐỘ
+        address: location.address,
+        latitude: location.lat,
+        longitude: location.lng,
       },
     });
-    console.log(`✅ Đã cập nhật Contact Info cho Shelter: ${shelter.name}`);
+    console.log(`✅ Đã cập nhật Contact & Location cho: ${shelter.name}`);
   }
 
   // 2. Cập nhật các Event chưa có Organizer (shelterId = null)
-  // Lấy bừa 1 Shelter làm Organizer mặc định để FE có cái hiển thị
   const defaultOrganizer = shelters[0]; 
   
   const eventsWithoutOrganizer = await prisma.event.findMany({
