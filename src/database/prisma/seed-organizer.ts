@@ -3,10 +3,10 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Bắt đầu dọn dẹp dữ liệu Organizer cũ...');
-  // Chú ý: Cần xóa Event trước vì có khóa ngoại trỏ tới Organizer
-  await prisma.eventInterest.deleteMany();
+  console.log('Bắt đầu dọn dẹp dữ liệu Organizer và Event cũ...');
+  // Xóa theo thứ tự để không bị lỗi khóa ngoại (Foreign Key)
   await prisma.eventImage.deleteMany();
+  await prisma.eventInterest.deleteMany();
   await prisma.event.deleteMany();
   await prisma.organizer.deleteMany();
 
@@ -36,6 +36,14 @@ async function main() {
       avatarUrl: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=200&auto=format&fit=crop',
       coverUrl: 'https://images.unsplash.com/photo-1495360010541-f48722b34f7d?q=80&w=800&auto=format&fit=crop',
       followers: 5200,
+    },
+    {
+      name: 'City Pet Training',
+      handle: '@citypettraining',
+      about: 'Trung tâm huấn luyện thú cưng chuyên nghiệp, thường xuyên mở các buổi workshop giao lưu và dạy kỹ năng cơ bản cho chó con.',
+      avatarUrl: 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?q=80&w=200&auto=format&fit=crop',
+      coverUrl: 'https://images.unsplash.com/photo-1534361960057-19889db9621e?q=80&w=800&auto=format&fit=crop',
+      followers: 3100,
     }
   ];
 
@@ -48,13 +56,13 @@ async function main() {
   }
 
   console.log(`Đã tạo thành công ${createdOrganizers.length} Organizers!`);
-
-  console.log('Đang tạo Events mẫu liên kết với Organizers...');
+  console.log('Đang tạo Events mẫu liên kết với Organizers kèm Photo Gallery...');
   
   const today = new Date();
   const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
   const nextMonth = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
 
+  // Sự kiện 1 (Của PawLife Official)
   await prisma.event.create({
     data: {
       title: 'Dog art therapy & painting class',
@@ -68,16 +76,26 @@ async function main() {
       latitude: 21.058178,
       longitude: 105.804158,
       interestedCount: 255,
-      organizerId: createdOrganizers[0].id, // Gắn với PawLife Official
+      organizerId: createdOrganizers[0].id, 
+      images: {
+        create: [
+          { url: 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1537151608828-ea2b11777ee8?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1535930891776-0c2dfb7fda1a?q=80&w=300&auto=format&fit=crop' }
+        ]
+      }
     }
   });
 
+  // Sự kiện 2 (Của Pawsome Events Co.) - Đã fix banner sang ảnh chạy bộ
   await prisma.event.create({
     data: {
       title: 'Hội thi Chó chạy Marathon 2026',
       category: 'Sports',
       description: 'Giải chạy bộ đồng hành cùng thú cưng quy mô lớn nhất năm. Cơ hội để thú cưng của bạn thể hiện sức bền và nhận những phần quà giá trị.',
-      bannerUrl: 'https://images.unsplash.com/photo-1535241556843-adbd92d4e673?q=80&w=800&auto=format&fit=crop',
+      bannerUrl: 'https://images.unsplash.com/photo-1537204696486-967f1b7198c8?q=80&w=800&auto=format&fit=crop', // Ảnh chó đang chạy ngoài trời
       startDate: new Date(nextMonth.setHours(6, 0, 0, 0)),
       endDate: new Date(nextMonth.setHours(10, 0, 0, 0)),
       locationName: 'Công viên Yên Sở',
@@ -85,11 +103,74 @@ async function main() {
       latitude: 20.955091,
       longitude: 105.868285,
       interestedCount: 840,
-      organizerId: createdOrganizers[1].id, // Gắn với Pawsome Events Co.
+      organizerId: createdOrganizers[1].id,
+      images: {
+        create: [
+          { url: 'https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1504595403659-9088ce801e29?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1517423568366-8b83523034fd?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1530281700549-e82e7bf110d6?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1546975490-a79ee8ebfb72?q=80&w=300&auto=format&fit=crop' }
+        ]
+      }
     }
   });
 
-  console.log('Đã tạo xong dữ liệu Organizer và Event mẫu!');
+  // Sự kiện 3 (Của Feline Friends Hub)
+  await prisma.event.create({
+    data: {
+      title: 'Morning Yoga with Cats',
+      category: 'Health',
+      description: 'Start your morning with a relaxing yoga session surrounded by our adorable rescue cats. A perfect way to find your zen and maybe find a new furry family member.',
+      bannerUrl: 'https://images.unsplash.com/photo-1543852786-1cf6624b9987?q=80&w=800&auto=format&fit=crop',
+      startDate: new Date(nextMonth.setHours(8, 0, 0, 0)),
+      endDate: new Date(nextMonth.setHours(10, 0, 0, 0)),
+      locationName: 'Central Park, NY',
+      address: 'Central Park West, New York, NY',
+      latitude: 40.785091,
+      longitude: -73.968285,
+      interestedCount: 128,
+      organizerId: createdOrganizers[2].id,
+      images: {
+        create: [
+          { url: 'https://images.unsplash.com/photo-1596492784531-6e6eb5ea92b5?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1573865526739-10659fec78a5?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1511044568932-338cba0ad803?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1501820488136-72669149e0d4?q=80&w=300&auto=format&fit=crop' }
+        ]
+      }
+    }
+  });
+
+  // Sự kiện 4 (Của City Pet Training)
+  await prisma.event.create({
+    data: {
+      title: 'Puppy Socialization Hour',
+      category: 'Training',
+      description: 'Bring your puppies for a fun, safe, and supervised socialization hour. This helps them build confidence and learn how to interact properly with other dogs.',
+      bannerUrl: 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?q=80&w=800&auto=format&fit=crop',
+      startDate: new Date(nextMonth.setHours(15, 0, 0, 0)),
+      endDate: new Date(nextMonth.setHours(17, 0, 0, 0)),
+      locationName: 'City Pet Center',
+      address: '456 Pet Avenue, Los Angeles, CA',
+      latitude: 34.052235,
+      longitude: -118.243683,
+      interestedCount: 340,
+      organizerId: createdOrganizers[3].id,
+      images: {
+        create: [
+          { url: 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1601758124510-52d02ddb7cbd?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1583337130417-3346a1be7dee?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1544568100-847a948585b9?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1534361960057-19889db9621e?q=80&w=300&auto=format&fit=crop' }
+        ]
+      }
+    }
+  });
+
+  console.log('Đã tạo xong dữ liệu Organizer và Event mẫu với đầy đủ Gallery ảnh!');
 }
 
 main()
