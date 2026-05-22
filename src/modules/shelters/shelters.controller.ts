@@ -9,7 +9,15 @@ import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt.guard';
 @Controller('shelters')
 export class SheltersController {
   constructor(private readonly sheltersService: SheltersService) {}
-
+  
+  @Public()
+  @Get(':id/organizer-profile')
+  async getOrganizerProfile(
+    @Param('id') id: string,
+    @Query('userId') userId?: string,
+  ) {
+    return this.sheltersService.getOrganizerProfile(id, userId);
+  }
   @Public() // API public cho phép xem danh sách
   @Get()
   findAll(@Query() query: GetSheltersDto) {

@@ -12,7 +12,57 @@ export class SheltersService {
     private readonly notificationsService: NotificationsService, // Inject NotificationsService
     private readonly redisService: RedisService
   ) {}
+  async getOrganizerProfile(shelterId: string, userId?: string) {
+    // Lấy thông tin Shelter kèm số lượng thống kê
+    const shelter = await this.prisma.shelter.findUnique({
+      where: { id: shelterId },
+      include: {
+        _count: {
+          select: { followers: true, events: true },
+        },
+      },
+    });
 
+    if (!shelter) {
+      throw new NotFoundException('Không tìm thấy ban tổ chức (Shelter)');
+    }
+
+    // Kiểm tra xem User hiện tại đã follow Shelter này chưa
+    let isFollowing = false;
+    if (userId) {
+      const followStatus = await this.prisma.followedShelter.findUnique({
+        where: {
+          userId_shelterId: { userId, shelterId },
+        },
+      });
+      isFollowing = !!followStatus;
+    }
+
+    // Lấy danh sách Events do Shelter này tổ chức
+    const events = await this.prisma.event.findMany({
+      where: { shelterId },
+      orderBy: { startDate: 'desc' },
+      // Lấy thêm số lượng người quan tâm event (nếu cần mapping chi tiết)
+    });
+
+    // Mapping dữ liệu để trả về format Frontend dễ dùng nhất
+    return {
+      success: true,
+      data: {
+        id: shelter.id,
+        name: shelter.name,
+        // Tạo handle giả lập từ tên nếu DB chưa có trường handle
+        handle: `@${shelter.name.toLowerCase().replace(/\s+/g, '')}`, 
+        avatar: shelter.avatarUrl || 'https://images.unsplash.com/photo-1517260739337-6799d239ce83?q=80&w=500&auto=format&fit=crop',
+        coverImg: shelter.coverUrl || 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?q=80&w=1000&auto=format&fit=crop',
+        followers: shelter._count.followers,
+        totalEvents: shelter._count.events,
+        about: shelter.description || 'Chưa có thông tin giới thiệu về ban tổ chức này.',
+        isFollowing,
+        events: events,
+      },
+    };
+  }
   async findAll(query: GetSheltersDto) {
     const { search, page = 1, limit = 10 } = query;
     const cacheKey = `shelters:all:page_${page}:limit_${limit}:search_${search || 'none'}`;
