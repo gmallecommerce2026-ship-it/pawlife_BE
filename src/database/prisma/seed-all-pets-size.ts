@@ -2,49 +2,31 @@ import { PrismaClient, PetSize } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Hàm định nghĩa luật tính size
-const calculateSize = (species: string | null, weight: number | null): PetSize => {
-//   if (!weight) return PetSize.MEDIUM; // Mặc định nếu không có cân nặng
-  
-//   const s = species?.toUpperCase() || 'DOG';
-  
-//   if (s === 'DOG') {
-//     if (weight < 3) return PetSize.SMALL;
-//     if (weight < 7) return PetSize.MEDIUM;
-//     return PetSize.LARGE;
-//   }
-  
-//   if (s === 'CAT') {
-//     if (weight < 3) return PetSize.SMALL;
-//     if (weight < 5) return PetSize.MEDIUM;
-//     return PetSize.LARGE;
-//   }
-
-  return PetSize.LARGE;
-};
-
 async function main() {
-  console.log("🔄 Bắt đầu cập nhật Size cho TOÀN BỘ thú cưng trong hệ thống...");
+  console.log("🎲 Bắt đầu gán Size ngẫu nhiên cho toàn bộ Pet...");
 
-  // Lấy toàn bộ pet không phân biệt chủ sở hữu
+  // Lấy toàn bộ Pet
   const pets = await prisma.pet.findMany({
-    select: { id: true, name: true, weight: true, species: true }
+    select: { id: true, name: true }
   });
 
+  const sizes = [PetSize.SMALL, PetSize.MEDIUM, PetSize.LARGE];
   let count = 0;
+
   for (const pet of pets) {
-    const newSize = calculateSize(pet.species, pet.weight);
-    
+    // Chọn ngẫu nhiên một giá trị từ mảng sizes
+    const randomSize = sizes[Math.floor(Math.random() * sizes.length)];
+
     await prisma.pet.update({
       where: { id: pet.id },
-      data: { size: newSize },
+      data: { size: randomSize },
     });
-    
+
     count++;
     if (count % 10 === 0) console.log(`...đã cập nhật ${count}/${pets.length} bé`);
   }
 
-  console.log(`✨ Hoàn tất! Đã cập nhật xong ${count} thú cưng.`);
+  console.log(`✨ Hoàn tất! Đã cập nhật ngẫu nhiên cho ${count} thú cưng.`);
 }
 
 main()
