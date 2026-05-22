@@ -433,6 +433,20 @@ model Notification {
   @@index([userId, createdAt(sort: Desc)]) 
 }
 
+model Organizer {
+  id          String   @id @default(uuid())
+  name        String
+  handle      String?  @unique // VD: @pawlife_org
+  about       String?  @db.Text
+  avatarUrl   String?
+  coverUrl    String?
+  followers   Int      @default(0) 
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  events      Event[]  // Mối quan hệ: 1 Organizer có nhiều Event
+}
+
 model Event {
   id              String   @id @default(uuid())
   title           String   // VD: "Dog art therapy & painting class"
@@ -454,9 +468,8 @@ model Event {
   interestedCount Int      @default(0) // Số người quan tâm "250+ Interested"
 
   // Đơn vị tổ chức (Organizer)
-  // Giả định Organizer chính là một Shelter/Tổ chức có sẵn trong app
-  shelterId       String?  
-  shelter         Shelter? @relation(fields: [shelterId], references: [id], onDelete: SetNull)
+  organizerId     String?
+  organizer       Organizer? @relation(fields: [organizerId], references: [id], onDelete: SetNull)
   
   // Quan hệ
   images          EventImage[]     // Danh sách ảnh cho "Gallery (Pre-Event)"
