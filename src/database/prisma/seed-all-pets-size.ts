@@ -4,23 +4,23 @@ const prisma = new PrismaClient();
 
 // Hàm định nghĩa luật tính size
 const calculateSize = (species: string | null, weight: number | null): PetSize => {
-  if (!weight) return PetSize.MEDIUM; // Mặc định nếu không có cân nặng
+//   if (!weight) return PetSize.MEDIUM; // Mặc định nếu không có cân nặng
   
-  const s = species?.toUpperCase() || 'DOG';
+//   const s = species?.toUpperCase() || 'DOG';
   
-  if (s === 'DOG') {
-    if (weight < 3) return PetSize.SMALL;
-    if (weight < 7) return PetSize.MEDIUM;
-    return PetSize.LARGE;
-  }
+//   if (s === 'DOG') {
+//     if (weight < 3) return PetSize.SMALL;
+//     if (weight < 7) return PetSize.MEDIUM;
+//     return PetSize.LARGE;
+//   }
   
-  if (s === 'CAT') {
-    if (weight < 3) return PetSize.SMALL;
-    if (weight < 5) return PetSize.MEDIUM;
-    return PetSize.LARGE;
-  }
+//   if (s === 'CAT') {
+//     if (weight < 3) return PetSize.SMALL;
+//     if (weight < 5) return PetSize.MEDIUM;
+//     return PetSize.LARGE;
+//   }
 
-  return PetSize.MEDIUM;
+  return PetSize.LARGE;
 };
 
 async function main() {
