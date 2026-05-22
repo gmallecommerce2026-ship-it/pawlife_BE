@@ -2,27 +2,24 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { Prisma, NotificationType } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
-import { RedisService } from '../../database/redis/redis.service'; // INJECT THÊM REDIS
+import { RedisService } from '../../database/redis/redis.service';
 
 @Injectable()
 export class EventsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationsService: NotificationsService, // Inject NotificationsService
-    private readonly redisService: RedisService // BỔ SUNG REDIS VÀO CONSTRUCTOR
+    private readonly notificationsService: NotificationsService,
+    private readonly redisService: RedisService
   ) {}
 
   async getUpcomingEvents(limit: number) {
-    // 1. TẠO CACHE KEY
     const cacheKey = `events:upcoming:limit_${limit}`;
 
-    // 2. KIỂM TRA CACHE
     const cachedData = await this.redisService.get<any>(cacheKey);
     if (cachedData) {
       return cachedData;
     }
 
-    // 3. NẾU KHÔNG CÓ CACHE, GỌI DATABASE
     const events = await this.prisma.event.findMany({
       where: {
         startDate: { gte: new Date() },
@@ -30,7 +27,8 @@ export class EventsService {
       orderBy: { startDate: 'asc' },
       take: limit,
       include: {
-        shelter: {
+        // FIX: Đổi từ shelter sang organizer
+        organizer: {
           select: { id: true, name: true, avatarUrl: true },
         },
       },
@@ -38,21 +36,17 @@ export class EventsService {
 
     const result = { success: true, data: events };
 
-    // 4. LƯU VÀO REDIS 1 TIẾNG
     await this.redisService.set(cacheKey, result, 3600);
 
     return result;
   }
 
-  // =====================================================================
-  // CÁC HÀM CÁ NHÂN HOÁ DƯỚI ĐÂY ĐƯỢC GIỮ NGUYÊN 100% ĐỂ KHÔNG HỎNG LOGIC
-  // =====================================================================
-
   async getEventDetail(eventId: string, userId?: string) {
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
       include: {
-        shelter: {
+        // FIX: Đổi từ shelter sang organizer
+        organizer: {
           select: { id: true, name: true, avatarUrl: true },
         },
         images: true,
@@ -107,10 +101,8 @@ export class EventsService {
         }),
       ]);
 
-      // Lấy thông tin event để lấy title
       const event = await this.prisma.event.findUnique({ where: { id: eventId } });
 
-      // Bắn thông báo realtime cho user
       if (event) {
         await this.notificationsService.createAndSendNotification({
           userId: userId,
@@ -131,7 +123,8 @@ export class EventsService {
       include: {
         event: {
           include: {
-            shelter: {
+            // FIX: Đổi từ shelter sang organizer
+            organizer: {
               select: { id: true, name: true, avatarUrl: true },
             },
           },
@@ -144,17 +137,11 @@ export class EventsService {
     return { success: true, data: events };
   }
 
-  // =====================================================================
-  // HÀM SEARCH ĐƯỢC BỌC REDIS CACHE
-  // =====================================================================
-
   async searchEvents(params: { search?: string; limit?: number }) {
     const { search, limit = 20 } = params;
 
-    // 1. TẠO CACHE KEY
     const cacheKey = `events:search:limit_${limit}:search_${search || 'all'}`;
 
-    // 2. KIỂM TRA CACHE
     const cachedData = await this.redisService.get<any>(cacheKey);
     if (cachedData) {
       return cachedData;
@@ -170,12 +157,12 @@ export class EventsService {
       ];
     }
 
-    // 3. GỌI DATABASE
     const events = await this.prisma.event.findMany({
       where: whereCondition,
       take: limit,
       include: {
-        shelter: {
+        // FIX: Đổi từ shelter sang organizer
+        organizer: {
           select: { id: true, name: true, avatarUrl: true },
         },
         images: true,
@@ -185,7 +172,6 @@ export class EventsService {
 
     const result = { success: true, data: events };
 
-    // 4. LƯU VÀO REDIS 1 TIẾNG
     await this.redisService.set(cacheKey, result, 3600);
 
     return result;

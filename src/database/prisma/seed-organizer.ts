@@ -39,7 +39,7 @@ async function main() {
     }
   ];
 
-  const createdOrganizers = [];
+  const createdOrganizers: any[] = [];
   for (const org of organizersData) {
     const createdOrg = await prisma.organizer.create({
       data: org,

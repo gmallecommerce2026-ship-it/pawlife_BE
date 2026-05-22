@@ -9,60 +9,52 @@ import { RedisService } from 'src/database/redis/redis.service';
 export class SheltersService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationsService: NotificationsService, // Inject NotificationsService
+    private readonly notificationsService: NotificationsService,
     private readonly redisService: RedisService
   ) {}
-  async getOrganizerProfile(shelterId: string, userId?: string) {
-    // Lấy thông tin Shelter kèm số lượng thống kê
-    const shelter = await this.prisma.shelter.findUnique({
-      where: { id: shelterId },
+
+  // =====================================================================
+  // FIX: HÀM NÀY ĐÃ ĐƯỢC CHUYỂN SANG TRUY VẤN BẢNG ORGANIZER
+  // =====================================================================
+  async getOrganizerProfile(organizerId: string, userId?: string) {
+    const organizer = await this.prisma.organizer.findUnique({
+      where: { id: organizerId },
       include: {
-        _count: {
-          select: { followers: true, events: true },
-        },
+        events: {
+          orderBy: { startDate: 'desc' }
+        }
       },
     });
 
-    if (!shelter) {
-      throw new NotFoundException('Không tìm thấy ban tổ chức (Shelter)');
+    if (!organizer) {
+      throw new NotFoundException('Không tìm thấy ban tổ chức (Organizer)');
     }
 
-    // Kiểm tra xem User hiện tại đã follow Shelter này chưa
+    // Do hiện tại hệ thống chưa thiết kế bảng FollowedOrganizer riêng (chỉ mới có FollowedShelter), 
+    // ta tạm thời để isFollowing = false. Sau này làm tính năng follow organizer thì sẽ query bảng phụ ở đây.
     let isFollowing = false;
-    if (userId) {
-      const followStatus = await this.prisma.followedShelter.findUnique({
-        where: {
-          userId_shelterId: { userId, shelterId },
-        },
-      });
-      isFollowing = !!followStatus;
-    }
 
-    // Lấy danh sách Events do Shelter này tổ chức
-    const events = await this.prisma.event.findMany({
-      where: { shelterId },
-      orderBy: { startDate: 'desc' },
-      // Lấy thêm số lượng người quan tâm event (nếu cần mapping chi tiết)
-    });
-
-    // Mapping dữ liệu để trả về format Frontend dễ dùng nhất
+    // Mapping dữ liệu trả về theo format FE yêu cầu
     return {
       success: true,
       data: {
-        id: shelter.id,
-        name: shelter.name,
-        // Tạo handle giả lập từ tên nếu DB chưa có trường handle
-        handle: `@${shelter.name.toLowerCase().replace(/\s+/g, '')}`, 
-        avatar: shelter.avatarUrl || 'https://images.unsplash.com/photo-1517260739337-6799d239ce83?q=80&w=500&auto=format&fit=crop',
-        coverImg: shelter.coverUrl || 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?q=80&w=1000&auto=format&fit=crop',
-        followers: shelter._count.followers,
-        totalEvents: shelter._count.events,
-        about: shelter.description || 'Chưa có thông tin giới thiệu về ban tổ chức này.',
+        id: organizer.id,
+        name: organizer.name,
+        handle: organizer.handle || `@${organizer.name.toLowerCase().replace(/\s+/g, '')}`,
+        avatar: organizer.avatarUrl || 'https://images.unsplash.com/photo-1517260739337-6799d239ce83?q=80&w=500&auto=format&fit=crop',
+        coverImg: organizer.coverUrl || 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?q=80&w=1000&auto=format&fit=crop',
+        followers: organizer.followers,
+        totalEvents: organizer.events.length,
+        about: organizer.about || 'Chưa có thông tin giới thiệu về ban tổ chức này.',
         isFollowing,
-        events: events,
+        events: organizer.events,
       },
     };
   }
+
+  // =====================================================================
+  // CÁC HÀM CÒN LẠI ĐƯỢC GIỮ NGUYÊN HOÀN TOÀN
+  // =====================================================================
   async findAll(query: GetSheltersDto) {
     const { search, page = 1, limit = 10 } = query;
     const cacheKey = `shelters:all:page_${page}:limit_${limit}:search_${search || 'none'}`;
@@ -70,16 +62,13 @@ export class SheltersService {
     const cachedData = await this.redisService.get<any>(cacheKey);
     if (cachedData) return cachedData;
 
-    // 1. CƠ CHẾ CHỐNG CACHE STAMPEDE
     const lockKey = `${cacheKey}:lock`;
     const isLocked = await this.redisService.get<boolean>(lockKey);
     
     if (isLocked) {
-      // Đợi 200ms rồi lấy lại cache thay vì query DB
       await new Promise(resolve => setTimeout(resolve, 200));
       return this.findAll(query);
     }
-    // Set lock trong 10 giây
     await this.redisService.set(lockKey, true, 10);
 
     const skip = (page - 1) * limit;
@@ -112,14 +101,10 @@ export class SheltersService {
     };
 
     await this.redisService.set(cacheKey, result, 3600);
-    await this.redisService.del(lockKey); // Xóa lock sau khi nạp cache xong
+    await this.redisService.del(lockKey);
 
     return result;
   }
-
-  // =====================================================================
-  // TẤT CẢ CÁC HÀM BÊN DƯỚI ĐƯỢC GIỮ NGUYÊN 100% ĐỂ ĐẢM BẢO KHÔNG BỊ HỎNG
-  // =====================================================================
 
   async findOne(id: string, userId?: string) {
     const shelter = await this.prisma.shelter.findUnique({
@@ -186,7 +171,6 @@ export class SheltersService {
         },
       });
 
-      // Bắn thông báo xác nhận follow thành công
       await this.notificationsService.createAndSendNotification({
         userId: userId,
         title: '🏠 Đã theo dõi trạm cứu hộ',
@@ -244,7 +228,6 @@ export class SheltersService {
     let isFollowed = false;
 
     if (existingFollow) {
-      // Unfollow
       await this.prisma.followedShelter.delete({
         where: {
           userId_shelterId: {
@@ -255,7 +238,6 @@ export class SheltersService {
       });
       isFollowed = false;
     } else {
-      // Follow
       await this.prisma.followedShelter.create({
         data: {
           userId,
@@ -264,7 +246,6 @@ export class SheltersService {
       });
       isFollowed = true;
 
-      // Bắn thông báo khi Follow thành công
       await this.notificationsService.createAndSendNotification({
         userId: userId,
         title: '🏠 Đã theo dõi trạm cứu hộ',
@@ -288,7 +269,6 @@ export class SheltersService {
   }
 
   async getFollowedSheltersByUser(userId: string) {
-    // Truy vấn database để lấy các trạm cứu hộ mà user này đã theo dõi
     const followedRecords = await this.prisma.followedShelter.findMany({
       where: {
         userId: userId,
@@ -307,7 +287,6 @@ export class SheltersService {
       },
     });
 
-    // Map lại dữ liệu trả về để khớp với những gì Frontend (FollowedSheltersScreen) đang cần hiển thị
     return followedRecords.map(record => {
       const shelter = record.shelter;
       return {
@@ -320,9 +299,9 @@ export class SheltersService {
       };
     });
   }
-  // Hàm tính khoảng cách bằng thuật toán Haversine trên Node.js
+
   private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371; // Bán kính trái đất tính bằng km
+    const R = 6371; 
     const dLat = (lat2 - lat1) * (Math.PI / 180);
     const dLon = (lon2 - lon1) * (Math.PI / 180);
     const a =
@@ -332,6 +311,7 @@ export class SheltersService {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
+
   async getSheltersNearBy(lat: number, lng: number, limit: number = 10) {
     const roundedLat = lat.toFixed(2);
     const roundedLng = lng.toFixed(2);
@@ -340,7 +320,6 @@ export class SheltersService {
     const cachedData = await this.redisService.get<any>(cacheKey);
     if (cachedData) return cachedData;
 
-    // CƠ CHẾ CHỐNG CACHE STAMPEDE
     const lockKey = `${cacheKey}:lock`;
     if (await this.redisService.get(lockKey)) {
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -349,10 +328,8 @@ export class SheltersService {
     await this.redisService.set(lockKey, true, 10);
     const REDIS_KEY = 'shelters:locations';
     
-    // 1. Lấy danh sách ID trạm từ Redis (Bán kính 50km)
     let nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, 50);
 
-    // [AUTO-SYNC] Nếu Redis trống, tự động nạp tọa độ từ Database vào Redis
     if (!nearbyShelterIds || nearbyShelterIds.length === 0) {
       const allShelters = await this.prisma.shelter.findMany({
         where: { latitude: { not: null }, longitude: { not: null } },
@@ -363,14 +340,12 @@ export class SheltersService {
       nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, 50);
     }
 
-    // Lấy số lượng vừa đủ limit để tối ưu query
     const targetIds = nearbyShelterIds.slice(0, limit);
 
     if (targetIds.length === 0) {
       return { data: [], meta: { limit, count: 0 } };
     }
 
-    // 2. Query MySQL với mảng ID (Tối ưu cực độ, bỏ hoàn toàn QueryRaw toán học)
     const shelters = await this.prisma.shelter.findMany({
       where: { id: { in: targetIds } },
     });
@@ -381,7 +356,6 @@ export class SheltersService {
       _count: { _all: true },
     });
 
-    // 3. Tính khoảng cách trên RAM và format chuẩn dữ liệu cũ
     const formattedShelters = shelters.map(shelter => {
       const petCountData = petCounts.find(pc => pc.shelterId === shelter.id);
       const distanceVal = this.calculateDistance(lat, lng, shelter.latitude!, shelter.longitude!);
@@ -391,14 +365,12 @@ export class SheltersService {
         _count: {
           pets: petCountData ? petCountData._count._all : 0
         },
-        distance_val: distanceVal, // Biến tạm để sắp xếp
+        distance_val: distanceVal,
       };
     });
 
-    // Sắp xếp mảng từ gần đến xa
     formattedShelters.sort((a, b) => a.distance_val - b.distance_val);
 
-    // Gắn format text distance và dọn dẹp biến tạm
     const finalData = formattedShelters.map(s => {
       const formattedData = {
          ...s,
@@ -413,10 +385,7 @@ export class SheltersService {
       meta: { limit, count: finalData.length }
     };
 
-    // 3. Cache lại kết quả trong 10 phút (600s)
     await this.redisService.set(cacheKey, result, 600);
-
-    // THÊM DÒNG NÀY: Mở khóa ngay lập tức để giải phóng cho các request đang đợi
     await this.redisService.del(`${cacheKey}:lock`); 
 
     return result;
