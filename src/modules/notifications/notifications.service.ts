@@ -2,14 +2,13 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { GetNotificationsDto, CreateNotificationDto } from './dto/notification.dto';
 import { NotificationsGateway } from './notifications.gateway';
-import { NotificationType } from '@prisma/client'; // Import từ Prisma Schema
+import { NotificationType } from '@prisma/client'; 
 
-// Định nghĩa Interface cho Push Notification
 export interface PushNotificationPayload {
   title: string;
   body: string;
-  referenceId?: string; // Bổ sung để liên kết với TagReport, Event...
-  data?: any;           // Chứa url deeplink hoặc metadata khác
+  referenceId?: string;
+  data?: any;           
 }
 
 @Injectable()
@@ -21,9 +20,6 @@ export class NotificationsService {
     private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
-  // ----------------------------------------------------------------------
-  // 1. Hàm tạo In-App Notification & Bắn Realtime Socket
-  // ----------------------------------------------------------------------
   async createAndSendNotification(data: CreateNotificationDto) {
     const notification = await this.prisma.notification.create({
       data: {
@@ -37,43 +33,29 @@ export class NotificationsService {
       },
     });
 
-    // Bắn sự kiện socket realtime tới đúng user đang mở App
     this.notificationsGateway.sendNotificationToUser(data.userId, notification);
-
     return notification;
   }
 
-  // ----------------------------------------------------------------------
-  // 2. Hàm gửi Push Notification (Màn hình khóa OS) - Sửa lỗi TS2339
-  // ----------------------------------------------------------------------
   async sendPushNotification(userId: string, payload: PushNotificationPayload) {
     try {
-      // 2.1 Tái sử dụng hàm In-App để lưu vào DB và bắn Socket
-      // Lưu ý: Ép kiểu as any hoặc cấu trúc lại cho khớp với CreateNotificationDto của bạn
       await this.createAndSendNotification({
         userId: userId,
         type: NotificationType.TAG_SCANNED, 
         title: payload.title,
         body: payload.body,
-        referenceId: payload.referenceId, // Quan trọng: Truyền ID của TagReport vào đây
+        referenceId: payload.referenceId, 
         metadata: payload.data || {},
       } as unknown as CreateNotificationDto); 
-
-      // 2.2 Tích hợp gửi ra màn hình khóa (FCM / Expo Server SDK)
-      // const sessions = await this.prisma.deviceSession.findMany({ where: { userId } });
-      // TODO: Map qua danh sách push tokens và gửi bằng Expo
 
       this.logger.log(`[Push Notification] Đã gửi thông báo tới user: ${userId}`);
       return true;
     } catch (error) {
       this.logger.error(`Lỗi gửi Push Notification:`, error);
-      return false; // Không throw error để tránh làm sập luồng code gọi nó
+      return false; 
     }
   }
 
-  // ----------------------------------------------------------------------
-  // 3. Lấy danh sách thông báo
-  // ----------------------------------------------------------------------
   async getUserNotifications(userId: string, query: GetNotificationsDto) {
     const { page = 1, limit = 20 } = query;
     const skip = (page - 1) * limit;
@@ -99,9 +81,6 @@ export class NotificationsService {
     };
   }
 
-  // ----------------------------------------------------------------------
-  // 4. Lấy chi tiết thông báo
-  // ----------------------------------------------------------------------
   async getNotificationDetail(userId: string, notificationId: string) {
     const notification = await this.prisma.notification.findUnique({
       where: { id: notificationId, userId },
@@ -129,7 +108,8 @@ export class NotificationsService {
         case 'EVENT':
           detailData = await this.prisma.event.findUnique({
             where: { id: notification.referenceId },
-            include: { shelter: true },
+            // SỬA LỖI Ở ĐÂY: Dùng organizer thay cho shelter
+            include: { organizer: true },
           });
           break;
 
@@ -168,13 +148,9 @@ export class NotificationsService {
       detail: detailData,
     };
   }
-  // ----------------------------------------------------------------------
-  // 1.5. Hàm thông báo cho chủ sở hữu khi thú cưng được quét
-  // ----------------------------------------------------------------------
+
   async notifyOwner(report: any) {
     try {
-      // 1. Lấy thông tin chủ sở hữu từ report
-      // Giả định cấu trúc: report.tag.pet.ownerId
       const ownerId = report.tag?.pet?.ownerId;
       const petName = report.tag?.pet?.name || 'thú cưng';
 
@@ -183,19 +159,16 @@ export class NotificationsService {
         return;
       }
 
-      // 2. Tạo nội dung thông báo tùy theo bán kính (radius)
       const isPrecise = report.radius <= 5;
       const title = '📍 Vị trí mới của thú cưng!';
       const body = isPrecise
         ? `Ai đó vừa tìm thấy ${petName} tại vị trí chính xác của họ.`
         : `Ai đó vừa chia sẻ khu vực nghi vấn của ${petName} trong bán kính ${report.radius}m.`;
 
-      // 3. Gọi hàm sendPushNotification đã có của bạn
-      // Hàm này sẽ tự động lưu vào DB và bắn Socket realtime
       await this.sendPushNotification(ownerId, {
         title,
         body,
-        referenceId: report.id, // ID của TagReport để FE điều hướng
+        referenceId: report.id, 
         data: {
           type: 'TAG_SCANNED',
           reportId: report.id,
@@ -208,9 +181,7 @@ export class NotificationsService {
       this.logger.error(`[notifyOwner] Lỗi khi xử lý thông báo chủ sở hữu:`, error);
     }
   }
-  // ----------------------------------------------------------------------
-  // 5. Cập nhật trạng thái đọc
-  // ----------------------------------------------------------------------
+
   async markAsRead(userId: string, notificationId: string) {
     return this.prisma.notification.updateMany({
       where: { id: notificationId, userId },
