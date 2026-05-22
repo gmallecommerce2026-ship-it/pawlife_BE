@@ -176,7 +176,6 @@ model Shelter {
   followers   FollowedShelter[]
   users User[] // Danh sách tài khoản quản lý Shelter này
   pets  Pet[]
-  events           Event[]
 }
 
 model FollowedShelter {
@@ -470,7 +469,7 @@ model Event {
   // Đơn vị tổ chức (Organizer)
   organizerId     String?
   organizer       Organizer? @relation(fields: [organizerId], references: [id], onDelete: SetNull)
-  
+
   // Quan hệ
   images          EventImage[]     // Danh sách ảnh cho "Gallery (Pre-Event)"
   interestedUsers EventInterest[]  // Lưu danh sách người dùng đã bấm nút "Interesting"
