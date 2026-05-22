@@ -4,58 +4,57 @@ const prisma = new PrismaClient();
 
 async function main() {
   console.log('Bắt đầu dọn dẹp dữ liệu Event cũ...');
-  // Chỉ xóa dữ liệu liên quan đến Event, KHÔNG xóa User, Shelter, hay Pet
   await prisma.eventImage.deleteMany();
   await prisma.eventInterest.deleteMany();
   await prisma.event.deleteMany();
 
   console.log('Đang tìm kiếm Shelters có sẵn để liên kết với Event...');
-  // Lấy ra các Shelter hiện có trong database để gán vào Event
   const shelters = await prisma.shelter.findMany({
     take: 3,
   });
 
   if (shelters.length === 0) {
-    console.log('❌ Không tìm thấy Shelter nào trong database. Vui lòng đảm bảo bạn đã có dữ liệu Shelter trước khi chạy file này!');
+    console.log('❌ Không tìm thấy Shelter nào trong database. Cần seed Shelter trước!');
     return;
   }
 
-  // Gán ID động từ dữ liệu thực tế (fallback về shelter đầu tiên nếu có ít hơn 3 shelter)
   const shelter1Id = shelters[0].id;
   const shelter2Id = shelters[1]?.id || shelters[0].id; 
   const shelter3Id = shelters[2]?.id || shelters[0].id;
 
   console.log('Đang tạo Events...');
-  // Tạo mốc thời gian linh động cho sự kiện (Tuần tới và Tháng tới)
   const today = new Date();
   const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
   const nextMonth = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-  // Tạo 3 Sự kiện (Events)
+  // Sự kiện 1
   await prisma.event.create({
     data: {
       title: 'Dog art therapy & painting class',
       category: 'Art',
-      description: 'Join us for a unique and therapeutic art experience with your furry friends! Our dog art therapy & painting class combines creative expression with the joy of spending quality time with your pet. This event is designed for both beginners and experienced artists, providing all materials and guidance needed to create beautiful memories together.',
+      description: 'Join us for a unique and therapeutic art experience with your furry friends! Our dog art therapy & painting class combines creative expression with the joy of spending quality time with your pet.',
       bannerUrl: 'https://images.unsplash.com/photo-1513360371669-4adf3dd7dff8?q=80&w=800&auto=format&fit=crop',
-      startDate: new Date(nextWeek.setHours(18, 0, 0, 0)), // Bắt đầu lúc 18:00
-      endDate: new Date(nextWeek.setHours(21, 0, 0, 0)),   // Kết thúc lúc 21:00
+      startDate: new Date(nextWeek.setHours(18, 0, 0, 0)),
+      endDate: new Date(nextWeek.setHours(21, 0, 0, 0)),
       locationName: 'Paw Studio, Brooklyn',
       address: '123 Art Street, Brooklyn, NY, United States',
       latitude: 40.678178,
       longitude: -73.944158,
       interestedCount: 255,
-      shelterId: shelter1Id,
+      shelterId: shelter1Id, // Liên kết với Shelter thực
       images: {
         create: [
           { url: 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?q=80&w=300&auto=format&fit=crop' },
           { url: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=300&auto=format&fit=crop' },
           { url: 'https://images.unsplash.com/photo-1537151608828-ea2b11777ee8?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1535930891776-0c2dfb7fda1a?q=80&w=300&auto=format&fit=crop' }
         ]
       }
     }
   });
 
+  // Sự kiện 2
   await prisma.event.create({
     data: {
       title: 'Morning Yoga with Cats',
@@ -72,12 +71,17 @@ async function main() {
       shelterId: shelter2Id,
       images: {
         create: [
-          { url: 'https://images.unsplash.com/photo-1596492784531-6e6eb5ea92b5?q=80&w=300&auto=format&fit=crop' }
+          { url: 'https://images.unsplash.com/photo-1596492784531-6e6eb5ea92b5?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1573865526739-10659fec78a5?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1511044568932-338cba0ad803?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1501820488136-72669149e0d4?q=80&w=300&auto=format&fit=crop' }
         ]
       }
     }
   });
 
+  // Sự kiện 3
   await prisma.event.create({
     data: {
       title: 'Puppy Socialization Hour',
@@ -92,10 +96,19 @@ async function main() {
       longitude: -118.243683,
       interestedCount: 340,
       shelterId: shelter3Id,
+      images: {
+        create: [
+          { url: 'https://images.unsplash.com/photo-1587300003388-59208cc962cb?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1601758124510-52d02ddb7cbd?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1583337130417-3346a1be7dee?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1544568100-847a948585b9?q=80&w=300&auto=format&fit=crop' },
+          { url: 'https://images.unsplash.com/photo-1534361960057-19889db9621e?q=80&w=300&auto=format&fit=crop' }
+        ]
+      }
     }
   });
 
-  console.log('Đã tạo xong dữ liệu mẫu Event!');
+  console.log('Đã tạo xong dữ liệu mẫu Event với tối thiểu 5 ảnh cho mỗi Gallery!');
 }
 
 main()
