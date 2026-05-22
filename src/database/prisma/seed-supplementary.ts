@@ -11,8 +11,18 @@ const mockLocations = [
   { address: "55 Lê Lợi, Hà Đông, Hà Nội", lat: 20.9702, lng: 105.7725 },
 ];
 
+// Mảng chứa các ảnh Cover chất lượng cao về chủ đề thú cưng/trạm cứu hộ
+const mockCovers = [
+  "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?q=80&w=1000&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1583337130417-3346a1be7dee?q=80&w=1000&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1543466835-00a7907e9de1?q=80&w=1000&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1553322378-eb94e5966b0c?q=80&w=1000&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1596492784531-6e6eb5ea9993?q=80&w=1000&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1527526029430-319f10814151?q=80&w=1000&auto=format&fit=crop"
+];
+
 async function main() {
-  console.log('🚀 Bắt đầu bổ sung dữ liệu (Contact Info, Verified, Location)...');
+  console.log('🚀 Bắt đầu bổ sung dữ liệu (Contact Info, Verified, Location, Cover Image)...');
 
   const shelters = await prisma.shelter.findMany();
   
@@ -32,6 +42,7 @@ async function main() {
     verifyDate.setMonth(verifyDate.getMonth() + 1);
 
     const location = mockLocations[i % mockLocations.length];
+    const coverUrl = mockCovers[i % mockCovers.length]; // Lấy ảnh cover xoay vòng
 
     await prisma.shelter.update({
       where: { id: shelter.id },
@@ -43,9 +54,10 @@ async function main() {
         address: location.address,
         latitude: location.lat,
         longitude: location.lng,
+        coverUrl: coverUrl, // <--- Đã bổ sung update trường coverUrl vào database
       },
     });
-    console.log(`✅ Đã cập nhật Contact & Location cho: ${shelter.name}`);
+    console.log(`✅ Đã cập nhật Contact, Location & Cover Image cho: ${shelter.name}`);
   }
 
   console.log('🎉 Hoàn tất quá trình bổ sung dữ liệu!');
