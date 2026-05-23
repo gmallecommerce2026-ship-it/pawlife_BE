@@ -81,6 +81,24 @@ export class NotificationsService {
     };
   }
 
+  async deleteNotification(userId: string, notificationId: string) {
+    // Tìm thông báo theo id và đảm bảo nó thuộc về user đang request
+    const notification = await this.prisma.notification.findUnique({
+      where: { id: notificationId, userId },
+    });
+
+    if (!notification) {
+      throw new NotFoundException('Không tìm thấy thông báo hoặc bạn không có quyền xóa');
+    }
+
+    // Thực hiện xóa
+    await this.prisma.notification.delete({
+      where: { id: notificationId },
+    });
+
+    return { success: true, message: 'Đã xóa thông báo thành công' };
+  }
+
   async getNotificationDetail(userId: string, notificationId: string) {
     const notification = await this.prisma.notification.findUnique({
       where: { id: notificationId, userId },

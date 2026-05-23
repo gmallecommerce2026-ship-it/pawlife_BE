@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Query, UseGuards, Delete } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { GetNotificationsDto } from './dto/notification.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
@@ -31,5 +31,11 @@ export class NotificationsController {
   @Patch('read-all')
   markAllAsRead(@User('id') userId: string) {
     return this.notificationsService.markAllAsRead(userId);
+  }
+
+  // Thêm API xóa thông báo
+  @Delete(':id')
+  deleteNotification(@User('id') userId: string, @Param('id') id: string) {
+    return this.notificationsService.deleteNotification(userId, id);
   }
 }
