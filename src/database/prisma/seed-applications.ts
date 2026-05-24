@@ -3,13 +3,12 @@ import { PrismaClient, ApplicationStatus, Pet } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Bắt đầu seed dữ liệu My Applications (Focus: Pet Avatars)...');
+  console.log('🌱 Bắt đầu seed 7 trạng thái Adoption Applications...');
 
-  // 1. Tạo Test User
+  // 1. User Test
   const testUser = await prisma.user.upsert({
     where: { email: 'hello@pawlife.vn' },
     update: {
-      // Dùng PNG thay vì SVG để React Native Image đọc được ngay
       avatarUrl: 'https://api.dicebear.com/9.x/avataaars/png?seed=AnDev&size=256', 
     },
     create: {
@@ -21,20 +20,20 @@ async function main() {
     },
   });
 
-  // 2. Danh sách Pet với Link ảnh .jpg/.png cực nhẹ, chống lỗi RN
-  // Dùng place.dog và cataas (hoặc các dịch vụ trả về binary image sạch)
+  // 2. Tạo 7 Pet ứng với 7 trạng thái (Thêm Daisy và Charlie)
   const mockPets = [
     { name: 'Milo', species: 'Dog', breed: 'Corgi', statusId: 'pet-milo-001', imgUrl: 'https://images.dog.ceo/breeds/corgi-cardigan/cg1.jpg' },
     { name: 'Luna', species: 'Cat', breed: 'British Shorthair', statusId: 'pet-luna-002', imgUrl: 'https://cdn2.thecatapi.com/images/0XYvRd7oD.jpg' },
     { name: 'Bella', species: 'Dog', breed: 'Golden Retriever', statusId: 'pet-bella-003', imgUrl: 'https://images.dog.ceo/breeds/retriever-golden/n02099601_3004.jpg' },
     { name: 'Simba', species: 'Cat', breed: 'Persian', statusId: 'pet-simba-004', imgUrl: 'https://cdn2.thecatapi.com/images/MTY3ODIyMQ.jpg' },
     { name: 'Max', species: 'Dog', breed: 'Husky', statusId: 'pet-max-005', imgUrl: 'https://images.dog.ceo/breeds/husky/n02110185_10047.jpg' },
+    { name: 'Daisy', species: 'Dog', breed: 'Poodle', statusId: 'pet-daisy-006', imgUrl: 'https://images.dog.ceo/breeds/poodle-standard/n02113799_2280.jpg' },
+    { name: 'Charlie', species: 'Dog', breed: 'Beagle', statusId: 'pet-charlie-007', imgUrl: 'https://images.dog.ceo/breeds/beagle/n02088364_12440.jpg' },
   ];
 
   const createdPets: Pet[] = []; 
   
   for (const p of mockPets) {
-    // 2.1 Upsert thông tin Pet
     const pet = await prisma.pet.upsert({
       where: { id: p.statusId },
       update: {},
@@ -48,37 +47,27 @@ async function main() {
       },
     });
 
-    // 2.2 Xử lý Avatar cho Pet (Lưu vào PetImage)
-    // - Bước 1: Xóa toàn bộ ảnh cũ bị lỗi link của pet này
-    await prisma.petImage.deleteMany({
-      where: { petId: pet.id }
-    });
-    
-    // - Bước 2: Tạo ảnh mới với định dạng chuẩn JPG
-    await prisma.petImage.create({
-      data: {
-        url: p.imgUrl,
-        petId: pet.id,
-      }
-    });
+    // Reset lại ảnh để đảm bảo luôn có hình
+    await prisma.petImage.deleteMany({ where: { petId: pet.id } });
+    await prisma.petImage.create({ data: { url: p.imgUrl, petId: pet.id } });
 
     createdPets.push(pet); 
   }
-
-  console.log(`🐾 Đã nạp thành công Avatar (ảnh đại diện) xịn cho ${createdPets.length} thú cưng`);
 
   const standardCommitments = {
     vaccine: true, medical: true, expenses: true,
     updateStatus: true, homeVisit: true, provideID: true,
   };
 
-  // 4. Seed các trạng thái My Application
+  // 3. Dữ liệu seed BẢY trạng thái đầy đủ
   const applicationsData = [
     { petId: createdPets[0].id, status: ApplicationStatus.SUBMITTED, note: 'Vừa mới nộp, chờ hệ thống tiếp nhận.', adoptFor: 'Myself', housing: 'Apartment' },
-    { petId: createdPets[1].id, status: ApplicationStatus.PENDING, note: 'Đang xem xét hồ sơ, chờ gọi điện xác minh.', adoptFor: 'Myself', housing: 'House with Yard' },
-    { petId: createdPets[2].id, status: ApplicationStatus.NEED_MORE_INFO, note: 'Thiếu hình ảnh chuồng trại hoặc thu nhập.', adoptFor: 'Family', housing: 'Townhouse' },
-    { petId: createdPets[3].id, status: ApplicationStatus.ADOPTION_COMPLETED, note: 'Nhận nuôi thành công!', adoptFor: 'Myself', housing: 'Apartment' },
-    { petId: createdPets[4].id, status: ApplicationStatus.CLOSED, note: 'Hồ sơ bị từ chối hoặc user tự hủy.', adoptFor: 'Someone else', housing: 'Shared Apartment' },
+    { petId: createdPets[1].id, status: ApplicationStatus.PENDING, note: 'Đang xem xét hồ sơ sơ bộ.', adoptFor: 'Myself', housing: 'House with Yard' },
+    { petId: createdPets[2].id, status: ApplicationStatus.NEED_MORE_INFO, note: 'Yêu cầu bổ sung hình ảnh nơi ở hiện tại.', adoptFor: 'Family', housing: 'Townhouse' },
+    { petId: createdPets[3].id, status: ApplicationStatus.INTERVIEW_SCHEDULED, note: 'Đã hẹn lịch phỏng vấn qua điện thoại vào sáng mai.', adoptFor: 'Myself', housing: 'Apartment' }, // MỚI
+    { petId: createdPets[4].id, status: ApplicationStatus.APPROVED, note: 'Hồ sơ đạt chuẩn. Chuẩn bị qua trạm đón bé.', adoptFor: 'Family', housing: 'House with Yard' }, // MỚI
+    { petId: createdPets[5].id, status: ApplicationStatus.ADOPTION_COMPLETED, note: 'Nhận nuôi thành công, bé đã về nhà.', adoptFor: 'Myself', housing: 'Apartment' },
+    { petId: createdPets[6].id, status: ApplicationStatus.CLOSED, note: 'Đơn bị từ chối do không đủ điều kiện chăm sóc.', adoptFor: 'Someone else', housing: 'Shared Apartment' },
   ];
 
   for (const app of applicationsData) {
@@ -110,7 +99,7 @@ async function main() {
     });
   }
 
-  console.log('🎉 Hoàn tất seed! Hãy reload lại app React Native nhé!');
+  console.log('🎉 Hoàn tất seed 7 trạng thái! Hãy reload lại app React Native nhé!');
 }
 
 main()
