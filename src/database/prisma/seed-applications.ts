@@ -91,8 +91,11 @@ async function main() {
         idealHome: p.ideal,
         status: 'AVAILABLE',
         shelterId: randomShelter.id, // <--- Gán Pet vào Shelter ngẫu nhiên
-        tags: {
-            create: POSSIBLE_TAGS.sort(() => 0.5 - Math.random()).slice(0, 3).map(tagName => ({ name: tagName }))
+        traitsList: {
+            create: [
+                { name: "Playful" },
+                { name: "Clingy" }
+            ]
         }
     },
     });

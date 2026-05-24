@@ -197,9 +197,9 @@ enum VerificationStatus {
   REJECTED
 }
 
-model PetTag {
+model PetTrait {
   id    String @id @default(uuid())
-  name  String // VD: Playful, Clingy, Friendly
+  name  String // Ví dụ: "Playful", "Clingy", "Friendly"
   petId String
   pet   Pet    @relation(fields: [petId], references: [id], onDelete: Cascade)
 }
@@ -218,14 +218,14 @@ model Pet {
   size        PetSize?
   weight      Float?    // Cân nặng (kg)
   color       String?
-
+  
   isVaccinated    Boolean @default(false)
   isSpayedNeutered Boolean @default(false)
 
   contactName      String?
   contactPhone     String?
   contactAddress   String?
-  
+  traitsList       PetTrait[]
   traits           String?  @db.Text // Đặc điểm tính cách chi tiết
   idealHome        String?  @db.Text // Ngôi nhà lý tưởng
   personalityTags  Json?
