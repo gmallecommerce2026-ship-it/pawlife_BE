@@ -50,13 +50,14 @@ export class ApplicationsService {
       include: {
         pet: {
           select: {
-            id: true,         // <-- BỔ SUNG: ID của thú cưng để View Pet Profile
+            id: true,         
             name: true,
             breed: true,
+            dob: true,        // <--- BỔ SUNG TRƯỜNG NÀY
             images: true, 
-            shelter: {        // <-- BỔ SUNG: Thông tin shelter để hiển thị tên và lấy ID chuyển trang
+            shelter: {        
               select: {
-                id: true,     // <-- BỔ SUNG: ID của shelter để View Shelter
+                id: true,     
                 name: true,
               }
             }
