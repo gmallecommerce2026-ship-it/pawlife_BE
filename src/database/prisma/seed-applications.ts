@@ -55,47 +55,29 @@ async function main() {
   // =====================================================================
   // BƯỚC 2: TẠO 7 THÚ CƯNG ĐẦY ĐỦ THÔNG TIN (DOB, GENDER, SIZE, WEIGHT)
   // =====================================================================
+  const shelters = await prisma.shelter.findMany({ select: { id: true } });
+  
+  if (shelters.length === 0) {
+    throw new Error('❌ Không tìm thấy trạm cứu hộ nào trong hệ thống. Vui lòng seed Shelter trước!');
+  }
+
   const mockPets = [
-    { 
-      name: 'Milo', species: 'Dog', breed: 'Corgi', gender: PetGender.MALE, size: PetSize.MEDIUM, weight: 12.5, statusId: mockPetIds[0], imgUrl: 'https://images.dog.ceo/breeds/corgi-cardigan/cg1.jpg', dob: getPastDate(2, 0),
-      description: 'Milo là một bé Corgi cực kỳ thông minh và năng động. Bé rất thích chơi nhặt bóng, luôn quấn quýt bên người và có nụ cười tỏa nắng. Milo đã được huấn luyện lệnh cơ bản và biết đi vệ sinh đúng chỗ trên khay.',
-      idealHome: 'Phù hợp với gia đình có không gian chơi đùa hoặc thường xuyên dắt bé đi dạo công viên. Bé cực kỳ thân thiện với trẻ em và hòa đồng với các chú chó khác.'
-    }, 
-    { 
-      name: 'Luna', species: 'Cat', breed: 'British Shorthair', gender: PetGender.FEMALE, size: PetSize.SMALL, weight: 4.2, statusId: mockPetIds[1], imgUrl: 'https://cdn2.thecatapi.com/images/0XYvRd7oD.jpg', dob: getPastDate(1, 0),
-      description: 'Luna là cô mèo Anh lông ngắn ngọt ngào, điềm tĩnh và thích được vuốt ve nọng cằm. Bé thường dành phần lớn thời gian để tắm nắng bên cửa sổ và ngủ nướng. Rất ngoan và không bao giờ cào đồ đạc.',
-      idealHome: 'Cần một môi trường sống yên tĩnh, thư giãn. Rất phù hợp với người bận rộn, thích nuôi mèo độc lập nhưng vẫn tình cảm. Khuyến khích nuôi hoàn toàn trong nhà.'
-    }, 
-    { 
-      name: 'Bella', species: 'Dog', breed: 'Golden Retriever', gender: PetGender.FEMALE, size: PetSize.LARGE, weight: 28.0, statusId: mockPetIds[2], imgUrl: 'https://images.dog.ceo/breeds/retriever-golden/n02099601_3004.jpg', dob: getPastDate(3, 6),
-      description: 'Bella là một cô nàng Golden hiền lành, trung thành và mang năng lượng chữa lành tuyệt vời. Bé rất kiên nhẫn, thích bơi lội vào cuối tuần và không bao giờ kén ăn.',
-      idealHome: 'Một gia đình ấm áp, lý tưởng nhất là có sân vườn rộng. Rất tuyệt vời để làm bạn với gia đình có trẻ nhỏ hoặc làm chó hỗ trợ tâm lý (therapy dog).'
-    }, 
-    { 
-      name: 'Simba', species: 'Cat', breed: 'Persian', gender: PetGender.MALE, size: PetSize.SMALL, weight: 4.5, statusId: mockPetIds[3], imgUrl: 'https://cdn2.thecatapi.com/images/MTY3ODIyMQ.jpg', dob: getPastDate(0, 8),
-      description: 'Simba là một cậu bé Ba Tư lông xù siêu đáng yêu và quấn chủ. Bé hơi nhút nhát với người lạ lúc đầu nhưng khi quen sẽ liên tục kêu gừ gừ và đòi bế.',
-      idealHome: 'Cần một chủ nhân có thời gian và kinh nghiệm chải lông, lau mắt hàng ngày cho dòng lông dài. Không gian sống không nên có quá nhiều tiếng ồn lớn.'
-    }, 
-    { 
-      name: 'Max', species: 'Dog', breed: 'Husky', gender: PetGender.MALE, size: PetSize.LARGE, weight: 24.5, statusId: mockPetIds[4], imgUrl: 'https://images.dog.ceo/breeds/husky/n02110185_10047.jpg', dob: getPastDate(4, 0),
-      description: 'Max là một chàng trai Husky năng lượng ngập tràn, hay "cãi" chủ (husky howl) và vô cùng hài hước. Bé rất khỏe, thích kéo đồ và cực kỳ phấn khích khi được ra ngoài chạy bộ.',
-      idealHome: 'Cần một chủ nhân yêu thể thao, có thể dắt bé chạy bộ nhiều km mỗi ngày để xả năng lượng. Bắt buộc nhà phải có sân với hàng rào cao, chắc chắn vì bé trốn rất giỏi.'
-    }, 
-    { 
-      name: 'Daisy', species: 'Dog', breed: 'Poodle', gender: PetGender.FEMALE, size: PetSize.MEDIUM, weight: 15.0, statusId: mockPetIds[5], imgUrl: 'https://images.dog.ceo/breeds/poodle-standard/n02113799_2280.jpg', dob: getPastDate(2, 5),
-      description: 'Daisy là cô bé Poodle nhỏ nhắn, lông xoăn tít và vô cùng lanh lợi. Bé rất quấn người, hay làm trò đứng bằng hai chân và hiểu ý chủ rất nhanh.',
-      idealHome: 'Tuyệt vời cho cuộc sống căn hộ chung cư. Do Poodle ít rụng lông nên rất tốt cho những gia đình có người bị dị ứng. Cần người có thể dành thời gian ở nhà nhiều với bé.'
-    }, 
-    { 
-      name: 'Charlie', species: 'Dog', breed: 'Beagle', gender: PetGender.MALE, size: PetSize.MEDIUM, weight: 10.5, statusId: mockPetIds[6], imgUrl: 'https://images.dog.ceo/breeds/beagle/n02088364_12440.jpg', dob: getPastDate(0, 10),
-      description: 'Charlie là cậu nhóc Beagle với cái mũi tò mò luôn hoạt động hết công suất. Bé cực kỳ ham ăn, thích trò chơi đánh hơi giấu đồ và luôn vẫy đuôi thân thiện với tất cả mọi người.',
-      idealHome: 'Cần gia đình kiên nhẫn huấn luyện vì dòng chó săn mùi thường hay lơ đãng khi ngửi thấy mùi lạ. Bé sẽ rất hạnh phúc nếu có một anh/chị chó khác năng động để chơi cùng.'
-    },
+    { name: 'Milo', species: 'Dog', breed: 'Corgi', gender: PetGender.MALE, size: PetSize.MEDIUM, weight: 12.5, statusId: mockPetIds[0], imgUrl: 'https://images.dog.ceo/breeds/corgi-cardigan/cg1.jpg', dob: getPastDate(2, 0), desc: 'Corgi năng động.', ideal: 'Sân vườn.' },
+    { name: 'Luna', species: 'Cat', breed: 'British Shorthair', gender: PetGender.FEMALE, size: PetSize.SMALL, weight: 4.2, statusId: mockPetIds[1], imgUrl: 'https://cdn2.thecatapi.com/images/0XYvRd7oD.jpg', dob: getPastDate(1, 0), desc: 'Mèo Anh lông ngắn ngọt ngào.', ideal: 'Nhà yên tĩnh.' },
+    { name: 'Bella', species: 'Dog', breed: 'Golden Retriever', gender: PetGender.FEMALE, size: PetSize.LARGE, weight: 28.0, statusId: mockPetIds[2], imgUrl: 'https://images.dog.ceo/breeds/retriever-golden/n02099601_3004.jpg', dob: getPastDate(3, 6), desc: 'Golden hiền lành.', ideal: 'Gia đình có trẻ nhỏ.' },
+    { name: 'Simba', species: 'Cat', breed: 'Persian', gender: PetGender.MALE, size: PetSize.SMALL, weight: 4.5, statusId: mockPetIds[3], imgUrl: 'https://cdn2.thecatapi.com/images/MTY3ODIyMQ.jpg', dob: getPastDate(0, 8), desc: 'Ba Tư quấn chủ.', ideal: 'Cần người chải lông.' },
+    { name: 'Max', species: 'Dog', breed: 'Husky', gender: PetGender.MALE, size: PetSize.LARGE, weight: 24.5, statusId: mockPetIds[4], imgUrl: 'https://images.dog.ceo/breeds/husky/n02110185_10047.jpg', dob: getPastDate(4, 0), desc: 'Husky năng lượng.', ideal: 'Chủ yêu thể thao.' },
+    { name: 'Daisy', species: 'Dog', breed: 'Poodle', gender: PetGender.FEMALE, size: PetSize.MEDIUM, weight: 15.0, statusId: mockPetIds[5], imgUrl: 'https://images.dog.ceo/breeds/poodle-standard/n02113799_2280.jpg', dob: getPastDate(2, 5), desc: 'Poodle lanh lợi.', ideal: 'Căn hộ chung cư.' },
+    { name: 'Charlie', species: 'Dog', breed: 'Beagle', gender: PetGender.MALE, size: PetSize.MEDIUM, weight: 10.5, statusId: mockPetIds[6], imgUrl: 'https://images.dog.ceo/breeds/beagle/n02088364_12440.jpg', dob: getPastDate(0, 10), desc: 'Beagle ham ăn.', ideal: 'Có anh chị chó chơi cùng.' },
   ];
 
   const createdPets: Pet[] = []; 
   
-  for (const p of mockPets) {
+  for (let i = 0; i < mockPets.length; i++) {
+    const p = mockPets[i];
+    // Chọn ngẫu nhiên một shelter từ danh sách đã lấy
+    const randomShelter = shelters[Math.floor(Math.random() * shelters.length)];
+
     const pet = await prisma.pet.create({
       data: {
         id: p.statusId,
@@ -106,9 +88,10 @@ async function main() {
         gender: p.gender,
         size: p.size,
         weight: p.weight,
-        description: p.description, // <--- Lấy text thật từ mảng
-        idealHome: p.idealHome,     // <--- Lấy text thật từ mảng
+        description: p.desc,
+        idealHome: p.ideal,
         status: 'AVAILABLE',
+        shelterId: randomShelter.id, // <--- Gán Pet vào Shelter ngẫu nhiên
       },
     });
 
