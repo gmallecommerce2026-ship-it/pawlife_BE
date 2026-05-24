@@ -218,7 +218,7 @@ model Pet {
   size        PetSize?
   weight      Float?    // Cân nặng (kg)
   color       String?
-  
+  lostPhotos String?
   isVaccinated    Boolean @default(false)
   isSpayedNeutered Boolean @default(false)
 

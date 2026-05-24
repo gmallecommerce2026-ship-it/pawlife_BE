@@ -344,6 +344,7 @@ export class PetsService {
           lostDateTime: isLost ? dateTime : null,
           // Gộp chi tiết (details) và lời nhắn (note) vào cùng một trường
           lostDetails: isLost ? `${note || ''}`.trim() : null,
+          lostPhotos: isLost ? JSON.stringify(photos) : null,
         }
       })
     ]);
