@@ -719,6 +719,7 @@ export class PetsService {
           orderBy: { createdAt: 'asc' } 
         },
         tags: true,
+        traitsList: true,
         shelter: {
           select: { id: true, name: true, contactInfo: true, address: true, avatarUrl: true }
         },
