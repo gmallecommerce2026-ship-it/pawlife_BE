@@ -197,6 +197,12 @@ enum VerificationStatus {
   REJECTED
 }
 
+model PetTag {
+  id    String @id @default(uuid())
+  name  String // VD: Playful, Clingy, Friendly
+  petId String
+  pet   Pet    @relation(fields: [petId], references: [id], onDelete: Cascade)
+}
 
 model Pet {
   id          String   @id @default(uuid())

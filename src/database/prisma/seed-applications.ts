@@ -72,10 +72,9 @@ async function main() {
   ];
 
   const createdPets: Pet[] = []; 
-  
+  const POSSIBLE_TAGS = ['Playful', 'Clingy', 'Friendly', 'Quiet', 'Active', 'Smart'];
   for (let i = 0; i < mockPets.length; i++) {
     const p = mockPets[i];
-    // Chọn ngẫu nhiên một shelter từ danh sách đã lấy
     const randomShelter = shelters[Math.floor(Math.random() * shelters.length)];
 
     const pet = await prisma.pet.create({
@@ -92,7 +91,10 @@ async function main() {
         idealHome: p.ideal,
         status: 'AVAILABLE',
         shelterId: randomShelter.id, // <--- Gán Pet vào Shelter ngẫu nhiên
-      },
+        tags: {
+            create: POSSIBLE_TAGS.sort(() => 0.5 - Math.random()).slice(0, 3).map(tagName => ({ name: tagName }))
+        }
+    },
     });
 
     await prisma.petImage.create({ data: { url: p.imgUrl, petId: pet.id } });
