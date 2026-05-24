@@ -229,7 +229,8 @@ model Pet {
   traits           String?  @db.Text // Đặc điểm tính cách chi tiết
   idealHome        String?  @db.Text // Ngôi nhà lý tưởng
   personalityTags  Json?
-
+  goodWith         Json?    // Lưu mảng string, vd: ["Dogs", "Kids"]
+  badWith          Json?    // Lưu mảng string, vd: ["Cats"]
   vaccinationRecordUrl  String?
   vetVerificationStatus VerificationStatus @default(PENDING)
 
