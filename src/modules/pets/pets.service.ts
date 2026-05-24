@@ -314,7 +314,7 @@ export class PetsService {
   }
   
   async toggleLostMode(userId: string, petId: string, dto: ToggleLostModeDto) {
-    const { isLost, location, dateTime, details, ownerName, ownerPhone, ownerAddress, note } = dto;
+    const { isLost, location, dateTime, details, ownerName, ownerPhone, ownerAddress, note, photos } = dto;
 
     const pet = await this.prisma.pet.findUnique({
       where: { id: petId },
@@ -344,7 +344,7 @@ export class PetsService {
           lostDateTime: isLost ? dateTime : null,
           // Gộp chi tiết (details) và lời nhắn (note) vào cùng một trường
           lostDetails: isLost ? `${note || ''}`.trim() : null,
-          lostPhotos: isLost ? JSON.stringify(photos) : null,
+          lostPhotos: isLost ? JSON.stringify(photos || []) : null,
         }
       })
     ]);
