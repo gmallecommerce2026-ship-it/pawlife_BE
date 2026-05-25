@@ -870,7 +870,7 @@ export class PetsService {
     return {
       ...pet,
       // ✅ Normalize về 'dob' để frontend dùng thống nhất
-      dob: pet.dob ?? pet.birthDate ?? pet.birthday ?? pet.dateOfBirth ?? null,
+      dob: pet.dob ?? null,
       avatarUrl: pet.images?.length > 0 ? pet.images[0].url : null,
       isLost,
       // ✅ Trả thêm lostInfo gom lại cho frontend dễ dùng
