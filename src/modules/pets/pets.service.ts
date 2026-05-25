@@ -829,7 +829,8 @@ export class PetsService {
         where: { id: pet.id },
         data: { 
           qrCodeUrl,
-          qrVerificationStatus: 'VERIFIED'
+          qrVerificationStatus: 'VERIFIED',
+          needsQrReplacement: false
         },
       });
     });

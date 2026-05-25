@@ -233,7 +233,6 @@ model Pet {
   badWith          Json?    // Lưu mảng string, vd: ["Cats"]
   vaccinationRecordUrls Json?
   vetVerificationStatus VerificationStatus @default(PENDING)
-
   qrCodeUrl             String?
   qrVerificationStatus  VerificationStatus @default(PENDING)
 
@@ -257,6 +256,7 @@ model Pet {
   lostLocation       String?  // Địa điểm thất lạc
   lostDateTime       String?  // Thời gian thất lạc
   lostDetails        String?  // Đặc điểm nhận dạng / Lời nhắn
+  needsQrReplacement Boolean @default(false)
 }
 
 model AdoptionApplication {
