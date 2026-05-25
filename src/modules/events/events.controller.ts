@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Param, Query, ParseIntPipe, DefaultValuePipe, Body } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, ParseIntPipe, DefaultValuePipe, Body, Res, Req } from '@nestjs/common';
 import { EventsService } from './events.service';
+import type { Request, Response } from 'express';
 
 @Controller('events')
 export class EventsController {
@@ -11,6 +12,73 @@ export class EventsController {
     @Query('limit', new DefaultValuePipe(5), ParseIntPipe) limit: number,
   ) {
     return this.eventsService.getUpcomingEvents(limit);
+  }
+
+  @Get(':id')
+  async getEventDetailOrPreview(
+    @Param('id') id: string,
+    @Req() req: Request,                         // Lấy header thông qua req an toàn hơn
+    @Res({ passthrough: true }) res: Response,   // Đã fix lỗi nhờ "import type"
+    @Query('userId') userId?: string,
+  ) {
+    // 1. Kiểm tra header an toàn, không bị nhầm lẫn class hệ thống
+    const acceptHeader = req.headers['accept'];
+    const acceptsHTML = acceptHeader && acceptHeader.includes('text/html');
+
+    if (acceptsHTML) {
+      const html = `
+      <!DOCTYPE html>
+      <html lang="vi">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Sự kiện PawLife</title>
+          <style>
+              body { 
+                  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+                  text-align: center; 
+                  padding: 40px 20px; 
+                  background-color: #FDF5EF; 
+                  margin: 0;
+              }
+              .container { 
+                  background: white; 
+                  padding: 40px 30px; 
+                  border-radius: 24px; 
+                  box-shadow: 0 10px 25px rgba(232, 155, 90, 0.15); 
+                  max-width: 400px; 
+                  margin: 0 auto; 
+              }
+              h1 { color: #E89B5A; margin-bottom: 10px; font-size: 28px; }
+              p { color: #8E8E93; line-height: 1.6; font-size: 16px; margin-bottom: 20px; }
+              .badge {
+                  display: inline-block;
+                  background-color: #E89B5A;
+                  color: white;
+                  padding: 8px 16px;
+                  border-radius: 20px;
+                  font-weight: bold;
+                  font-size: 14px;
+              }
+          </style>
+      </head>
+      <body>
+          <div class="container">
+              <h1>🐾 PawLife</h1>
+              <p>Chi tiết sự kiện này hiện chỉ có thể xem được bên trong ứng dụng PawLife.</p>
+              <div class="badge">Coming Soon</div>
+          </div>
+      </body>
+      </html>
+      `;
+      
+      res.setHeader('Content-Type', 'text/html');
+      res.send(html);
+      return; 
+    }
+
+    // 2. Nếu là App Mobile gọi API, trả về JSON data
+    return this.eventsService.getEventDetail(id, userId);
   }
 
   @Get('interested/user')
