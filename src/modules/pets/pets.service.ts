@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, NotFoundException, InternalServerErrorException, BadRequestException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, InternalServerErrorException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { SwipePetDto } from './dto/swipe-pet.dto';
 import { PetGender, PetSize, Prisma, NotificationType } from '@prisma/client';
@@ -11,6 +11,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
 import { ToggleLostModeDto } from './dto/toggle-lost-mode.dto';
+import { ReplaceQrDto } from './dto/replace-qr.dto';
 export interface FeedFilters {
   gender?: PetGender;
   size?: PetSize;
@@ -772,6 +773,72 @@ export class PetsService {
     await this.redisService.set(cacheKey, result, 600);
 
     return result;
+  }
+  async replaceQrCode(userId: string, petId: string, dto: ReplaceQrDto) {
+    const { newTagId } = dto;
+
+    // 1. Kiểm tra Pet có tồn tại và thuộc quyền sở hữu của User không
+    const pet = await this.prisma.pet.findUnique({
+      where: { id: petId },
+      include: { tags: true }, // Lấy kèm các tag cũ để xử lý
+    });
+
+    if (!pet) throw new NotFoundException('Không tìm thấy thú cưng.');
+    if (pet.ownerId !== userId) throw new ForbiddenException('Bạn không có quyền thao tác trên thú cưng này.');
+
+    // 2. Kiểm tra Tag mới có hợp lệ không
+    const newTag = await this.prisma.tag.findUnique({
+      where: { id: newTagId },
+    });
+
+    if (!newTag) throw new NotFoundException('Mã QR này không tồn tại trong hệ thống.');
+    if (newTag.petId && newTag.petId !== petId) {
+      throw new ConflictException('Mã QR này đã được sử dụng cho một thú cưng khác.');
+    }
+    if (newTag.petId === petId) {
+      return { message: 'Mã QR này hiện đã được gắn cho thú cưng này.' };
+    }
+
+    // 3. Thực thi Transaction để đảm bảo tính toàn vẹn
+    await this.prisma.$transaction(async (tx) => {
+      // 3.1. Hủy liên kết tất cả Tag cũ (nếu có)
+      if (pet.tags && pet.tags.length > 0) {
+        await tx.tag.updateMany({
+          where: { petId: pet.id },
+          data: { 
+            petId: null, 
+            status: 'INACTIVE' 
+          },
+        });
+      }
+
+      // 3.2. Gắn Tag mới vào Pet
+      await tx.tag.update({
+        where: { id: newTagId },
+        data: { 
+          petId: pet.id,
+          status: 'ACTIVE' 
+        },
+      });
+
+      // 3.3. Cập nhật thông tin Pet (Nếu bạn dùng qrCodeUrl để lưu link hiển thị)
+      // Giả sử link QR sinh ra từ domain của bạn: https://yourdomain.com/scan/{tagId}
+      const qrCodeUrl = `https://yourdomain.com/scan/${newTagId}`;
+      
+      await tx.pet.update({
+        where: { id: pet.id },
+        data: { 
+          qrCodeUrl,
+          qrVerificationStatus: 'VERIFIED'
+        },
+      });
+    });
+
+    return { 
+      success: true, 
+      message: 'Thay đổi mã QR thành công!',
+      newTagId,
+    };
   }
   async getPetByTagId(tagId: string) {
     // 1. SỬA LỖI 1: Phải query từ bảng Tag, không query từ bảng Pet

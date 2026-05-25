@@ -10,6 +10,7 @@ import { CreatePetDto } from './dto/create-pet.dto';
 import { UpdatePetDto } from './dto/update-pet.dto';
 import { Throttle } from '@nestjs/throttler'; // BỔ SUNG IMPORT
 import { ToggleLostModeDto } from './dto/toggle-lost-mode.dto';
+import { ReplaceQrDto } from './dto/replace-qr.dto';
 
 @Controller('pets')
 @UseGuards(JwtAuthGuard) 
@@ -118,6 +119,16 @@ export class PetsController {
     @Body() createPetDto: CreatePetDto
   ) {
     return this.petsService.createPet(userId, createPetDto);
+  }
+
+  @Patch(':id/replace-qr')
+  async replaceQrCode(
+    @Req() req: any,
+    @Param('id') petId: string,
+    @Body() replaceQrDto: ReplaceQrDto,
+  ) {
+    const userId = req.user.id; // Lấy từ JWT payload
+    return this.petsService.replaceQrCode(userId, petId, replaceQrDto);
   }
   
   @Get(':id')
