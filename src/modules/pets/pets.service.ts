@@ -789,6 +789,9 @@ export class PetsService {
                 phone: true, // Lấy đúng tên trường trong User schema
               },
             },
+            images: {
+              orderBy: { createdAt: 'asc' }
+            }
           },
         },
       },
@@ -811,6 +814,7 @@ export class PetsService {
     // Trả về object gom chung data của pet, owner và cờ isLost để frontend dễ xử lý
     return {
       ...pet,
+      avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null,
       isLost: isLost, 
     };
   }
