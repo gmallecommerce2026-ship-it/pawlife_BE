@@ -1,8 +1,8 @@
-// src/modules/pets/dto/replace-qr.dto.ts
-import { IsNotEmpty, IsString, IsUUID } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 
 export class ReplaceQrDto {
-  @IsNotEmpty()
-  @IsUUID('4', { message: 'Mã QR không hợp lệ (Phải là UUID)' })
-  newTagId!: string; // ID của mã QR mới quét được
+  @IsNotEmpty({ message: 'Mã QR không được để trống' })
+  @IsString({ message: 'Mã QR không hợp lệ' })
+  // XÓA DÒNG NÀY: @IsUUID('4', { message: 'Mã QR không hợp lệ (Phải là UUID)' })
+  newTagId!: string; 
 }
