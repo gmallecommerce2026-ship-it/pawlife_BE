@@ -1,14 +1,14 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, IsArray, IsEnum, IsBoolean, IsDateString } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsArray, IsEnum, IsBoolean, IsDateString, ArrayMaxSize } from 'class-validator';
 import { PetGender, PetSize } from '@prisma/client'; // Import Enum từ Prisma
 
 export class CreatePetDto {
   @IsString()
   @IsNotEmpty()
-  name: string;
+  name!: string;
 
   @IsString()
   @IsNotEmpty()
-  species: string; // Dog, Cat...
+  species!: string; // Dog, Cat...
 
   @IsString()
   @IsOptional()
@@ -69,9 +69,11 @@ export class CreatePetDto {
   @IsOptional()
   isSpayedNeutered?: boolean; 
 
-  @IsString()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(5, { message: 'Chỉ được phép tải lên tối đa 5 file chứng nhận tiêm chủng' })
   @IsOptional()
-  vaccinationRecordUrl?: string; 
+  vaccinationRecordUrls?: string[];
 
   @IsString()
   @IsOptional()
