@@ -842,24 +842,15 @@ export class PetsService {
     };
   }
   async getPetByTagId(tagId: string) {
-    // 1. SỬA LỖI 1: Phải query từ bảng Tag, không query từ bảng Pet
     const tag = await this.prisma.tag.findUnique({
-      where: { id: tagId }, 
+      where: { id: tagId },
       include: {
         pet: {
           include: {
-            // 2. SỬA LỖI 3: Bắt buộc phải include owner thì TypeScript mới nhận diện được `pet.owner`
             owner: {
-              select: {
-                id: true,
-                name: true,
-                avatarUrl: true,
-                phone: true, // Lấy đúng tên trường trong User schema
-              },
+              select: { id: true, name: true, avatarUrl: true, phone: true },
             },
-            images: {
-              orderBy: { createdAt: 'asc' }
-            }
+            images: { orderBy: { createdAt: 'asc' } },
           },
         },
       },
@@ -870,22 +861,28 @@ export class PetsService {
     }
 
     const pet = tag.pet;
-    
-    // 3. SỬA LỖI 2: Xác định trạng thái thất lạc từ bảng Tag, không lấy từ Pet
     const isLost = tag.status === TagStatus.LOST;
 
-    // Logic bảo mật: Ẩn số điện thoại nếu thú cưng không ở trạng thái LOST
     if (!isLost && pet.owner) {
-      pet.owner.phone = null;
+      (pet.owner as any).phone = null;
     }
 
-    // Trả về object gom chung data của pet, owner và cờ isLost để frontend dễ xử lý
     return {
       ...pet,
-      avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null,
-      isLost: isLost, 
+      // ✅ Normalize về 'dob' để frontend dùng thống nhất
+      dob: pet.dob ?? pet.birthDate ?? pet.birthday ?? pet.dateOfBirth ?? null,
+      avatarUrl: pet.images?.length > 0 ? pet.images[0].url : null,
+      isLost,
+      // ✅ Trả thêm lostInfo gom lại cho frontend dễ dùng
+      lostInfo: isLost ? {
+        ownerName: pet.lostContactName ?? pet.owner?.name ?? null,
+        ownerPhone: pet.lostContactPhone ?? pet.owner?.phone ?? null,
+        ownerAddress: pet.lostContactAddress ?? null,
+        note: pet.lostDetails ?? null,
+      } : null,
     };
   }
+
   async cancelTransfer(petId: string, userId: string) {
     // 1. SỬA LỖI QUERY: Cho phép cả Sender HOẶC Receiver tìm thấy request
     const transferReq = await this.prisma.transferRequest.findFirst({
