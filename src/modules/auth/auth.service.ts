@@ -1,5 +1,5 @@
 // src/modules/auth/auth.service.ts
-import { Injectable, BadRequestException, UnauthorizedException, InternalServerErrorException, ConflictException } from '@nestjs/common';
+import { Injectable, BadRequestException, UnauthorizedException, InternalServerErrorException, ConflictException, HttpException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { RegisterDto, LoginDto, SocialLoginDto, SendOtpDto, OtpType, ResetPasswordDto, ChangePasswordDto } from './dto/auth.dto';
@@ -275,16 +275,17 @@ export class AuthService {
           email = payload.email; if (!name) name = payload.name || email.split('@')[0]; picture = payload.picture || null; break;
         }
         case 'FACEBOOK': {
-          // Xóa gender và birthday khỏi URL truy vấn
+          // Gọi API của Facebook để lấy thông tin
           const { data } = await axios.get(`https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${dto.token}`);
           
-          if (!data || !data.email) throw new BadRequestException('Facebook không trả về email.');
+          if (!data) throw new BadRequestException('Không thể kết nối với hệ thống Facebook.');
           
-          email = data.email; 
-          if (!name) name = data.name || email.split('@')[0]; 
+          // CHIẾN LƯỢC FALLBACK EMAIL: 
+          // Rất nhiều user tạo FB bằng SĐT nên sẽ không có email. Ta tạo email ảo để không làm gián đoạn luồng đăng nhập.
+          email = data.email || `${data.id}@facebook.pawlife.local`; 
+          
+          if (!name) name = data.name || `User_${data.id.substring(0, 6)}`; 
           picture = data.picture?.data?.url || null;
-          
-          // Vì không lấy gender/birthday từ FB nữa nên chúng ta xóa các dòng gán data.gender và data.birthday đi
           break;
         }
         case 'APPLE': {
@@ -294,7 +295,18 @@ export class AuthService {
         }
         default: throw new BadRequestException('Provider không được hỗ trợ.');
       }
-    } catch (error) { throw new UnauthorizedException('Token mạng xã hội không hợp lệ hoặc đã hết hạn.'); }
+    } catch (error: any) { 
+      // 1. Ghi log chi tiết lỗi từ Axios (Facebook API) để dễ debug
+      console.error('Lỗi Social Login:', error?.response?.data || error?.message || error);
+
+      // 2. Nếu lỗi là do chúng ta chủ động ném ra (BadRequestException), hãy giữ nguyên
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      // 3. Nếu là lỗi mạng hoặc token thực sự hỏng thì mới báo token hết hạn
+      throw new UnauthorizedException('Token mạng xã hội không hợp lệ hoặc đã hết hạn.'); 
+    }
 
     let user = await this.prisma.user.findUnique({ where: { email }, });
     if (!user) {
