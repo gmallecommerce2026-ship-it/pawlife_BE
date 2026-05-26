@@ -119,3 +119,25 @@ export class ChangePasswordDto {
   @MinLength(6, { message: 'Mật khẩu mới phải có ít nhất 6 ký tự' })
   newPassword: string;
 }
+
+export class UpdateProfileDto {
+  @IsOptional()
+  @IsString({ message: 'Tên phải là chuỗi' })
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  gender?: string;
+
+  @IsOptional()
+  @IsString()
+  dob?: string;
+
+  @IsOptional()
+  @IsString()
+  avatarUrl?: string;
+}
