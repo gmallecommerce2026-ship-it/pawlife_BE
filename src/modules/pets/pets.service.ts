@@ -12,17 +12,31 @@ import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
 import { ToggleLostModeDto } from './dto/toggle-lost-mode.dto';
 import { ReplaceQrDto } from './dto/replace-qr.dto';
+
 export interface FeedFilters {
   gender?: PetGender;
   size?: PetSize;
   species?: string;
 }
+
+// --- KHAI BÁO TYPE CHO PAW HISTORY TẠI ĐÂY ---
+export type PawHistoryType = 'CREATED' | 'BIRTH' | 'QR_LINKED' | 'TRANSFER' | 'VACCINE';
+
+export interface PawHistoryItem {
+  id: string;
+  type: PawHistoryType;
+  title: string;
+  date: Date | string; 
+  description: string;
+}
+// ----------------------------------------------
+
 const ownerSelectQuery = {
   select: {
     id: true,
     name: true,       // Đã sửa thành name
     avatarUrl: true,  // Đã sửa thành avatarUrl
-    phone: true,// Chỉ trả về khi cần thiết (ví dụ: pet đang bị thất lạc)
+    phone: true,      // Chỉ trả về khi cần thiết (ví dụ: pet đang bị thất lạc)
   },
 };
 
@@ -36,6 +50,7 @@ export class PetsService {
     private readonly redisService: RedisService, // Inject RedisService
     private configService: ConfigService,
   ) {}
+
   private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371; // Bán kính trái đất tính bằng km
     const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -47,6 +62,7 @@ export class PetsService {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
+
   private async getAvailablePetsByShelterIds(shelterIds: string[]) {
     const cacheKey = `pets:available:shelters:${shelterIds.sort().join('_')}`;
     
@@ -61,6 +77,7 @@ export class PetsService {
     await this.redisService.set(cacheKey, pets, 300); // Cache 5 phút
     return pets;
   }
+
   async linkQrCode(userId: string, petId: string, tagId: string) {
     // 1. Kiểm tra Pet có tồn tại và thuộc quyền sở hữu của user không
     const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
@@ -105,6 +122,7 @@ export class PetsService {
 
     return { success: true, message: 'Liên kết vòng cổ thành công!' };
   }
+
   async getFeed(userId: string, limit: number, filters?: FeedFilters, lat?: number, lng?: number) {
     const { gender, size, species } = filters || {};
 
@@ -224,7 +242,6 @@ export class PetsService {
     }
 
     // XÓA CACHE SWIPE CỦA USER ĐỂ LẦN GET FEED TỚI SẼ LẤY DATA MỚI
-    // (Hoặc tối ưu hơn là đẩy trực tiếp petId vào mảng JSON trong Redis nếu bạn quen xử lý JSON array)
     const interactionCacheKey = `user:${userId}:swiped_pets`;
     await this.redisService.del(interactionCacheKey);
 
@@ -364,7 +381,6 @@ export class PetsService {
       for (const tag of tags) {
         await this.redisService.removeLocation(LOST_TAGS_KEY, tag.id);
       }
-      // Bạn có thể mở comment await this.clearNearbyCache(); nếu đã định nghĩa
     }
 
     // 4. Bắn Notification
@@ -382,7 +398,7 @@ export class PetsService {
       message: isLost ? 'Đã bật chế độ báo lạc!' : 'Đã tắt chế độ báo lạc, thú cưng an toàn.',
       isLost: isLost,
     };
-}
+  }
 
   async requestTransfer(petId: string, payload: { email?: string; phone?: string }, senderId: string) {
     if (!payload.email && !payload.phone) {
@@ -398,23 +414,16 @@ export class PetsService {
 
     // Xử lý Số điện thoại (Tự động Normalize)
     if (payload.phone) {
-      // 1. Xóa bỏ các khoảng trắng hoặc ký tự thừa (nếu user nhập 076 666 8602)
       let rawPhone = payload.phone.replace(/[\s-]/g, '');
-      
-      // 2. Thêm số nguyên bản user nhập vào mảng tìm kiếm
       orConditions.push({ phone: rawPhone });
 
-      // 3. Tự động sinh ra các biến thể để quét trong DB
       if (rawPhone.startsWith('0')) {
-        // Nếu nhập '076...', tìm thêm '+8476...'
         orConditions.push({ phone: '+84' + rawPhone.substring(1) });
       } else if (rawPhone.startsWith('+84')) {
-        // Nếu nhập '+8476...', tìm thêm '076...'
         orConditions.push({ phone: '0' + rawPhone.substring(3) });
       }
     }
 
-    // 4. Tìm người nhận với các điều kiện đã được mở rộng
     const receiver = await this.prisma.user.findFirst({
       where: {
         OR: orConditions,
@@ -537,7 +546,7 @@ export class PetsService {
           include: {
             images: {
               take: 1,
-              orderBy: { createdAt: 'asc' } // <--- THÊM DÒNG NÀY
+              orderBy: { createdAt: 'asc' }
             },
             shelter: {
               select: {
@@ -588,7 +597,7 @@ export class PetsService {
         return {
           ...pet,
           avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null,
-          isLost, // 3. TRẢ VỀ CỜ NÀY CHO FRONTEND
+          isLost, 
         };
       });
     } catch (error) {
@@ -612,7 +621,6 @@ export class PetsService {
         }
 
         // 2. Gom 2 hành động vào Transaction: Tạo Pet + Update Tag
-        // Nếu 1 trong 2 thất bại, Prisma sẽ tự động rollback (hủy) cả 2
         const result = await this.prisma.$transaction(async (prisma) => {
           // 2.1 Tạo Pet trước
           const newPet = await prisma.pet.create({
@@ -688,7 +696,7 @@ export class PetsService {
       take: limit,
       include: {
         images: {
-          orderBy: { createdAt: 'asc' } // <--- THÊM DÒNG NÀY
+          orderBy: { createdAt: 'asc' } 
         },
         shelter: {
           select: { id: true, address: true, name: true, avatarUrl: true }
@@ -712,7 +720,7 @@ export class PetsService {
         return cachedPet;
     }
 
-    // 2. Lấy từ DB nếu chưa có cache
+    // 2. Lấy từ DB nếu chưa có cache (Bỏ where PENDING ở transferRequests)
     const pet = await this.prisma.pet.findUnique({
       where: { id },
       include: {
@@ -726,10 +734,13 @@ export class PetsService {
           select: { id: true, name: true, contactInfo: true, address: true, avatarUrl: true }
         },
         transferRequests: {
-          where: { status: 'PENDING' },
+          orderBy: { updatedAt: 'desc' },
           include: {
             receiver: {
               select: { id: true, name: true, email: true, phone: true, avatarUrl: true }
+            },
+            sender: {
+              select: { id: true, name: true } // Cần lấy sender để parse history
             }
           }
         }
@@ -754,12 +765,87 @@ export class PetsService {
       };
     }
 
-    const pendingTransfer = pet.transferRequests && pet.transferRequests.length > 0 ? pet.transferRequests[0] : null;
+    // Tách transfer request đang PENDING cho các logic trả về cũ
+    const pendingTransfer = pet.transferRequests && pet.transferRequests.length > 0 
+      ? pet.transferRequests.find(tr => tr.status === 'PENDING') 
+      : null;
+
+    // ==============================================================
+    // --- BUILD PAW HISTORY DYNAMICALLY (TYPE-SAFE) ---
+    // ==============================================================
+    const pawHistory: PawHistoryItem[] = [];
+
+    // Sự kiện 1: Tham gia hệ thống
+    pawHistory.push({
+      id: `join_${pet.id}`,
+      type: 'CREATED',
+      title: 'Joined PawLife',
+      date: pet.createdAt,
+      description: `Hồ sơ của ${pet.name} được tạo trên hệ thống.`
+    });
+
+    // Sự kiện 2: Ngày sinh
+    if (pet.dob) {
+      pawHistory.push({
+        id: `dob_${pet.id}`,
+        type: 'BIRTH',
+        title: 'Date of Birth',
+        date: pet.dob,
+        description: `${pet.name} cất tiếng gấu/meo chào đời.`
+      });
+    }
+
+    // Sự kiện 3: Vòng cổ QR
+    if (pet.tags && pet.tags.length > 0) {
+      const activeTag = pet.tags.find(t => t.status !== 'INACTIVE');
+      if (activeTag) {
+        pawHistory.push({
+          id: `tag_${activeTag.id}`,
+          type: 'QR_LINKED',
+          title: 'QR Code Registered',
+          date: activeTag.status === 'ACTIVE' ? pet.updatedAt : pet.createdAt,
+          description: `Vòng cổ thông minh được kích hoạt cho ${pet.name}.`
+        });
+      }
+    }
+
+    // Sự kiện 4: Lịch sử Vaccine
+    // Type checking an toàn cho Json value từ DB
+    const vaccineUrls = pet.vaccinationRecordUrls as string[];
+    if (Array.isArray(vaccineUrls) && vaccineUrls.length > 0) {
+      pawHistory.push({
+        id: `vaccine_${pet.id}`,
+        type: 'VACCINE',
+        title: 'Vaccination Record Updated',
+        date: pet.updatedAt, 
+        description: `Cập nhật ${vaccineUrls.length} giấy tờ tiêm chủng/y tế.`
+      });
+    }
+
+    // Sự kiện 5: Lịch sử chuyển nhượng / Nhận nuôi
+    if (pet.transferRequests) {
+      pet.transferRequests
+        .filter(tr => tr.status === 'COMPLETED')
+        .forEach(tr => {
+          pawHistory.push({
+            id: `transfer_${tr.id}`,
+            type: 'TRANSFER',
+            title: 'Ownership Transferred',
+            date: tr.updatedAt,
+            description: `Được chuyển nhượng thành công cho chủ mới (${tr.receiver?.name || 'Ẩn danh'}).`
+          });
+        });
+    }
+
+    // Sort an toàn
+    pawHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    // ==============================================================
 
     const result = {
       ...pet,
       shelter: formattedShelter,
       owner: formattedOwner,
+      pawHistory, // <--- BỔ SUNG PAW HISTORY VÀO RESPONSE
       avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null,
       transferStatus: pendingTransfer ? pendingTransfer.status : null,
       pendingContact: pendingTransfer ? (pendingTransfer.receiver.email || pendingTransfer.receiver.phone) : null,
@@ -774,6 +860,7 @@ export class PetsService {
 
     return result;
   }
+
   async replaceQrCode(userId: string, petId: string, dto: ReplaceQrDto) {
     const { newTagId } = dto;
 
@@ -821,8 +908,7 @@ export class PetsService {
         },
       });
 
-      // 3.3. Cập nhật thông tin Pet (Nếu bạn dùng qrCodeUrl để lưu link hiển thị)
-      // Giả sử link QR sinh ra từ domain của bạn: https://yourdomain.com/scan/{tagId}
+      // 3.3. Cập nhật thông tin Pet
       const qrCodeUrl = `https://yourdomain.com/scan/${newTagId}`;
       
       await tx.pet.update({
@@ -841,6 +927,7 @@ export class PetsService {
       newTagId,
     };
   }
+
   async getPetByTagId(tagId: string) {
     const tag = await this.prisma.tag.findUnique({
       where: { id: tagId },
@@ -927,6 +1014,7 @@ export class PetsService {
 
     return { success: true, message: 'Đã hủy yêu cầu chuyển nhượng.' };
   }
+  
   async updatePet(userId: string, petId: string, updateData: any) {
     const pet = await this.prisma.pet.findUnique({
       where: { id: petId },
