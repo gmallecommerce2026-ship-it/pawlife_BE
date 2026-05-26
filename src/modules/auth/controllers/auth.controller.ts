@@ -1,5 +1,5 @@
 // src/modules/auth/controllers/auth.controller.ts
-import { Controller, Post, Body, HttpCode, HttpStatus, Delete, UseGuards, Headers, Ip, Param, Get, Req } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, Delete, UseGuards, Headers, Ip, Param, Get, Req, Patch } from '@nestjs/common';
 import { AuthService } from '../auth.service';
 import { RegisterDto, LoginDto, SocialLoginDto, SendOtpDto, ResetPasswordDto, ChangePasswordDto } from '../dto/auth.dto';
 import { User } from 'src/common/decorators/user.decorator';
@@ -93,6 +93,15 @@ export class AuthController {
   ) {
     const realIp = forwardedIp ? forwardedIp.split(',')[0] : ip;
     return this.authService.loginWith2fa(tempToken, code, userAgent, realIp, deviceNameHeader, deviceOsHeader);
+  }
+
+  @Patch('me/profile')
+  @UseGuards(JwtAuthGuard)
+  async updateMyProfile(
+    @User('id') userId: string,
+    @Body() updateData: any // Nên tạo thêm UpdateProfileDto cho chuẩn chỉ
+  ) {
+    return this.authService.updateProfile(userId, updateData);
   }
 
   @Throttle({ default: { limit: 5, ttl: 60000 } }) // BỔ SUNG

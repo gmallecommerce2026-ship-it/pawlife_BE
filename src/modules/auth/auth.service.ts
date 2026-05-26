@@ -203,6 +203,30 @@ export class AuthService {
     return await this.generateAuthResponse(user, userAgent, ip, deviceNameHeader, deviceOsHeader);
   }
 
+  async updateProfile(userId: string, updateData: any) {
+    // Tránh việc user gửi các field nhạy cảm như password, role, isDeleted...
+    const allowedUpdates = {
+      name: updateData.name,
+      phone: updateData.phone,
+      gender: updateData.gender,
+      dob: updateData.dob,
+      avatarUrl: updateData.avatarUrl,
+    };
+
+    // Loại bỏ các key undefined
+    Object.keys(allowedUpdates).forEach(key => allowedUpdates[key] === undefined && delete allowedUpdates[key]);
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: allowedUpdates,
+    });
+
+    return {
+      message: 'Cập nhật thành công',
+      user: updatedUser
+    };
+  }
+
   async loginWith2fa(tempToken: string, code: string, userAgent: string, ip: string, deviceNameHeader?: string, deviceOsHeader?: string) {
     let decoded;
     try { decoded = this.jwtService.verify(tempToken); } catch (error) { throw new UnauthorizedException('Phiên đăng nhập 2FA đã hết hạn. Vui lòng đăng nhập lại.'); }
