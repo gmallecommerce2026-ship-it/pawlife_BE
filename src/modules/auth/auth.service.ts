@@ -309,15 +309,69 @@ export class AuthService {
     if (!user.gender) { updatedData.gender = 'UNKNOWN'; user.gender = updatedData.gender; needsUpdate = true; }
     if (needsUpdate) { await this.prisma.user.update({ where: { id: user.id }, data: updatedData, }); }
 
-    const parser = new UAParser(userAgent); const os = parser.getOS(); const device = parser.getDevice();
+    const parser = new UAParser(userAgent); 
+    const os = parser.getOS(); 
+    const device = parser.getDevice();
+    
     let deviceType = 'smartphone';
     if (device.type === 'tablet') deviceType = 'tablet';
-    if (!device.type && (os.name === 'Mac OS' || os.name === 'Windows' || os.name === 'Linux' || os.name === 'Ubuntu')) { deviceType = 'laptop'; }
+    if (!device.type && (os.name === 'Mac OS' || os.name === 'Windows' || os.name === 'Linux' || os.name === 'Ubuntu')) { 
+      deviceType = 'laptop'; 
+    }
+    
     const geo = geoip.lookup(ip);
     const location = geo ? `${geo.city || ''}, ${geo.country || ''}`.replace(/^, |, $/g, '') || 'Unknown Location' : 'Unknown Location';
-    const deviceName = deviceNameHeader || device.model || os.name || 'Unknown Device';
+    
+    // Ưu tiên Header từ Mobile gửi lên vì nó chính xác hơn User-Agent mặc định
+    const finalDeviceName = deviceNameHeader || device.model || os.name || 'Unknown Device';
     const finalOsName = deviceOsHeader || `${os.name || ''} ${os.version || ''}`.trim() || 'Unknown OS';
-    const session = await this.prisma.deviceSession.create({ data: { userId: user.id, deviceName: deviceName, deviceType: deviceType, os: finalOsName, ipAddress: ip, location: location, } });
+
+    // 🔴 FIX: TÌM KIẾM THIẾT BỊ ĐÃ TỒN TẠI DỰA TRÊN USER, TÊN MÁY VÀ HỆ ĐIỀU HÀNH
+    let session = await this.prisma.deviceSession.findFirst({
+      where: {
+        userId: user.id,
+        deviceName: finalDeviceName,
+        os: finalOsName,
+      }
+    });
+
+    if (session) {
+      // Nếu đã có máy này, chỉ cập nhật thời gian hoạt động, IP và vị trí mới nhất
+      session = await this.prisma.deviceSession.update({
+        where: { id: session.id },
+        data: {
+          lastActive: new Date(),
+          ipAddress: ip,
+          location: location,
+        }
+      });
+    } else {
+      // Đảm bảo hệ thống lớn không bị phình to (Limit tối đa 5-10 session / 1 user)
+      const currentSessionsCount = await this.prisma.deviceSession.count({ where: { userId: user.id } });
+      if (currentSessionsCount >= 10) {
+        // Xóa thiết bị cũ nhất nếu vượt quá giới hạn
+        const oldestSession = await this.prisma.deviceSession.findFirst({
+          where: { userId: user.id },
+          orderBy: { lastActive: 'asc' }
+        });
+        if (oldestSession) {
+          await this.prisma.deviceSession.delete({ where: { id: oldestSession.id } });
+        }
+      }
+
+      // Tạo mới nếu là thiết bị lần đầu đăng nhập
+      session = await this.prisma.deviceSession.create({ 
+        data: { 
+          userId: user.id, 
+          deviceName: finalDeviceName, 
+          deviceType: deviceType, 
+          os: finalOsName, 
+          ipAddress: ip, 
+          location: location, 
+        } 
+      });
+    }
+
     const payload = { userId: user.id, sessionId: session.id, email: user.email, role: user.role };
     const accessToken = this.jwtService.sign(payload);
 
