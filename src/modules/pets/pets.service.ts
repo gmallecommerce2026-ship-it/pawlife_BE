@@ -464,6 +464,8 @@ export class PetsService {
       petId,
     });
 
+    await this.redisService.del(`pet:detail:${petId}`);
+
     return { success: true, message: 'Đã gửi yêu cầu' };
   }
 
@@ -1012,6 +1014,8 @@ export class PetsService {
       referenceId: petId,
     });
 
+    await this.redisService.del(`pet:detail:${petId}`);
+    
     return { success: true, message: 'Đã hủy yêu cầu chuyển nhượng.' };
   }
   
