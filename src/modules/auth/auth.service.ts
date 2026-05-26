@@ -221,6 +221,12 @@ export class AuthService {
       data: allowedUpdates,
     });
 
+    // =========================================================================
+    // FIX BUG Ở ĐÂY: Xóa cache Redis để invalidate data cũ. 
+    // Lần gọi API /me hoặc login tiếp theo hệ thống buộc phải query lại DB mới nhất.
+    // =========================================================================
+    await this.redisService.del(`auth:user_profile:${userId}`);
+
     return {
       message: 'Cập nhật thành công',
       user: updatedUser
