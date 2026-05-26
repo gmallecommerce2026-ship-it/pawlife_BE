@@ -275,10 +275,17 @@ export class AuthService {
           email = payload.email; if (!name) name = payload.name || email.split('@')[0]; picture = payload.picture || null; break;
         }
         case 'FACEBOOK': {
-          const { data } = await axios.get(`https://graph.facebook.com/me?fields=id,name,email,picture.type(large),gender,birthday&access_token=${dto.token}`);
+          // Xóa gender và birthday khỏi URL truy vấn
+          const { data } = await axios.get(`https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${dto.token}`);
+          
           if (!data || !data.email) throw new BadRequestException('Facebook không trả về email.');
-          email = data.email; if (!name) name = data.name || email.split('@')[0]; picture = data.picture?.data?.url || null;
-          if (!gender && data.gender) gender = data.gender; if (!dob && data.birthday) dob = new Date(data.birthday); break;
+          
+          email = data.email; 
+          if (!name) name = data.name || email.split('@')[0]; 
+          picture = data.picture?.data?.url || null;
+          
+          // Vì không lấy gender/birthday từ FB nữa nên chúng ta xóa các dòng gán data.gender và data.birthday đi
+          break;
         }
         case 'APPLE': {
           const payload = await appleSignin.verifyIdToken(dto.token, { audience: process.env.APPLE_CLIENT_ID, ignoreExpiration: true, });
