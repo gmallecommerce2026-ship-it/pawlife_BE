@@ -18,7 +18,7 @@ import * as qrcode from 'qrcode';
 import { RedisService } from 'src/database/redis/redis.service';
 import { InjectQueue } from '@nestjs/bullmq'; // <-- BỔ SUNG
 import { Queue } from 'bullmq'; // <-- BỔ SUNG
-
+import * as https from 'https';
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 @Injectable()
 export class AuthService {
@@ -276,7 +276,11 @@ export class AuthService {
         }
         case 'FACEBOOK': {
           // Gọi API của Facebook để lấy thông tin
-          const { data } = await axios.get(`https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${dto.token}`);
+          const httpsAgent = new https.Agent({ family: 4 }); // Ép dùng IPv4
+          const { data } = await axios.get(
+            `https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${dto.token}`,
+            { httpsAgent }
+          );
           
           if (!data) throw new BadRequestException('Không thể kết nối với hệ thống Facebook.');
           
@@ -393,11 +397,21 @@ export class AuthService {
 
     const payload = { userId: user.id, sessionId: session.id, email: user.email, role: user.role };
     const accessToken = this.jwtService.sign(payload);
-
+    
+    const isProfileComplete = !!(
+      user.name && 
+      user.name !== 'User' && 
+      user.name !== user.email.split('@')[0] && // Loại trừ trường hợp tên mặc định lấy từ email
+      user.phone &&
+      user.gender && 
+      user.gender !== 'UNKNOWN' &&
+      user.dob &&
+      user.avatarUrl
+    );
     return {
       message: 'Đăng nhập thành công',
       accessToken,
-      user: { id: user.id, email: user.email, name: user.name, phone: user.phone, gender: user.gender, dob: user.dob, avatarUrl: user.avatarUrl, isTwoFactorEnabled: user.isTwoFactorEnabled, },
+      user: { id: user.id, email: user.email, name: user.name, phone: user.phone, gender: user.gender, dob: user.dob, avatarUrl: user.avatarUrl, isTwoFactorEnabled: user.isTwoFactorEnabled, isProfileComplete, },
     };
   }
 }
