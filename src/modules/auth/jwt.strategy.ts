@@ -2,6 +2,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { Request } from 'express';
+import { RedisService } from 'src/database/redis/redis.service';
 
 const extractJwtFromCookie = (req: Request) => {
   if (req.cookies && req.cookies.accessToken) {
@@ -12,7 +13,7 @@ const extractJwtFromCookie = (req: Request) => {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor() {
+  constructor(private readonly redisService: RedisService) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -27,6 +28,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!payload.userId) {
         console.error('[JwtStrategy] Token invalid: missing userId');
         throw new UnauthorizedException('Token không hợp lệ');
+    }
+
+    const sessionStatus = await this.redisService.get(`auth:session:${payload.sessionId}`);
+    if (!sessionStatus) {
+      throw new UnauthorizedException('Phiên đăng nhập đã hết hạn hoặc bị thiết bị khác đăng xuất.');
     }
 
     // 1. TIN TƯỞNG HOÀN TOÀN VÀO PAYLOAD (KHÔNG GỌI REDIS/DB Ở ĐÂY)

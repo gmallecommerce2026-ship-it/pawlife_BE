@@ -89,6 +89,7 @@ model FavoritePet {
 
 model DeviceSession {
   id          String   @id @default(uuid())
+  deviceIdentifier String?
   deviceName  String?  // VD: "iPhone", "Mac OS"
   deviceType  String   @default("smartphone") // "smartphone", "laptop", "tablet"
   os          String?  // VD: "iOS 16.5", "Windows 11"

@@ -46,7 +46,7 @@ export class AuthController {
     return this.authService.changePassword(userId, changePasswordDto);
   }
 
-  @Throttle({ default: { limit: 5, ttl: 60000 } }) // BỔ SUNG: Chống Brute-force Login
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // Chống Brute-force Login
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -54,11 +54,13 @@ export class AuthController {
     @Headers('user-agent') userAgent: string,
     @Headers('x-device-name') deviceNameHeader: string,
     @Headers('x-device-os') deviceOsHeader: string,
+    @Headers('x-device-id') deviceIdHeader: string, // <-- 1. BỔ SUNG LẤY HEADER NÀY TỪ APP
     @Headers('x-forwarded-for') forwardedIp: string,
     @Ip() ip: string,
   ) {
     const realIp = forwardedIp ? forwardedIp.split(',')[0] : ip;
-    return this.authService.login(loginDto, userAgent, realIp, deviceNameHeader, deviceOsHeader);
+    // <-- 2. TRUYỀN THÊM BIẾN deviceIdHeader VÀO CUỐI HÀM
+    return this.authService.login(loginDto, userAgent, realIp, deviceNameHeader, deviceOsHeader, deviceIdHeader); 
   }
 
   @Post('2fa/generate')

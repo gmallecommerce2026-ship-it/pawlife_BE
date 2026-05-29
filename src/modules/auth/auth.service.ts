@@ -97,7 +97,9 @@ export class AuthService {
   async logoutDevice(userId: string, deviceId: string) {
     const device = await this.prisma.deviceSession.findUnique({ where: { id: deviceId }, });
     if (!device || device.userId !== userId) throw new BadRequestException('Thiết bị không tồn tại hoặc không thuộc quyền sở hữu của bạn.');
-    await this.prisma.deviceSession.delete({ where: { id: deviceId }, });
+    await this.prisma.deviceSession.delete({ where: { id: deviceId } });
+      // VÔ HIỆU HÓA SESSION TRONG REDIS
+    await this.redisService.del(`auth:session:${deviceId}`);
     return { success: true, message: 'Đã đăng xuất khỏi thiết bị.' };
   }
 
@@ -191,16 +193,28 @@ export class AuthService {
     return { message: 'Đã tắt xác thực 2 bước.' };
   }
 
-  async login(dto: LoginDto, userAgent: string, ip: string, deviceNameHeader?: string, deviceOsHeader?: string) {
+  async login(
+    dto: LoginDto, 
+    userAgent: string, 
+    ip: string, 
+    deviceNameHeader?: string, 
+    deviceOsHeader?: string, 
+    deviceIdHeader?: string // <-- 1. THÊM THAM SỐ NÀY
+  ) {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    
     if (!user || !user.password) throw new UnauthorizedException('Tài khoản hoặc mật khẩu không chính xác.');
+    
     const isPasswordMatch = await bcrypt.compare(dto.password, user.password);
     if (!isPasswordMatch) throw new UnauthorizedException('Tài khoản hoặc mật khẩu không chính xác.');
+    
     if (user.isTwoFactorEnabled) {
       const tempToken = this.jwtService.sign({ userId: user.id, is2FAPending: true }, { expiresIn: '5m' });
       return { requires2FA: true, tempToken, message: 'Vui lòng nhập mã Authenticator để tiếp tục.', };
     }
-    return await this.generateAuthResponse(user, userAgent, ip, deviceNameHeader, deviceOsHeader);
+    
+    // <-- 2. TRUYỀN TIẾP XUỐNG HÀM XỬ LÝ CHÍNH
+    return await this.generateAuthResponse(user, userAgent, ip, deviceNameHeader, deviceOsHeader, deviceIdHeader);
   }
 
   async updateProfile(userId: string, updateData: any) {
@@ -326,7 +340,14 @@ export class AuthService {
     return await this.generateAuthResponse(user, userAgent, ip, deviceNameHeader, deviceOsHeader);
   }
 
-  private async generateAuthResponse(user: any, userAgent: string, ip: string, deviceNameHeader?: string, deviceOsHeader?: string) {
+  private async generateAuthResponse(
+    user: any, 
+    userAgent: string, 
+    ip: string, 
+    deviceNameHeader?: string, 
+    deviceOsHeader?: string,
+    deviceIdHeader?: string // <-- BỔ SUNG THAM SỐ THỨ 6: ID thiết bị vật lý
+  ) {
     let updatedData: any = {}; let needsUpdate = false;
     if (!user.name || user.name.trim() === '' || user.name === 'User') { updatedData.name = user.email.split('@')[0]; user.name = updatedData.name; needsUpdate = true; }
     if (!user.gender) { updatedData.gender = 'UNKNOWN'; user.gender = updatedData.gender; needsUpdate = true; }
@@ -349,27 +370,47 @@ export class AuthService {
     const finalDeviceName = deviceNameHeader || device.model || os.name || 'Unknown Device';
     const finalOsName = deviceOsHeader || `${os.name || ''} ${os.version || ''}`.trim() || 'Unknown OS';
 
-    // 🔴 FIX: TÌM KIẾM THIẾT BỊ ĐÃ TỒN TẠI DỰA TRÊN USER, TÊN MÁY VÀ HỆ ĐIỀU HÀNH
-    let session = await this.prisma.deviceSession.findFirst({
-      where: {
-        userId: user.id,
-        deviceName: finalDeviceName,
-        os: finalOsName,
-      }
-    });
+    // =========================================================================
+    // 🔴 BẮT ĐẦU FIX: LOGIC XỬ LÝ DEVICE SESSION CHUẨN XÁC NHẤT
+    // =========================================================================
+    let session: any = null;
+
+    // 1. Ưu tiên cao nhất: Tìm bằng ID vật lý duy nhất của thiết bị
+    if (deviceIdHeader) {
+      session = await this.prisma.deviceSession.findFirst({
+        where: {
+          userId: user.id,
+          deviceIdentifier: deviceIdHeader,
+        }
+      });
+    }
+
+    // 2. Fallback: Dành cho trình duyệt web hoặc App version cũ chưa truyền ID
+    if (!session) {
+      session = await this.prisma.deviceSession.findFirst({
+        where: {
+          userId: user.id,
+          deviceName: finalDeviceName,
+          os: finalOsName,
+        }
+      });
+    }
 
     if (session) {
-      // Nếu đã có máy này, chỉ cập nhật thời gian hoạt động, IP và vị trí mới nhất
+      // NẾU ĐÃ CÓ: Cập nhật trạng thái mới nhất
       session = await this.prisma.deviceSession.update({
         where: { id: session.id },
         data: {
           lastActive: new Date(),
           ipAddress: ip,
           location: location,
+          deviceIdentifier: deviceIdHeader || session.deviceIdentifier, // Đồng bộ ID vào DB nếu record cũ chưa có
+          deviceName: finalDeviceName, 
+          os: finalOsName // Luôn cập nhật OS phòng khi họ mới update iOS/Android
         }
       });
     } else {
-      // Đảm bảo hệ thống lớn không bị phình to (Limit tối đa 5-10 session / 1 user)
+      // NẾU CHƯA CÓ: Kiểm tra dung lượng hệ thống (Limit 10 sessions)
       const currentSessionsCount = await this.prisma.deviceSession.count({ where: { userId: user.id } });
       if (currentSessionsCount >= 10) {
         // Xóa thiết bị cũ nhất nếu vượt quá giới hạn
@@ -382,10 +423,11 @@ export class AuthService {
         }
       }
 
-      // Tạo mới nếu là thiết bị lần đầu đăng nhập
+      // Tạo mới thiết bị lần đầu đăng nhập
       session = await this.prisma.deviceSession.create({ 
         data: { 
           userId: user.id, 
+          deviceIdentifier: deviceIdHeader, // Lưu thêm ID thiết bị vào DB
           deviceName: finalDeviceName, 
           deviceType: deviceType, 
           os: finalOsName, 
@@ -394,6 +436,8 @@ export class AuthService {
         } 
       });
     }
+    // =========================================================================
+    await this.redisService.set(`auth:session:${session.id}`, "active", 30 * 24 * 60 * 60); // TTL bằng thời gian sống của JWT
 
     const payload = { userId: user.id, sessionId: session.id, email: user.email, role: user.role };
     const accessToken = this.jwtService.sign(payload);
@@ -408,6 +452,7 @@ export class AuthService {
       user.dob &&
       user.avatarUrl
     );
+    
     return {
       message: 'Đăng nhập thành công',
       accessToken,
