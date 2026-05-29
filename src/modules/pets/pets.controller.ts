@@ -132,8 +132,11 @@ export class PetsController {
   }
   
   @Get(':id')
-  async getPetById(@Param('id') id: string) {
-    return this.petsService.getPetById(id);
+  async getPetById(
+    @User('id') userId: string, 
+    @Param('id') id: string
+  ) {
+    return this.petsService.getPetById(id, userId);
   }
 
   @Get()

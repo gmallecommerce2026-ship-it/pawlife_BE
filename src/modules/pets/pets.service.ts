@@ -713,154 +713,172 @@ export class PetsService {
     };
   }
 
-  async getPetById(id: string) {
+  async getPetById(id: string, userId?: string) {
     const cacheKey = `pet:detail:${id}`;
     
-    // 1. Kiểm tra cache
-    const cachedPet = await this.redisService.get<any>(cacheKey);
-    if (cachedPet) {
-        return cachedPet;
-    }
-
+    // 1. Kiểm tra cache (Chỉ lấy phần dữ liệu tĩnh dùng chung)
+    let petData = await this.redisService.get<any>(cacheKey);
+    
     // 2. Lấy từ DB nếu chưa có cache (Bỏ where PENDING ở transferRequests)
-    const pet = await this.prisma.pet.findUnique({
-      where: { id },
-      include: {
-        owner: ownerSelectQuery,
-        images: {
-          orderBy: { createdAt: 'asc' } 
-        },
-        tags: true,
-        traitsList: true,
-        shelter: {
-          select: { id: true, name: true, contactInfo: true, address: true, avatarUrl: true }
-        },
-        transferRequests: {
-          orderBy: { updatedAt: 'desc' },
-          include: {
-            receiver: {
-              select: { id: true, name: true, email: true, phone: true, avatarUrl: true }
-            },
-            sender: {
-              select: { id: true, name: true } // Cần lấy sender để parse history
+    if (!petData) {
+      const pet = await this.prisma.pet.findUnique({
+        where: { id },
+        include: {
+          owner: ownerSelectQuery,
+          images: {
+            orderBy: { createdAt: 'asc' } 
+          },
+          tags: true,
+          traitsList: true,
+          shelter: {
+            select: { id: true, name: true, contactInfo: true, address: true, avatarUrl: true }
+          },
+          transferRequests: {
+            orderBy: { updatedAt: 'desc' },
+            include: {
+              receiver: {
+                select: { id: true, name: true, email: true, phone: true, avatarUrl: true }
+              },
+              sender: {
+                select: { id: true, name: true } // Cần lấy sender để parse history
+              }
             }
           }
-        }
-      },
-    });
-
-    if (!pet) throw new NotFoundException('Không tìm thấy thông tin thú cưng này!');
-
-    let formattedShelter: any = null;
-    if (pet.shelter) {
-      formattedShelter = {
-        ...pet.shelter,
-        phone: pet.shelter.contactInfo,
-      };
-    }
-
-    let formattedOwner: any = null;
-    if (pet.owner) {
-      formattedOwner = {
-        ...pet.owner,
-        address: 'Chưa cập nhật',
-      };
-    }
-
-    // Tách transfer request đang PENDING cho các logic trả về cũ
-    const pendingTransfer = pet.transferRequests && pet.transferRequests.length > 0 
-      ? pet.transferRequests.find(tr => tr.status === 'PENDING') 
-      : null;
-
-    // ==============================================================
-    // --- BUILD PAW HISTORY DYNAMICALLY (TYPE-SAFE) ---
-    // ==============================================================
-    const pawHistory: PawHistoryItem[] = [];
-
-    // Sự kiện 1: Tham gia hệ thống
-    pawHistory.push({
-      id: `join_${pet.id}`,
-      type: 'CREATED',
-      title: 'Joined PawLife',
-      date: pet.createdAt,
-      description: `Hồ sơ của ${pet.name} được tạo trên hệ thống.`
-    });
-
-    // Sự kiện 2: Ngày sinh
-    if (pet.dob) {
-      pawHistory.push({
-        id: `dob_${pet.id}`,
-        type: 'BIRTH',
-        title: 'Date of Birth',
-        date: pet.dob,
-        description: `${pet.name} cất tiếng gấu/meo chào đời.`
+        },
       });
-    }
 
-    // Sự kiện 3: Vòng cổ QR
-    if (pet.tags && pet.tags.length > 0) {
-      const activeTag = pet.tags.find(t => t.status !== 'INACTIVE');
-      if (activeTag) {
+      if (!pet) throw new NotFoundException('Không tìm thấy thông tin thú cưng này!');
+
+      let formattedShelter: any = null;
+      if (pet.shelter) {
+        formattedShelter = {
+          ...pet.shelter,
+          phone: pet.shelter.contactInfo,
+        };
+      }
+
+      let formattedOwner: any = null;
+      if (pet.owner) {
+        formattedOwner = {
+          ...pet.owner,
+          address: 'Chưa cập nhật',
+        };
+      }
+
+      // Tách transfer request đang PENDING cho các logic trả về cũ
+      const pendingTransfer = pet.transferRequests && pet.transferRequests.length > 0 
+        ? pet.transferRequests.find(tr => tr.status === 'PENDING') 
+        : null;
+
+      // ==============================================================
+      // --- BUILD PAW HISTORY DYNAMICALLY (TYPE-SAFE) ---
+      // ==============================================================
+      const pawHistory: PawHistoryItem[] = [];
+
+      // Sự kiện 1: Tham gia hệ thống
+      pawHistory.push({
+        id: `join_${pet.id}`,
+        type: 'CREATED',
+        title: 'Joined PawLife',
+        date: pet.createdAt,
+        description: `Hồ sơ của ${pet.name} được tạo trên hệ thống.`
+      });
+
+      // Sự kiện 2: Ngày sinh
+      if (pet.dob) {
         pawHistory.push({
-          id: `tag_${activeTag.id}`,
-          type: 'QR_LINKED',
-          title: 'QR Code Registered',
-          date: activeTag.status === 'ACTIVE' ? pet.updatedAt : pet.createdAt,
-          description: `Vòng cổ thông minh được kích hoạt cho ${pet.name}.`
+          id: `dob_${pet.id}`,
+          type: 'BIRTH',
+          title: 'Date of Birth',
+          date: pet.dob,
+          description: `${pet.name} cất tiếng gấu/meo chào đời.`
         });
       }
-    }
 
-    // Sự kiện 4: Lịch sử Vaccine
-    // Type checking an toàn cho Json value từ DB
-    const vaccineUrls = pet.vaccinationRecordUrls as string[];
-    if (Array.isArray(vaccineUrls) && vaccineUrls.length > 0) {
-      pawHistory.push({
-        id: `vaccine_${pet.id}`,
-        type: 'VACCINE',
-        title: 'Vaccination Record Updated',
-        date: pet.updatedAt, 
-        description: `Cập nhật ${vaccineUrls.length} giấy tờ tiêm chủng/y tế.`
-      });
-    }
-
-    // Sự kiện 5: Lịch sử chuyển nhượng / Nhận nuôi
-    if (pet.transferRequests) {
-      pet.transferRequests
-        .filter(tr => tr.status === 'COMPLETED')
-        .forEach(tr => {
+      // Sự kiện 3: Vòng cổ QR
+      if (pet.tags && pet.tags.length > 0) {
+        const activeTag = pet.tags.find(t => t.status !== 'INACTIVE');
+        if (activeTag) {
           pawHistory.push({
-            id: `transfer_${tr.id}`,
-            type: 'TRANSFER',
-            title: 'Ownership Transferred',
-            date: tr.updatedAt,
-            description: `Được chuyển nhượng thành công cho chủ mới (${tr.receiver?.name || 'Ẩn danh'}).`
+            id: `tag_${activeTag.id}`,
+            type: 'QR_LINKED',
+            title: 'QR Code Registered',
+            date: activeTag.status === 'ACTIVE' ? pet.updatedAt : pet.createdAt,
+            description: `Vòng cổ thông minh được kích hoạt cho ${pet.name}.`
           });
+        }
+      }
+
+      // Sự kiện 4: Lịch sử Vaccine
+      // Type checking an toàn cho Json value từ DB
+      const vaccineUrls = pet.vaccinationRecordUrls as string[];
+      if (Array.isArray(vaccineUrls) && vaccineUrls.length > 0) {
+        pawHistory.push({
+          id: `vaccine_${pet.id}`,
+          type: 'VACCINE',
+          title: 'Vaccination Record Updated',
+          date: pet.updatedAt, 
+          description: `Cập nhật ${vaccineUrls.length} giấy tờ tiêm chủng/y tế.`
         });
+      }
+
+      // Sự kiện 5: Lịch sử chuyển nhượng / Nhận nuôi
+      if (pet.transferRequests) {
+        pet.transferRequests
+          .filter(tr => tr.status === 'COMPLETED')
+          .forEach(tr => {
+            pawHistory.push({
+              id: `transfer_${tr.id}`,
+              type: 'TRANSFER',
+              title: 'Ownership Transferred',
+              date: tr.updatedAt,
+              description: `Được chuyển nhượng thành công cho chủ mới (${tr.receiver?.name || 'Ẩn danh'}).`
+            });
+          });
+      }
+
+      // Sort an toàn
+      pawHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      // ==============================================================
+
+      petData = {
+        ...pet,
+        shelter: formattedShelter,
+        owner: formattedOwner,
+        pawHistory, // <--- BỔ SUNG PAW HISTORY VÀO RESPONSE
+        avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null,
+        transferStatus: pendingTransfer ? pendingTransfer.status : null,
+        pendingContact: pendingTransfer ? (pendingTransfer.receiver.email || pendingTransfer.receiver.phone) : null,
+        transferRequestId: pendingTransfer ? pendingTransfer.id : null,
+        receiverId: pendingTransfer ? pendingTransfer.receiverId : null,
+        senderId: pendingTransfer ? pendingTransfer.senderId : null,
+        receiver: pendingTransfer ? pendingTransfer.receiver : null,
+      };
+
+      // 3. Set Cache chung (Lưu trong 10 phút = 600s)
+      await this.redisService.set(cacheKey, petData, 600);
     }
 
-    // Sort an toàn
-    pawHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    // ==============================================================
+    // 4. Kiểm tra trạng thái thả tim (Favorite) cho User cụ thể
+    // Truy vấn cực nhẹ qua SQL Index, luôn trả về kết quả mới nhất cho dù cache pet chưa hết hạn
+    let isFavorited = false;
+    if (userId) {
+      const favoriteRecord = await this.prisma.favoritePet.findUnique({
+        where: {
+          userId_petId: {
+            userId: userId,
+            petId: id,
+          }
+        }
+      });
+      isFavorited = !!favoriteRecord;
+    }
 
-    const result = {
-      ...pet,
-      shelter: formattedShelter,
-      owner: formattedOwner,
-      pawHistory, // <--- BỔ SUNG PAW HISTORY VÀO RESPONSE
-      avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null,
-      transferStatus: pendingTransfer ? pendingTransfer.status : null,
-      pendingContact: pendingTransfer ? (pendingTransfer.receiver.email || pendingTransfer.receiver.phone) : null,
-      transferRequestId: pendingTransfer ? pendingTransfer.id : null,
-      receiverId: pendingTransfer ? pendingTransfer.receiverId : null,
-      senderId: pendingTransfer ? pendingTransfer.senderId : null,
-      receiver: pendingTransfer ? pendingTransfer.receiver : null,
+    // 5. Trộn dữ liệu tĩnh và trạng thái cá nhân rồi trả về cho Frontend
+    return {
+      ...petData,
+      isFavorited
     };
-
-    // 3. Set Cache (Lưu trong 10 phút = 600s)
-    await this.redisService.set(cacheKey, result, 600);
-
-    return result;
   }
 
   async replaceQrCode(userId: string, petId: string, dto: ReplaceQrDto) {
