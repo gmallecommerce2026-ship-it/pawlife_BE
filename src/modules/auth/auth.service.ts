@@ -297,15 +297,15 @@ export class AuthService {
       }
     } catch (error: any) { 
       // 1. Ghi log chi tiết lỗi từ Axios (Facebook API) để dễ debug
-      console.error('Lỗi Social Login:', error?.response?.data || error?.message || error);
+      const realError = error?.response?.data?.error?.message || error?.message || 'Lỗi không xác định';
+      console.error('Lỗi Social Login Thật:', realError);
 
-      // 2. Nếu lỗi là do chúng ta chủ động ném ra (BadRequestException), hãy giữ nguyên
       if (error instanceof HttpException) {
         throw error;
       }
 
-      // 3. Nếu là lỗi mạng hoặc token thực sự hỏng thì mới báo token hết hạn
-      throw new UnauthorizedException('Token mạng xã hội không hợp lệ hoặc đã hết hạn.'); 
+      // TẠM THỜI TRẢ LỖI THẬT VỀ FRONTEND ĐỂ FIX BUG
+      throw new UnauthorizedException(`Lỗi thật: ${realError}`);
     }
 
     let user = await this.prisma.user.findUnique({ where: { email }, });
