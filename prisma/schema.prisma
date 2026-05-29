@@ -111,7 +111,7 @@ model TransferRequest {
   updatedAt  DateTime @updatedAt
 
   // Quan hệ (Relations) - Hãy đảm bảo tên field trùng với schema Pet và User hiện tại của bạn
-  pet        Pet      @relation(fields: [petId], references: [id])
+  pet        Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
   sender     User     @relation("SentTransfers", fields: [senderId], references: [id])
   receiver   User     @relation("ReceivedTransfers", fields: [receiverId], references: [id])
 }
@@ -265,7 +265,7 @@ model AdoptionApplication {
   userId           String
   user             User              @relation(fields: [userId], references: [id])
   petId            String
-  pet              Pet               @relation(fields: [petId], references: [id])
+  pet              Pet               @relation(fields: [petId], references: [id], onDelete: Cascade)
   status           ApplicationStatus @default(SUBMITTED)
   
   // --- Section A: Contact Information ---
@@ -324,7 +324,7 @@ model AdoptionRequest {
   user   User   @relation(fields: [userId], references: [id])
 
   petId String
-  pet   Pet    @relation(fields: [petId], references: [id]) // Đã bổ sung relation
+  pet   Pet    @relation(fields: [petId], references: [id], onDelete: Cascade) // Đã bổ sung relation
 }
 
 model Tag {
@@ -332,7 +332,7 @@ model Tag {
   status TagStatus @default(INACTIVE)
 
   petId String?
-  pet   Pet?    @relation(fields: [petId], references: [id])
+  pet   Pet?    @relation(fields: [petId], references: [id], onDelete: SetNull)
 
   reports TagReport[]
 }
