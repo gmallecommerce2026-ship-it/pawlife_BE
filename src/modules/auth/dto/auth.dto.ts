@@ -1,5 +1,5 @@
 // src/auth/dto/auth.dto.ts
-import { IsEmail, IsNotEmpty, IsString, MinLength, Length, IsOptional, IsEnum, IsIn } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MinLength, Length, IsOptional, IsEnum, IsIn, IsBoolean } from 'class-validator';
 
 export enum OtpType {
   SIGNUP = 'SIGNUP',
@@ -73,6 +73,10 @@ export class LoginDto {
   @IsString()
   @IsNotEmpty({ message: 'Vui lòng nhập mật khẩu' })
   password: string;
+
+  @IsOptional()
+  @IsBoolean()
+  rememberMe?: boolean;
 }
 
 export class SendOtpDto {

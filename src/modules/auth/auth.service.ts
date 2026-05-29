@@ -214,7 +214,7 @@ export class AuthService {
     }
     
     // <-- 2. TRUYỀN TIẾP XUỐNG HÀM XỬ LÝ CHÍNH
-    return await this.generateAuthResponse(user, userAgent, ip, deviceNameHeader, deviceOsHeader, deviceIdHeader);
+    return await this.generateAuthResponse(user, userAgent, ip, deviceNameHeader, deviceOsHeader, deviceIdHeader, dto.rememberMe);
   }
 
   async updateProfile(userId: string, updateData: any) {
@@ -346,8 +346,10 @@ export class AuthService {
     ip: string, 
     deviceNameHeader?: string, 
     deviceOsHeader?: string,
-    deviceIdHeader?: string // <-- BỔ SUNG THAM SỐ THỨ 6: ID thiết bị vật lý
+    deviceIdHeader?: string, // <-- BỔ SUNG THAM SỐ THỨ 6: ID thiết bị vật lý
+    rememberMe?: boolean // <-- BỔ SUNG THAM SỐ THỨ 7: Ghi nhớ đăng nhập
   ) {
+    
     let updatedData: any = {}; let needsUpdate = false;
     if (!user.name || user.name.trim() === '' || user.name === 'User') { updatedData.name = user.email.split('@')[0]; user.name = updatedData.name; needsUpdate = true; }
     if (!user.gender) { updatedData.gender = 'UNKNOWN'; user.gender = updatedData.gender; needsUpdate = true; }
@@ -437,10 +439,12 @@ export class AuthService {
       });
     }
     // =========================================================================
-    await this.redisService.set(`auth:session:${session.id}`, "active", 30 * 24 * 60 * 60); // TTL bằng thời gian sống của JWT
+    const expiresIn = rememberMe ? '30d' : '1d'; 
+    const redisTtlSeconds = rememberMe ? (30 * 24 * 60 * 60) : (24 * 60 * 60);
+    await this.redisService.set(`auth:session:${session.id}`, "active", redisTtlSeconds); // TTL bằng thời gian sống của JWT
 
     const payload = { userId: user.id, sessionId: session.id, email: user.email, role: user.role };
-    const accessToken = this.jwtService.sign(payload);
+    const accessToken = this.jwtService.sign(payload, { expiresIn });
     
     const isProfileComplete = !!(
       user.name && 

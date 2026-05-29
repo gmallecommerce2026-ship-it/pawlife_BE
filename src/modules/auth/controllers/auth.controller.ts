@@ -5,6 +5,7 @@ import { RegisterDto, LoginDto, SocialLoginDto, SendOtpDto, ResetPasswordDto, Ch
 import { User } from 'src/common/decorators/user.decorator';
 import { JwtAuthGuard } from '../guards/jwt.guard';
 import { Throttle } from '@nestjs/throttler'; // BỔ SUNG IMPORT
+import { SkipProfileCheck } from 'src/common/decorators/skip-profile-check.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -98,6 +99,7 @@ export class AuthController {
   }
 
   @Patch('me/profile')
+  @SkipProfileCheck()
   @UseGuards(JwtAuthGuard)
   async updateMyProfile(
     @User('id') userId: string,
