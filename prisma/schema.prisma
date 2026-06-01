@@ -153,6 +153,7 @@ model User {
   isTwoFactorEnabled   Boolean  @default(false)
   adoptionApplications AdoptionApplication[]
   interestedEvents EventInterest[]
+  tagReports  TagReport[]
 }
 
 model Shelter {
@@ -351,6 +352,8 @@ model TagReport {
   id          String   @id @default(uuid())
   tagId       String
   tag         Tag      @relation(fields: [tagId], references: [id])
+  userId      String?  
+  user        User?    @relation(fields: [userId], references: [id])
   scannedBy   String? // Tên hoặc email người quét (nếu họ nhập)
   phoneNumber String? // Số điện thoại người quét để liên hệ lại
   latitude    Float? // Tọa độ GPS
