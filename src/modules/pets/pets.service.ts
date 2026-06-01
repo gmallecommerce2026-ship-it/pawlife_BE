@@ -364,7 +364,16 @@ export class PetsService {
           lostDetails: isLost ? `${note || ''}`.trim() : null,
           lostPhotos: isLost ? JSON.stringify(photos || []) : null,
         }
-      })
+      }),
+      ...(isLost ? [] : [
+        this.prisma.tagReport.updateMany({
+          where: {
+            tag: { petId: petId },
+            status: 'PENDING' // Chỉ cập nhật các report đang pending
+          },
+          data: { status: 'RESOLVED' }
+        })
+      ])
     ]);
 
     // Lấy danh sách tag để xử lý Geo Redis
