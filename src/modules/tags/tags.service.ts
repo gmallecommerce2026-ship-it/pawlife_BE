@@ -128,6 +128,7 @@ export class TagsService {
       breed: pet.breed || 'Chưa cập nhật',
       gender: pet.gender || 'unknown',
       color: pet.color || 'Chưa cập nhật',
+      dob: pet.dob,
       status: isLost ? 'lost' : 'safe',
       image: pet.images && pet.images.length > 0 ? pet.images[0].url : 'https://via.placeholder.com/600',
       
