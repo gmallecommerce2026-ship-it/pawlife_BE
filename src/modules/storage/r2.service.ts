@@ -31,7 +31,7 @@ export class R2Service {
       responseChecksumValidation: 'WHEN_REQUIRED',
     });
   }
-
+  
   async generatePresignedUrl(fileName: string, fileType: string, folder: string = 'products') {
     try {
       const fileExtension = fileName.split('.').pop();
@@ -55,6 +55,25 @@ export class R2Service {
     } catch (error) {
       console.error('R2 Presigned Error:', error);
       throw new InternalServerErrorException('Could not generate upload URL');
+    }
+  }
+
+  async uploadBuffer(buffer: Buffer, key: string, contentType: string = 'application/octet-stream') {
+    try {
+      const command = new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+        // Đảm bảo file backup là private, không nên cấp quyền 'public-read'
+      });
+
+      await this.s3Client.send(command);
+      console.log(`✅ Uploaded backup to R2: ${key}`);
+      return key;
+    } catch (error) {
+      console.error('R2 Backup Upload Error:', error);
+      throw new InternalServerErrorException('Could not upload backup to R2');
     }
   }
 

@@ -21,6 +21,7 @@ import { ApplicationsModule } from './modules/applications/applications.module';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { Redis } from 'ioredis';
 import { APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -105,6 +106,7 @@ import { APP_GUARD } from '@nestjs/core';
     PawcareModule,
     NotificationsModule,
     ApplicationsModule,
+    ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
   providers: [
