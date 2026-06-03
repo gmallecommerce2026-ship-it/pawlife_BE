@@ -4,7 +4,7 @@ import { ApplicationsService } from './applications.service';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { User } from '../../common/decorators/user.decorator';
 import { CreateApplicationDto } from './dto/create-application.dto';
-
+import { BadRequestException } from '@nestjs/common';
 @Controller('applications')
 @UseGuards(JwtAuthGuard)
 export class ApplicationsController {
