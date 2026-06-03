@@ -96,6 +96,34 @@ export class ApplicationsService {
     return application;
   }
 
+  async updateVerificationPhotos(userId: string, applicationId: string, photos: string[]) {
+    // 1. Kiểm tra đơn có tồn tại và thuộc về user không
+    const application = await this.prisma.adoptionApplication.findFirst({
+      where: { 
+        id: applicationId,
+        userId: userId 
+      },
+    });
+
+    if (!application) {
+      throw new NotFoundException('Không tìm thấy đơn đăng ký nhận nuôi này!');
+    }
+
+    // 2. Tùy chọn: Validate trạng thái (chỉ cho phép upload khi đang cần thêm thông tin)
+    if (application.status !== 'NEED_MORE_INFO') {
+      throw new BadRequestException('Đơn đăng ký hiện không yêu cầu bổ sung thông tin.');
+    }
+
+    // 3. Cập nhật ảnh và chuyển trạng thái về PENDING
+    return await this.prisma.adoptionApplication.update({
+      where: { id: applicationId },
+      data: { 
+        verificationPhotos: photos,
+        status: 'PENDING', // Đổi trạng thái để Shelter duyệt tiếp
+      },
+    });
+  }
+
   async withdrawApplication(userId: string, applicationId: string) {
     // Kiểm tra xem đơn có tồn tại và thuộc về user đang đăng nhập không
     const application = await this.prisma.adoptionApplication.findFirst({

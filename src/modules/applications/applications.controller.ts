@@ -35,6 +35,19 @@ export class ApplicationsController {
     return { success: true, data };
   }
 
+  @Patch(':id/verification-photos')
+  async updateVerificationPhotos(
+    @User('id') userId: string,
+    @Param('id') applicationId: string,
+    @Body('photos') photos: string[], // Nhận mảng chuỗi URLs từ frontend
+  ) {
+    if (!photos || photos.length === 0) {
+      throw new BadRequestException('Vui lòng cung cấp ít nhất một ảnh xác minh.');
+    }
+    const data = await this.applicationsService.updateVerificationPhotos(userId, applicationId, photos);
+    return { success: true, message: 'Đã gửi ảnh xác minh thành công', data };
+  }
+
   @Patch(':id/withdraw')
   async withdrawApplication(
     @User('id') userId: string,

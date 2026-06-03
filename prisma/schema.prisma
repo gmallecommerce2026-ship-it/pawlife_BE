@@ -291,6 +291,8 @@ model AdoptionApplication {
   adoptionReason   String
   commitments      Json              // Lưu các giá trị (vaccine, medical, expenses, updateStatus, homeVisit, provideID)
 
+  verificationPhotos Json?
+
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
