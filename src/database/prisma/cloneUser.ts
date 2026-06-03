@@ -4,7 +4,7 @@ import * as bcrypt from 'bcrypt'; // Hoặc 'bcryptjs'
 const prisma = new PrismaClient();
 
 async function main() {
-  const SOURCE_EMAIL = 'pawlife@hello.vn'; 
+  const SOURCE_EMAIL = 'hello@pawlife.vn'; 
   const TARGET_EMAIL = 'sannhanhieucho@gmail.com';
   const TARGET_PASSWORD = 'Sannhanhieucho@2026';
 
