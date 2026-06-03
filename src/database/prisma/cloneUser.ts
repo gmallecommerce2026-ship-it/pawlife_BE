@@ -71,14 +71,14 @@ async function main() {
 
   // 5. CLONE DANH SÁCH ĐƠN NHẬN NUÔI (APPLICATIONS)
   // LƯU Ý: Nếu model của bạn tên khác, hãy đổi `prisma.application` thành `prisma.tên_model`
-  const sourceApps = await prisma.application.findMany({
+  const sourceApps = await prisma.adoptionApplication.findMany({ // <--- SỬA Ở ĐÂY
     where: { userId: sourceUser.id }
   });
 
   let appsCount = 0;
   for (const app of sourceApps) {
     const { id, createdAt, updatedAt, userId, ...appData } = app as any;
-    await prisma.application.create({
+    await prisma.adoptionApplication.create({
       data: {
         ...appData,
         userId: newUser.id // Gán ID của user mới
