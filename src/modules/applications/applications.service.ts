@@ -23,18 +23,31 @@ export class ApplicationsService {
       );
     }
 
+    // TÌM TẤT CẢ CÁC ĐƠN BẤT KỂ TRẠNG THÁI
     const existingApp = await this.prisma.adoptionApplication.findFirst({
       where: { 
         userId, 
         petId: data.petId,
-        status: { not: 'CLOSED' } 
       },
     });
 
     if (existingApp) {
-      throw new BadRequestException('Bạn đã gửi đơn đăng ký cho thú cưng này rồi.');
+      // Nếu có đơn đang mở -> Chặn lại
+      if (existingApp.status !== 'CLOSED' && existingApp.status !== 'ADOPTION_COMPLETED') {
+        throw new BadRequestException('Bạn đã gửi đơn đăng ký cho thú cưng này rồi.');
+      }
+      
+      // Nếu có đơn nhưng đã bị CLOSED -> Tái sử dụng (Update) bản ghi cũ để không vi phạm luật Unique P2002
+      return await this.prisma.adoptionApplication.update({
+        where: { id: existingApp.id },
+        data: {
+          ...data,
+          status: 'SUBMITTED',
+        },
+      });
     }
 
+    // Nếu chưa từng có đơn nào -> Tạo mới bình thường
     return await this.prisma.adoptionApplication.create({
       data: {
         userId,
