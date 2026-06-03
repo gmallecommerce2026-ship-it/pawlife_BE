@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import * as bcrypt from 'bcrypt'; // Hoặc 'bcryptjs' tùy thư viện bạn đang dùng
+import * as bcrypt from 'bcrypt'; // Hoặc 'bcryptjs'
 
 const prisma = new PrismaClient();
 
@@ -10,7 +10,7 @@ async function main() {
 
   console.log(`🚀 Bắt đầu nhân bản dữ liệu từ [${SOURCE_EMAIL}] sang [${TARGET_EMAIL}]...`);
 
-  // 1. Kiểm tra xem user đích đã tồn tại chưa để tránh lỗi
+  // 1. Kiểm tra xem user đích đã tồn tại chưa
   const existingTargetUser = await prisma.user.findUnique({
     where: { email: TARGET_EMAIL },
   });
@@ -20,13 +20,9 @@ async function main() {
     return;
   }
 
-  // 2. Tìm user gốc KÈM THEO dữ liệu liên quan (Pets, Applications)
+  // 2. TÌM USER GỐC (Chỉ lấy thông tin user, không dùng include để tránh lỗi type)
   const sourceUser = await prisma.user.findUnique({
-    where: { email: SOURCE_EMAIL },
-    include: {
-      pets: true,         // Lấy toàn bộ thú cưng của user này
-      applications: true, // Lấy toàn bộ đơn đăng ký nhận nuôi
-    }
+    where: { email: SOURCE_EMAIL }
   });
 
   if (!sourceUser) {
@@ -34,56 +30,64 @@ async function main() {
     return;
   }
 
-  // 3. Chuẩn bị dữ liệu cho User mới
+  // Chuẩn bị mật khẩu mới
   const hashedPassword = await bcrypt.hash(TARGET_PASSWORD, 10);
   
-  // Tách bỏ các trường không được copy (id, ngày tháng, các mảng relation)
-  const { 
-    id, createdAt, updatedAt, email, password, phone, 
-    pets, applications, ...baseUserData 
-  } = sourceUser;
+  // Tách bỏ id và ngày tháng
+  const { id, createdAt, updatedAt, email, password, phone, ...baseUserData } = sourceUser as any;
 
-  // Xử lý chống trùng lặp số điện thoại (Nếu schema của bạn set phone là @unique)
-  // Ở đây tôi fake tạm bằng cách thêm chữ số vào đuôi số cũ
+  // Xử lý chống trùng lặp số điện thoại (nếu schema có @unique)
   const newPhone = phone ? `${phone.slice(0, -2)}99` : null;
 
-  // 4. Tạo User mới và nhân bản luôn Pets + Applications thông qua Nested Writes
-  console.log("⏳ Đang tiến hành ghi xuống Database...");
-
+  // 3. TẠO USER MỚI
   const newUser = await prisma.user.create({
     data: {
       ...baseUserData,
       email: TARGET_EMAIL,
       password: hashedPassword,
       phone: newPhone,
-      
-      // Copy mảng Pets (loại bỏ id và relation keys)
-      pets: {
-        create: pets.map((pet) => {
-          const { id, createdAt, updatedAt, ownerId, ...petData } = pet;
-          return petData;
-        })
-      },
-
-      // Copy mảng Applications (loại bỏ id và relation keys)
-      applications: {
-        create: applications.map((app) => {
-          const { id, createdAt, updatedAt, userId, petId, ...appData } = app;
-          return {
-            ...appData,
-            // Chú ý: Đơn nhận nuôi thường trỏ tới 1 con pet cụ thể (petId). 
-            // Nếu bạn muốn giữ nguyên lịch sử, ta truyền lại petId gốc.
-            petId: petId 
-          };
-        })
-      }
     }
   });
+  console.log(`✨ Đã tạo thành công User mới: ${newUser.id}`);
 
-  console.log(`✨ Hoàn tất! Đã tạo thành công User mới:`);
-  console.log(`   👉 ID: ${newUser.id}`);
-  console.log(`   👉 Đã copy ${pets.length} bé thú cưng`);
-  console.log(`   👉 Đã copy ${applications.length} đơn nhận nuôi`);
+  // 4. CLONE DANH SÁCH THÚ CƯNG (MY PETS)
+  // LƯU Ý: Đổi `ownerId` thành tên field chính xác trong schema Pet của bạn (ví dụ: userId)
+  const sourcePets = await prisma.pet.findMany({
+    where: { ownerId: sourceUser.id } 
+  });
+
+  let petsCount = 0;
+  for (const pet of sourcePets) {
+    const { id, createdAt, updatedAt, ownerId, ...petData } = pet as any;
+    await prisma.pet.create({
+      data: {
+        ...petData,
+        ownerId: newUser.id // Gán ID của user mới
+      }
+    });
+    petsCount++;
+  }
+  console.log(`   👉 Đã copy ${petsCount} bé thú cưng`);
+
+  // 5. CLONE DANH SÁCH ĐƠN NHẬN NUÔI (APPLICATIONS)
+  // LƯU Ý: Nếu model của bạn tên khác, hãy đổi `prisma.application` thành `prisma.tên_model`
+  const sourceApps = await prisma.application.findMany({
+    where: { userId: sourceUser.id }
+  });
+
+  let appsCount = 0;
+  for (const app of sourceApps) {
+    const { id, createdAt, updatedAt, userId, ...appData } = app as any;
+    await prisma.application.create({
+      data: {
+        ...appData,
+        userId: newUser.id // Gán ID của user mới
+      }
+    });
+    appsCount++;
+  }
+  console.log(`   👉 Đã copy ${appsCount} đơn nhận nuôi`);
+  console.log(`✅ HOÀN TẤT QUÁ TRÌNH NHÂN BẢN!`);
 }
 
 main()
