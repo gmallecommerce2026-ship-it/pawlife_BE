@@ -332,7 +332,12 @@ export class PetsService {
   }
   
   async toggleLostMode(userId: string, petId: string, dto: ToggleLostModeDto) {
-    const { isLost, location, dateTime, details, ownerName, ownerPhone, ownerAddress, note, photos } = dto;
+    // 1. BỔ SUNG: Destructuring thêm latitude, longitude, lostDate từ dto
+    const { 
+      isLost, location, dateTime, details, ownerName, 
+      ownerPhone, ownerAddress, note, photos,
+      latitude, longitude, lostDate 
+    } = dto;
 
     const pet = await this.prisma.pet.findUnique({
       where: { id: petId },
@@ -363,6 +368,11 @@ export class PetsService {
           // Gộp chi tiết (details) và lời nhắn (note) vào cùng một trường
           lostDetails: isLost ? `${note || ''}`.trim() : null,
           lostPhotos: isLost ? JSON.stringify(photos || []) : null,
+          
+          // 2. BỔ SUNG: Lưu toạ độ và thời gian chuẩn vào Database
+          lostLatitude: isLost && latitude ? latitude : null,
+          lostLongitude: isLost && longitude ? longitude : null,
+          lostDate: isLost && lostDate ? new Date(lostDate) : null,
         }
       }),
       ...(isLost ? [] : [
@@ -390,61 +400,67 @@ export class PetsService {
       for (const tag of tags) {
         await this.redisService.removeLocation(LOST_TAGS_KEY, tag.id);
       }
+    } else if (latitude && longitude) {
+      // 3.1. BỔ SUNG LƯU VÀO REDIS: Khi bật báo lạc, ném ngay toạ độ vào Redis
+      // Để chức năng lấy danh sách Pets quanh đây chạy ngon lành lập tức
+      for (const tag of tags) {
+        await this.redisService.addLocation(LOST_TAGS_KEY, longitude, latitude, tag.id);
+      }
     }
 
     // 4. Bắn Notification
     await this.notificationsService.createAndSendNotification({
-    userId: userId,
-    title: isLost ? '🚨 Báo động đi lạc!' : '✅ Thú cưng an toàn',
-    body: isLost 
-      ? `Bạn đã BẬT chế độ báo lạc cho bé ${pet.name}.` 
-      : `Bạn đã TẮT chế độ báo lạc cho bé ${pet.name}.`,
-    type: NotificationType.TAG,
-    referenceId: petId,
-  });
+      userId: userId,
+      title: isLost ? '🚨 Báo động đi lạc!' : '✅ Thú cưng an toàn',
+      body: isLost 
+        ? `Bạn đã BẬT chế độ báo lạc cho bé ${pet.name}.` 
+        : `Bạn đã TẮT chế độ báo lạc cho bé ${pet.name}.`,
+      type: NotificationType.TAG,
+      referenceId: petId,
+    });
 
-  // 4.2 LOGIC MỚI: Bắn thông báo Cảm ơn cho những người đã hỗ trợ scan QR
-  if (!isLost) {
-    try {
-      // Tìm danh sách những User (có tài khoản) đã quét/report mã QR này
-      const recentReporters = await this.prisma.tagReport.findMany({
-        where: {
-          tag: { petId: petId },
-          userId: { not: null }, // Chỉ lấy những scan từ user đăng nhập
-          // createdAt: { gte: pet.lostDateTime } // Có thể uncomment nếu muốn chỉ gửi cho người scan sau lúc bị lạc
-        },
-        distinct: ['userId'], // Đảm bảo 1 user chỉ nhận 1 thông báo dù họ scan nhiều lần
-        select: { userId: true }
-      });
+    // 4.2 LOGIC MỚI: Bắn thông báo Cảm ơn cho những người đã hỗ trợ scan QR
+    if (!isLost) {
+      try {
+        // Tìm danh sách những User (có tài khoản) đã quét/report mã QR này
+        const recentReporters = await this.prisma.tagReport.findMany({
+          where: {
+            tag: { petId: petId },
+            userId: { not: null }, // Chỉ lấy những scan từ user đăng nhập
+            // createdAt: { gte: pet.lostDateTime } // Có thể uncomment nếu muốn chỉ gửi cho người scan sau lúc bị lạc
+          },
+          distinct: ['userId'], // Đảm bảo 1 user chỉ nhận 1 thông báo dù họ scan nhiều lần
+          select: { userId: true }
+        });
 
-      // Lặp qua và gửi Push Notification
-      for (const reporter of recentReporters) {
-        // Không gửi lại cho chính người chủ nếu họ tự quét
-        if (reporter.userId && reporter.userId !== userId) {
-          await this.notificationsService.createAndSendNotification({
-            userId: reporter.userId,
-            title: '🎉 Tin vui!',
-            body: `Chủ của bé ${pet.name} đã báo bình an và tìm được bé. Cảm ơn bạn đã hỗ trợ quét vòng cổ!`,
-            type: NotificationType.SYSTEM,
-            referenceId: petId,
-          });
-          
-          // Gửi realtime qua socket để app của người kia nổ thông báo luôn
-          this.notificationsGateway.server.to(`user_${reporter.userId}`).emit('notification', {
-             title: '🎉 Tin vui!',
-             body: `Chủ của bé ${pet.name} đã báo bình an và tìm được bé. Cảm ơn bạn đã hỗ trợ quét vòng cổ!`
-          });
+        // Lặp qua và gửi Push Notification
+        for (const reporter of recentReporters) {
+          // Không gửi lại cho chính người chủ nếu họ tự quét
+          if (reporter.userId && reporter.userId !== userId) {
+            await this.notificationsService.createAndSendNotification({
+              userId: reporter.userId,
+              title: '🎉 Tin vui!',
+              body: `Chủ của bé ${pet.name} đã báo bình an và tìm được bé. Cảm ơn bạn đã hỗ trợ quét vòng cổ!`,
+              type: NotificationType.SYSTEM,
+              referenceId: petId,
+            });
+            
+            // Gửi realtime qua socket để app của người kia nổ thông báo luôn
+            this.notificationsGateway.server.to(`user_${reporter.userId}`).emit('notification', {
+                title: '🎉 Tin vui!',
+                body: `Chủ của bé ${pet.name} đã báo bình an và tìm được bé. Cảm ơn bạn đã hỗ trợ quét vòng cổ!`
+            });
+          }
         }
+      } catch (err) {
+        console.error("Lỗi khi gửi thông báo cho những người đã scan:", err);
       }
-    } catch (err) {
-      console.error("Lỗi khi gửi thông báo cho những người đã scan:", err);
     }
-  }
 
-  return {
-    message: isLost ? 'Đã bật chế độ báo lạc!' : 'Đã tắt chế độ báo lạc, thú cưng an toàn.',
-    isLost: isLost,
-  };
+    return {
+      message: isLost ? 'Đã bật chế độ báo lạc!' : 'Đã tắt chế độ báo lạc, thú cưng an toàn.',
+      isLost: isLost,
+    };
   }
 
   async requestTransfer(petId: string, payload: { email?: string; phone?: string }, senderId: string) {

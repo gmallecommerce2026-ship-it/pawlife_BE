@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional, IsString, IsArray } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsArray, IsNumber, IsDateString } from 'class-validator';
 
 export class ToggleLostModeDto {
   @IsBoolean()
@@ -36,4 +36,17 @@ export class ToggleLostModeDto {
   @IsArray()
   @IsString({ each: true }) // Đảm bảo mọi phần tử trong mảng đều là chuỗi URL
   photos?: string[];
+
+  // BỔ SUNG:
+  @IsOptional()
+  @IsNumber()
+  latitude?: number;
+
+  @IsOptional()
+  @IsNumber()
+  longitude?: number;
+
+  @IsOptional()
+  @IsDateString()
+  lostDate?: string;
 }
