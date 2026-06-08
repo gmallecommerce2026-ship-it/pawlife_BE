@@ -805,7 +805,6 @@ export class PetsService {
           images: {
             orderBy: { createdAt: 'asc' } 
           },
-          tags: true,
           traitsList: true,
           shelter: {
             select: { id: true, name: true, contactInfo: true, address: true, avatarUrl: true }
