@@ -174,6 +174,7 @@ export class PetsController {
     @Param('id') id: string, 
     @Body() dto: ToggleLostModeDto // Lấy toàn bộ payload frontend gửi lên
   ) {
+    console.log("BACKEND NHẬN ĐƯỢC DTO:", dto);
     return this.petsService.toggleLostMode(req.user.id, id, dto);
   }
 }
