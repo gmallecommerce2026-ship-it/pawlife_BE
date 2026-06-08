@@ -19,7 +19,18 @@ export class TagsService {
   async getTagReportDetail(id: string) {
     const report = await this.prisma.tagReport.findUnique({
       where: { id },
-      include: { tag: { include: { pet: { include: { owner: true, images: true } } } } },
+      include: { 
+        tag: { 
+          include: { 
+            pet: { 
+              include: { 
+                owner: true, 
+                images: true 
+              } 
+            } 
+          } 
+        } 
+      },
     });
 
     if (!report) throw new NotFoundException('Không tìm thấy báo cáo quét thẻ này.');
@@ -29,7 +40,14 @@ export class TagsService {
       orderBy: { scannedAt: 'desc' }
     });
 
-    return { ...report, scanHistory };
+    // TỔNG HỢP VÀ TRẢ VỀ DỮ LIỆU ĐỒNG NHẤT
+    return { 
+      ...report,
+      // Đảm bảo Frontend nhận được radius của report (nếu có)
+      // hoặc radius của Pet (nếu là point zero/báo mất)
+      radius: report.radius || report.tag?.pet?.lostRadius || 0,
+      scanHistory 
+    };
   }
   
   async createTagReport(data: CreateTagReportDto) {
