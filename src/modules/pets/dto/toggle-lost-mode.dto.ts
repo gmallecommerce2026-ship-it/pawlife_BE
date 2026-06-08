@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import { IsBoolean, IsOptional, IsString, IsArray, IsNumber, IsDateString } from 'class-validator';
 
 export class ToggleLostModeDto {
@@ -36,6 +37,11 @@ export class ToggleLostModeDto {
   @IsArray()
   @IsString({ each: true }) // Đảm bảo mọi phần tử trong mảng đều là chuỗi URL
   photos?: string[];
+
+  @IsOptional()
+  @Transform(({ value }) => parseFloat(value))
+  @IsNumber()
+  radius?: number;
 
   // BỔ SUNG:
   @IsOptional()
