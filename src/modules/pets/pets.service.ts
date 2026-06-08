@@ -335,7 +335,7 @@ export class PetsService {
     const { 
       isLost, location, dateTime, details, ownerName, 
       ownerPhone, ownerAddress, note, photos,
-      latitude, longitude, lostDate 
+      latitude, longitude, lostDate, radius
     } = dto;
 
     const pet = await this.prisma.pet.findUnique({
@@ -371,6 +371,7 @@ export class PetsService {
           lostPhotos: isLost ? JSON.stringify(photos || []) : null,
           lostLatitude: isLost && latitude ? latitude : null,
           lostLongitude: isLost && longitude ? longitude : null,
+          lostRadius: isLost && radius ? radius : null,
           lostDate: isLost && lostDate ? new Date(lostDate) : null,
         }
       }),

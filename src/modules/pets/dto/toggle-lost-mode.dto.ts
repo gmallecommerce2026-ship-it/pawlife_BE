@@ -39,7 +39,7 @@ export class ToggleLostModeDto {
   photos?: string[];
 
   @IsOptional()
-  @Transform(({ value }) => parseFloat(value))
+  @Transform(({ value }) => parseFloat(value)) // Đảm bảo chuyển string từ FE sang number
   @IsNumber()
   radius?: number;
 

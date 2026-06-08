@@ -255,6 +255,7 @@ model Pet {
 
   lostLatitude       Float?    // Lưu vĩ độ báo lạc
   lostLongitude      Float?    // Lưu kinh độ báo lạc
+  lostRadius     Float?
   lostDate           DateTime? // Lưu thời gian chuẩn để tính "Time Ago"
   
   lostContactName    String?  // Tên người liên hệ khẩn cấp khi thất lạc
