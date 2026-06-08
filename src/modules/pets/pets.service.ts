@@ -332,7 +332,6 @@ export class PetsService {
   }
   
   async toggleLostMode(userId: string, petId: string, dto: ToggleLostModeDto) {
-    // 1. BỔ SUNG: Destructuring thêm latitude, longitude, lostDate từ dto
     const { 
       isLost, location, dateTime, details, ownerName, 
       ownerPhone, ownerAddress, note, photos,
@@ -350,7 +349,11 @@ export class PetsService {
 
     const newStatus = isLost ? 'LOST' : 'ACTIVE';
     
-    // 1. Cập nhật DB (Dùng Transaction để đảm bảo tính toàn vẹn dữ liệu)
+    // --- BƯỚC MỚI: TÌM TAG ĐANG ACTIVE ĐỂ TẠO REPORT ---
+    const activeTag = await this.prisma.tag.findFirst({
+      where: { petId: petId, status: { not: 'INACTIVE' } }
+    });
+    
     await this.prisma.$transaction([
       this.prisma.tag.updateMany({
         where: { petId: petId },
@@ -359,27 +362,38 @@ export class PetsService {
       this.prisma.pet.update({
         where: { id: petId },
         data: {
-          // Lưu dữ liệu khi BẬT báo lạc, reset về null khi TẮT báo lạc
           lostContactName: isLost ? ownerName : null,
           lostContactPhone: isLost ? ownerPhone : null,
           lostContactAddress: isLost ? ownerAddress : null,
           lostLocation: isLost ? location : null,
           lostDateTime: isLost ? dateTime : null,
-          // Gộp chi tiết (details) và lời nhắn (note) vào cùng một trường
           lostDetails: isLost ? `${note || ''}`.trim() : null,
           lostPhotos: isLost ? JSON.stringify(photos || []) : null,
-          
-          // 2. BỔ SUNG: Lưu toạ độ và thời gian chuẩn vào Database
           lostLatitude: isLost && latitude ? latitude : null,
           lostLongitude: isLost && longitude ? longitude : null,
           lostDate: isLost && lostDate ? new Date(lostDate) : null,
         }
       }),
+      // --- BƯỚC MỚI: TẠO TAG_REPORT "POINT ZERO" KHI BÁO LẠC ---
+      ...(isLost && activeTag ? [
+        this.prisma.tagReport.create({
+          data: {
+            tagId: activeTag.id,
+            userId: userId,
+            latitude: latitude || null,
+            longitude: longitude || null,
+            message: note ? `Báo mất: ${note}` : 'Chủ nhân đã báo mất thú cưng',
+            scannedBy: ownerName || 'Chủ nhân',
+            status: 'PENDING',
+          }
+        })
+      ] : []),
+      // Đóng các report khi tìm thấy
       ...(isLost ? [] : [
         this.prisma.tagReport.updateMany({
           where: {
             tag: { petId: petId },
-            status: 'PENDING' // Chỉ cập nhật các report đang pending
+            status: 'PENDING' 
           },
           data: { status: 'RESOLVED' }
         })
@@ -806,7 +820,16 @@ export class PetsService {
                 select: { id: true, name: true } // Cần lấy sender để parse history
               }
             }
-          }
+          },
+          tags: {
+            include: {
+              reports: {
+                orderBy: { scannedAt: 'desc' },
+                take: 1, // Chỉ lấy report gần nhất để tiết kiệm RAM
+                select: { id: true }
+              }
+            }
+          },
         },
       });
 
@@ -904,12 +927,22 @@ export class PetsService {
       pawHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       // ==============================================================
 
+      let latestReportId: any = null;
+      if (pet.tags && pet.tags.length > 0) {
+        // Tìm tag đang dùng
+        const activeTag = pet.tags.find(t => t.status !== 'INACTIVE') || pet.tags[0];
+        if (activeTag && activeTag.reports && activeTag.reports.length > 0) {
+          latestReportId = activeTag.reports[0].id;
+        }
+      }
+
       petData = {
         ...pet,
         shelter: formattedShelter,
         owner: formattedOwner,
         pawHistory, // <--- BỔ SUNG PAW HISTORY VÀO RESPONSE
         avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null,
+        latestReportId,
         transferStatus: pendingTransfer ? pendingTransfer.status : null,
         pendingContact: pendingTransfer ? (pendingTransfer.receiver.email || pendingTransfer.receiver.phone) : null,
         transferRequestId: pendingTransfer ? pendingTransfer.id : null,
