@@ -367,6 +367,7 @@ model TagReport {
   longitude   Float?
   radius      Float?
   message     String? // Lời nhắn từ người quét
+  images      Json?
   status      TagReportStatus @default(PENDING)
   scannedAt   DateTime @default(now())
 }

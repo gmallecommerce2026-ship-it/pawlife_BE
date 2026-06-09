@@ -1,6 +1,6 @@
 // src/modules/tags/dto/create-tag-report.dto.ts
 import { Transform } from 'class-transformer';
-import { IsString, IsOptional, IsNumber, IsNotEmpty } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsNotEmpty, IsArray } from 'class-validator';
 
 export class CreateTagReportDto {
   @IsString()
@@ -42,4 +42,9 @@ export class CreateTagReportDto {
   @IsOptional()
   @IsString()
   message?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
 }

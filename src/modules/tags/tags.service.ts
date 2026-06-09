@@ -65,6 +65,7 @@ export class TagsService {
         scannedBy: reportData.scannedBy,
         phoneNumber: reportData.phoneNumber,
         message: reportData.message,
+        images: reportData.images,
       },
       include: { tag: { include: { pet: { include: { owner: true } } } } },
     });
