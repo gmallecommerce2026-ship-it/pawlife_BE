@@ -16,7 +16,7 @@ export class TagsService {
     private redisService: RedisService // INJECT REDIS
   ) {}
   
-  async getTagReportDetail(id: string) {
+  async getTagReportDetail(id: string, currentUserId?: string) {
     const report = await this.prisma.tagReport.findUnique({
       where: { id },
       include: { 
@@ -40,12 +40,34 @@ export class TagsService {
       orderBy: { scannedAt: 'desc' }
     });
 
-    // TỔNG HỢP VÀ TRẢ VỀ DỮ LIỆU ĐỒNG NHẤT
+    const radius = report.radius || 0; // Giả sử lưu dưới DB là mét (Ví dụ: 500m)
+    
+    // LOGIC PHÂN QUYỀN VỊ TRÍ
+    // 1. Nếu user hiện tại là người quét thẻ (report.userId)
+    // 2. Hoặc user hiện tại là CHỦ của thú cưng (report.tag.pet.ownerId)
+    const isOwnerOrScanner = currentUserId && (
+      currentUserId === report.userId || 
+      currentUserId === report.tag.pet.ownerId
+    );
+
+    let finalLat = report.latitude;
+    let finalLng = report.longitude;
+    let isExactLocation = true;
+
+    // Nếu không có quyền và có tọa độ + bán kính hợp lệ -> Fake vị trí
+    if (!isOwnerOrScanner && radius > 0 && report.latitude && report.longitude) {
+      const fakePoint = generateRandomPointInRadius(report.latitude, report.longitude, radius);
+      finalLat = fakePoint.lat;
+      finalLng = fakePoint.lng;
+      isExactLocation = false;
+    }
+
     return { 
       ...report,
-      // Đảm bảo Frontend nhận được radius của report (nếu có)
-      // hoặc radius của Pet (nếu là point zero/báo mất)
-      radius: report.radius || report.tag?.pet?.lostRadius || 0,
+      latitude: finalLat,     // Trả về tọa độ đã được quyết định (Thật hoặc Fake)
+      longitude: finalLng,    
+      radius: radius,
+      isExactLocation,        // <--- Flag báo cho Frontend biết để hiện UI
       scanHistory 
     };
   }
