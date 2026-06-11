@@ -40,54 +40,40 @@ export class TagsService {
     private notificationsService: NotificationsService,
     private redisService: RedisService // INJECT REDIS
   ) { }
-  private normalizePhone(phone?: string | null): string | null {
-    if (!phone) return null;
-    let p = phone.replace(/[^0-9+]/g, '');
-    if (p.startsWith('+84')) p = '0' + p.slice(3);
-    else if (p.startsWith('84') && p.length >= 11) p = '0' + p.slice(2);
-    return p || null;
-  }
 
-  async getTagReportDetail(id: string, currentUserId?: string | null) {
-  const report = await this.prisma.tagReport.findUnique({
-    where: { id },
-    include: {
-      tag: {
-        include: {
-          pet: {
-            include: { owner: true, images: true }
+  async getTagReportDetail(id: string, currentUserId?: string) {
+    const report = await this.prisma.tagReport.findUnique({
+      where: { id },
+      include: {
+        tag: {
+          include: {
+            pet: {
+              include: {
+                owner: true,
+                images: true
+              }
+            }
           }
         }
-      }
-    },
-  });
-
-  if (!report) throw new NotFoundException('Không tìm thấy báo cáo quét thẻ này.');
-
-  // ── Lấy phone của currentUser từ DB nếu có login ──────────────────────────
-  let currentUserPhone: string | null = null;
-  if (currentUserId) {
-    const currentUser = await this.prisma.user.findUnique({
-      where: { id: currentUserId },
-      select: { phone: true },
+      },
     });
-    currentUserPhone = this.normalizePhone(currentUser?.phone);
-  }
 
-  const petOwnerId = report.tag?.pet?.ownerId ?? null;
-  const petOwnerPhone = this.normalizePhone(report.tag?.pet?.owner?.phone);
-  const reporterPhone = this.normalizePhone(report.phoneNumber);
+    if (!report) throw new NotFoundException('Không tìm thấy báo cáo quét thẻ này.');
 
-  const isOwnerOrScanner =
-    !!currentUserId && (
-      currentUserId === report.userId ||        // match userId trực tiếp
-      currentUserId === petOwnerId              // là chủ pet
-    ) ||
-    // ✅ Match qua phone: user login có cùng SĐT với người đã scan
-    !!(currentUserPhone && reporterPhone && currentUserPhone === reporterPhone) ||
-    // ✅ Match qua phone: user login là chủ pet (so sánh phone)
-    !!(currentUserPhone && petOwnerPhone && currentUserPhone === petOwnerPhone);
+    const scanHistory = await this.prisma.tagReport.findMany({
+      where: { tagId: report.tagId, id: { not: report.id } },
+      orderBy: { scannedAt: 'desc' }
+    });
 
+    const radius = report.radius || 0; // Giả sử lưu dưới DB là mét (Ví dụ: 500m)
+
+    // LOGIC PHÂN QUYỀN VỊ TRÍ
+    // 1. Nếu user hiện tại là người quét thẻ (report.userId)
+    // 2. Hoặc user hiện tại là CHỦ của thú cưng (report.tag.pet.ownerId)
+    const isOwnerOrScanner = currentUserId && (
+      currentUserId === report.userId ||
+      currentUserId === report.tag?.pet?.ownerId // 🌟 THÊM DẤU ? VÀO tag?.pet?.
+    );
 
     let finalLat = report.latitude;
     let finalLng = report.longitude;
