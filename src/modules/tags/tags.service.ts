@@ -5,7 +5,7 @@ import { TagStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateTagReportDto } from './dto/create-tag-report.dto';
 import { RedisService } from '../../database/redis/redis.service'; // IMPORT REDIS
-
+import { generateRandomPointInRadius } from '../../common/utils/geo.util';
 @Injectable()
 export class TagsService {
   private readonly LOST_TAGS_KEY = 'tags:locations:lost'; // Key lưu trong Redis
@@ -47,7 +47,7 @@ export class TagsService {
     // 2. Hoặc user hiện tại là CHỦ của thú cưng (report.tag.pet.ownerId)
     const isOwnerOrScanner = currentUserId && (
       currentUserId === report.userId || 
-      currentUserId === report.tag.pet.ownerId
+      currentUserId === report.tag?.pet?.ownerId // 🌟 THÊM DẤU ? VÀO tag?.pet?.
     );
 
     let finalLat = report.latitude;
