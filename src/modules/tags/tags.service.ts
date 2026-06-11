@@ -5,31 +5,56 @@ import { TagStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateTagReportDto } from './dto/create-tag-report.dto';
 import { RedisService } from '../../database/redis/redis.service'; // IMPORT REDIS
-import { generateRandomPointInRadius } from '../../common/utils/geo.util';
+function seededRandom(seed: string): number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = Math.imul(31, h) + seed.charCodeAt(i) | 0;
+  }
+  return ((h ^ (h >>> 15)) >>> 0) / 4294967296;
+}
+
+function generateFakePointInRadius(
+  lat: number,
+  lng: number,
+  radiusMeters: number,
+  seed: string,
+): { lat: number; lng: number } {
+  const safeRadius = Math.max(radiusMeters, 500);
+  const r1 = seededRandom(seed + '_A');
+  const r2 = seededRandom(seed + '_B');
+  const angle = 2 * Math.PI * r1;
+  const distance = safeRadius * Math.sqrt(r2);
+  const latOffset = (distance * Math.cos(angle)) / 111_320;
+  const lngOffset = (distance * Math.sin(angle)) / (111_320 * Math.cos(lat * (Math.PI / 180)));
+  return { lat: lat + latOffset, lng: lng + lngOffset };
+}
+
+
+
 @Injectable()
 export class TagsService {
   private readonly LOST_TAGS_KEY = 'tags:locations:lost'; // Key lưu trong Redis
 
   constructor(
-    private prisma: PrismaService, 
+    private prisma: PrismaService,
     private notificationsService: NotificationsService,
     private redisService: RedisService // INJECT REDIS
-  ) {}
-  
+  ) { }
+
   async getTagReportDetail(id: string, currentUserId?: string) {
     const report = await this.prisma.tagReport.findUnique({
       where: { id },
-      include: { 
-        tag: { 
-          include: { 
-            pet: { 
-              include: { 
-                owner: true, 
-                images: true 
-              } 
-            } 
-          } 
-        } 
+      include: {
+        tag: {
+          include: {
+            pet: {
+              include: {
+                owner: true,
+                images: true
+              }
+            }
+          }
+        }
       },
     });
 
@@ -41,12 +66,12 @@ export class TagsService {
     });
 
     const radius = report.radius || 0; // Giả sử lưu dưới DB là mét (Ví dụ: 500m)
-    
+
     // LOGIC PHÂN QUYỀN VỊ TRÍ
     // 1. Nếu user hiện tại là người quét thẻ (report.userId)
     // 2. Hoặc user hiện tại là CHỦ của thú cưng (report.tag.pet.ownerId)
     const isOwnerOrScanner = currentUserId && (
-      currentUserId === report.userId || 
+      currentUserId === report.userId ||
       currentUserId === report.tag?.pet?.ownerId // 🌟 THÊM DẤU ? VÀO tag?.pet?.
     );
 
@@ -56,22 +81,49 @@ export class TagsService {
 
     // Nếu không có quyền và có tọa độ + bán kính hợp lệ -> Fake vị trí
     if (!isOwnerOrScanner && radius > 0 && report.latitude && report.longitude) {
-      const fakePoint = generateRandomPointInRadius(report.latitude, report.longitude, radius);
+      const fakePoint = generateFakePointInRadius(
+        report.latitude,
+        report.longitude,
+        radius,
+        `scan_${report.id}`,
+      );
+
       finalLat = fakePoint.lat;
       finalLng = fakePoint.lng;
       isExactLocation = false;
     }
 
-    return { 
+    const petData = report.tag?.pet;
+    if (
+      petData &&
+      !isOwnerOrScanner &&
+      petData.lostLatitude != null &&
+      petData.lostLongitude != null &&
+      petData.lostRadius != null &&
+      petData.lostRadius > 0
+    ) {
+      const fakeOwnerLost = generateFakePointInRadius(
+        petData.lostLatitude,   // ✅ Đã là Float, không cần parseFloat
+        petData.lostLongitude,
+        petData.lostRadius,
+        `lost_${petData.id}`,
+      );
+      // lostLatitude/lostLongitude là Float? trong Prisma nên gán thẳng number
+      (report as any).tag.pet.lostLatitude = fakeOwnerLost.lat;
+      (report as any).tag.pet.lostLongitude = fakeOwnerLost.lng;
+    }
+
+
+    return {
       ...report,
       latitude: finalLat,     // Trả về tọa độ đã được quyết định (Thật hoặc Fake)
-      longitude: finalLng,    
+      longitude: finalLng,
       radius: radius,
       isExactLocation,        // <--- Flag báo cho Frontend biết để hiện UI
-      scanHistory 
+      scanHistory
     };
   }
-  
+
   async createTagReport(data: CreateTagReportDto) {
     const { tagId, ...reportData } = data;
     const lat = Number(reportData.lat ?? reportData.latitude);
@@ -172,15 +224,15 @@ export class TagsService {
       dob: pet.dob,
       status: isLost ? 'lost' : 'safe',
       image: pet.images && pet.images.length > 0 ? pet.images[0].url : 'https://via.placeholder.com/600',
-      
+
       // SỬA Ở ĐÂY: Gọi đúng các trường lostContactName, lostContactPhone, lostContactAddress
       owner: isLost ? {
         name: pet.lostContactName || pet.owner?.name || 'Người dùng ẩn danh',
         phone: pet.lostContactPhone || pet.owner?.phone || 'Chưa cung cấp số điện thoại',
-        address: pet.lostContactAddress || 'Chưa cập nhật địa chỉ', 
+        address: pet.lostContactAddress || 'Chưa cập nhật địa chỉ',
         avatarUrl: pet.owner?.avatarUrl || null,
       } : null,
-      
+
       // SỬA Ở ĐÂY: Trả về trường note từ lostDetails trong DB để Frontend hứng được
       note: pet.lostDetails || "Please contact me ASAP",
     };

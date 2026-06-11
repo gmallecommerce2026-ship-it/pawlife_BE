@@ -1,15 +1,18 @@
 // src/modules/tags/tags.controller.ts
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { TagsService } from './tags.service';
 import { CreateTagReportDto } from './dto/create-tag-report.dto';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt.guard';
 
 @Controller('tags')
 export class TagsController {
   constructor(private readonly tagsService: TagsService) {}
   
   @Get('reports/:id')
-  async getTagReportDetail(@Param('id') id: string) {
-    return this.tagsService.getTagReportDetail(id);
+  @UseGuards(OptionalJwtAuthGuard) // Optional: có token thì xác thực, không có thì vẫn pass
+  async getTagReportDetail(@Param('id') id: string, @Request() req: any) {
+    const currentUserId = req.user?.id ?? null;
+    return this.tagsService.getTagReportDetail(id, currentUserId);
   }
 
   @Get(':tagId/scan')

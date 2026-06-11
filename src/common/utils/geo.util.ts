@@ -1,32 +1,38 @@
-// src/common/utils/geo.util.ts
+const TO_RAD = Math.PI / 180;
+const TO_DEG = 180 / Math.PI;
+const RADIUS_EARTH = 6371000;
+
 export function generateRandomPointInRadius(
   centerLat: number,
   centerLng: number,
   radiusMeters: number,
 ): { lat: number; lng: number } {
-  const radiusEarth = 6371000; // Bán kính trái đất tính bằng mét
-  const r = radiusMeters / radiusEarth;
-  
-  // Random góc từ 0 đến 360 độ (2 PI)
+  const r = radiusMeters / RADIUS_EARTH;
   const theta = 2 * Math.PI * Math.random();
-  // Random khoảng cách từ tâm (căn bậc 2 để phân bố đều diện tích)
   const distance = Math.sqrt(Math.random()) * r;
 
-  const latRad = centerLat * (Math.PI / 180);
-  const lngRad = centerLng * (Math.PI / 180);
+  const latRad = centerLat * TO_RAD;
+  const lngRad = centerLng * TO_RAD;
+
+  const sinLat = Math.sin(latRad);
+  const cosLat = Math.cos(latRad);
+  const sinDist = Math.sin(distance);
+  const cosDist = Math.cos(distance);
+  const sinTheta = Math.sin(theta);
+  const cosTheta = Math.cos(theta);
 
   const finalLatRad = Math.asin(
-    Math.sin(latRad) * Math.cos(distance) +
-    Math.cos(latRad) * Math.sin(distance) * Math.cos(theta)
+    sinLat * cosDist + cosLat * sinDist * cosTheta
   );
 
   const finalLngRad = lngRad + Math.atan2(
-    Math.sin(theta) * Math.sin(distance) * Math.cos(latRad),
-    Math.cos(distance) - Math.sin(latRad) * Math.sin(finalLatRad)
+    sinTheta * sinDist * cosLat,
+    cosDist - sinLat * Math.sin(finalLatRad)
   );
 
+  // Đảm bảo kết quả nằm trong khoảng địa lý hợp lệ
   return {
-    lat: finalLatRad * (180 / Math.PI),
-    lng: finalLngRad * (180 / Math.PI),
+    lat: Math.max(-90, Math.min(90, finalLatRad * TO_DEG)),
+    lng: ((finalLngRad * TO_DEG + 540) % 360) - 180, // Chuẩn hóa kinh độ về [-180, 180]
   };
 }
