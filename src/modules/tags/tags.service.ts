@@ -45,16 +45,7 @@ export class TagsService {
     const report = await this.prisma.tagReport.findUnique({
       where: { id },
       include: {
-        tag: {
-          include: {
-            pet: {
-              include: {
-                owner: true,
-                images: true
-              }
-            }
-          }
-        }
+        tag: { include: { pet: { include: { owner: true, images: true } } } }
       },
     });
 
@@ -65,48 +56,64 @@ export class TagsService {
       orderBy: { scannedAt: 'desc' }
     });
 
-    const radius = report.radius || 0; 
-    // Logic phân quyền
-    const isOwnerOrScanner = currentUserId && (
-      currentUserId === report.userId ||
-      currentUserId === report.tag?.pet?.ownerId
-    );
+    const radius = report.radius || 0;
 
-    const isExactLocation = !!isOwnerOrScanner;
+    // 🌟 TÁCH BẠCH QUYỀN ĐỂ FIX LỖI:
+    // 1. isOwner: Chỉ chủ thú cưng mới có quyền tối cao
+    const isOwner = currentUserId && currentUserId === report.tag?.pet?.ownerId;
+    // 2. isMainScanner: Người lạ thực hiện lần quét thẻ NÀY
+    const isMainScanner = currentUserId && currentUserId === report.userId;
 
-    // 1. XỬ LÝ REPORT CHÍNH
+    // --- 1. XỬ LÝ TỌA ĐỘ BÁO CÁO CHÍNH ---
     let finalLat = report.latitude;
     let finalLng = report.longitude;
+    let isExactLocation = !!(isOwner || isMainScanner); // Chỉ Chủ hoặc Người vừa quét mới xem được điểm này
 
     if (!isExactLocation && radius > 0 && report.latitude && report.longitude) {
-      // Dùng report.id làm seed để đảm bảo random cố định
-      const fakePoint = generateFakePointInRadius(report.latitude, report.longitude, radius, `report_${report.id}`);
+      const fakePoint = generateFakePointInRadius(report.latitude, report.longitude, radius, `scan_${report.id}`);
       finalLat = fakePoint.lat;
       finalLng = fakePoint.lng;
     }
 
-    // 2. XỬ LÝ LỊCH SỬ QUÉT (Bảo mật: Không được leak tọa độ thật)
+    // --- 2. XỬ LÝ ĐIỂM BÁO MẤT GỐC (LOST PIN) CỦA PET ---
+    const petData = report.tag?.pet;
+    if (
+      petData &&
+      !isOwner && // 🌟 CHỈ CÓ CHỦ MỚI ĐƯỢC XEM (Người quét không được phép xem)
+      petData.lostLatitude != null &&
+      petData.lostLongitude != null &&
+      petData.lostRadius != null &&
+      petData.lostRadius > 0
+    ) {
+      const fakeOwnerLost = generateFakePointInRadius(
+        petData.lostLatitude,
+        petData.lostLongitude,
+        petData.lostRadius,
+        `lost_${petData.id}`,
+      );
+      (report as any).tag.pet.lostLatitude = fakeOwnerLost.lat;
+      (report as any).tag.pet.lostLongitude = fakeOwnerLost.lng;
+    }
+
+    // --- 3. XỬ LÝ LỊCH SỬ QUÉT ---
     const processedScanHistory = scanHistory.map(hist => {
-      if (isExactLocation || !hist.radius || !hist.latitude || !hist.longitude) {
-        return hist; // Có quyền -> trả tọa độ thật
+      // Check xem user đang xem có phải là người tạo ra lịch sử này không
+      const isHistScanner = currentUserId && currentUserId === hist.userId;
+      const canViewHistExact = isOwner || isHistScanner;
+
+      if (canViewHistExact || !hist.radius || !hist.latitude || !hist.longitude) {
+        return { ...hist, isEstimated: false }; // Có quyền
       }
-      
-      const fakeHistPoint = generateFakePointInRadius(hist.latitude, hist.longitude, hist.radius, `report_${hist.id}`);
+
+      // Trả tọa độ fake nếu không có quyền
+      const fakeHistPoint = generateFakePointInRadius(hist.latitude, hist.longitude, hist.radius, `scan_${hist.id}`);
       return {
         ...hist,
         latitude: fakeHistPoint.lat,
         longitude: fakeHistPoint.lng,
-        isEstimated: true // Cờ cho Frontend biết đây là tọa độ fake
+        isEstimated: true 
       };
     });
-
-    // 3. XỬ LÝ VỊ TRÍ PET BÁO MẤT
-    const petData = report.tag?.pet;
-    if (petData && !isExactLocation && petData.lostLatitude != null && petData.lostLongitude != null && petData.lostRadius != null && petData.lostRadius > 0) {
-      const fakeOwnerLost = generateFakePointInRadius(petData.lostLatitude, petData.lostLongitude, petData.lostRadius, `lost_${petData.id}`);
-      (report as any).tag.pet.lostLatitude = fakeOwnerLost.lat;
-      (report as any).tag.pet.lostLongitude = fakeOwnerLost.lng;
-    }
 
     return {
       ...report,
@@ -114,7 +121,8 @@ export class TagsService {
       longitude: finalLng,
       radius: radius,
       isExactLocation,        
-      scanHistory: processedScanHistory // Trả về mảng đã được bảo mật
+      isOwner, // 🌟 Truyền cờ này xuống cho Frontend
+      scanHistory: processedScanHistory
     };
   }
 
