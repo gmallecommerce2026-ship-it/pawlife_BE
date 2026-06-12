@@ -65,62 +65,56 @@ export class TagsService {
       orderBy: { scannedAt: 'desc' }
     });
 
-    const radius = report.radius || 0; // Giả sử lưu dưới DB là mét (Ví dụ: 500m)
-
-    // LOGIC PHÂN QUYỀN VỊ TRÍ
-    // 1. Nếu user hiện tại là người quét thẻ (report.userId)
-    // 2. Hoặc user hiện tại là CHỦ của thú cưng (report.tag.pet.ownerId)
+    const radius = report.radius || 0; 
+    // Logic phân quyền
     const isOwnerOrScanner = currentUserId && (
       currentUserId === report.userId ||
-      currentUserId === report.tag?.pet?.ownerId // 🌟 THÊM DẤU ? VÀO tag?.pet?.
+      currentUserId === report.tag?.pet?.ownerId
     );
 
+    const isExactLocation = !!isOwnerOrScanner;
+
+    // 1. XỬ LÝ REPORT CHÍNH
     let finalLat = report.latitude;
     let finalLng = report.longitude;
-    let isExactLocation = true;
 
-    // Nếu không có quyền và có tọa độ + bán kính hợp lệ -> Fake vị trí
-    if (!isOwnerOrScanner && radius > 0 && report.latitude && report.longitude) {
-      const fakePoint = generateFakePointInRadius(
-        report.latitude,
-        report.longitude,
-        radius,
-        `scan_${report.id}`,
-      );
-
+    if (!isExactLocation && radius > 0 && report.latitude && report.longitude) {
+      // Dùng report.id làm seed để đảm bảo random cố định
+      const fakePoint = generateFakePointInRadius(report.latitude, report.longitude, radius, `report_${report.id}`);
       finalLat = fakePoint.lat;
       finalLng = fakePoint.lng;
-      isExactLocation = false;
     }
 
+    // 2. XỬ LÝ LỊCH SỬ QUÉT (Bảo mật: Không được leak tọa độ thật)
+    const processedScanHistory = scanHistory.map(hist => {
+      if (isExactLocation || !hist.radius || !hist.latitude || !hist.longitude) {
+        return hist; // Có quyền -> trả tọa độ thật
+      }
+      
+      const fakeHistPoint = generateFakePointInRadius(hist.latitude, hist.longitude, hist.radius, `report_${hist.id}`);
+      return {
+        ...hist,
+        latitude: fakeHistPoint.lat,
+        longitude: fakeHistPoint.lng,
+        isEstimated: true // Cờ cho Frontend biết đây là tọa độ fake
+      };
+    });
+
+    // 3. XỬ LÝ VỊ TRÍ PET BÁO MẤT
     const petData = report.tag?.pet;
-    if (
-      petData &&
-      !isOwnerOrScanner &&
-      petData.lostLatitude != null &&
-      petData.lostLongitude != null &&
-      petData.lostRadius != null &&
-      petData.lostRadius > 0
-    ) {
-      const fakeOwnerLost = generateFakePointInRadius(
-        petData.lostLatitude,   // ✅ Đã là Float, không cần parseFloat
-        petData.lostLongitude,
-        petData.lostRadius,
-        `lost_${petData.id}`,
-      );
-      // lostLatitude/lostLongitude là Float? trong Prisma nên gán thẳng number
+    if (petData && !isExactLocation && petData.lostLatitude != null && petData.lostLongitude != null && petData.lostRadius != null && petData.lostRadius > 0) {
+      const fakeOwnerLost = generateFakePointInRadius(petData.lostLatitude, petData.lostLongitude, petData.lostRadius, `lost_${petData.id}`);
       (report as any).tag.pet.lostLatitude = fakeOwnerLost.lat;
       (report as any).tag.pet.lostLongitude = fakeOwnerLost.lng;
     }
 
-
     return {
       ...report,
-      latitude: finalLat,     // Trả về tọa độ đã được quyết định (Thật hoặc Fake)
+      latitude: finalLat,     
       longitude: finalLng,
       radius: radius,
-      isExactLocation,        // <--- Flag báo cho Frontend biết để hiện UI
-      scanHistory
+      isExactLocation,        
+      scanHistory: processedScanHistory // Trả về mảng đã được bảo mật
     };
   }
 
