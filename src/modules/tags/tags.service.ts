@@ -58,16 +58,20 @@ export class TagsService {
 
     const radius = report.radius || 0;
 
-    // 🌟 TÁCH BẠCH QUYỀN ĐỂ FIX LỖI:
-    // 1. isOwner: Chỉ chủ thú cưng mới có quyền tối cao
     const isOwner = currentUserId && currentUserId === report.tag?.pet?.ownerId;
-    // 2. isMainScanner: Người lạ thực hiện lần quét thẻ NÀY
     const isMainScanner = currentUserId && currentUserId === report.userId;
 
-    // --- 1. XỬ LÝ TỌA ĐỘ BÁO CÁO CHÍNH ---
+    // 🔴 1. ĐẶT DEBUG XÁC MINH QUYỀN:
+    console.log('\n--- 🐛 DEBUG BACKEND: PHÂN QUYỀN ---');
+    console.log('1. Current User ID (Người đang xem):', currentUserId || 'Khách vãng lai (Chưa đăng nhập)');
+    console.log('2. Pet Owner ID (Chủ thú cưng):', report.tag?.pet?.ownerId);
+    console.log('3. Report Scanner ID (Người đã quét):', report.userId);
+    console.log('👉 Kết luận isOwner:', isOwner);
+    console.log('👉 Kết luận isMainScanner:', isMainScanner);
+
     let finalLat = report.latitude;
     let finalLng = report.longitude;
-    let isExactLocation = !!(isOwner || isMainScanner); // Chỉ Chủ hoặc Người vừa quét mới xem được điểm này
+    let isExactLocation = !!(isOwner || isMainScanner);
 
     if (!isExactLocation && radius > 0 && report.latitude && report.longitude) {
       const fakePoint = generateFakePointInRadius(report.latitude, report.longitude, radius, `scan_${report.id}`);
@@ -75,11 +79,16 @@ export class TagsService {
       finalLng = fakePoint.lng;
     }
 
-    // --- 2. XỬ LÝ ĐIỂM BÁO MẤT GỐC (LOST PIN) CỦA PET ---
     const petData = report.tag?.pet;
+    
+    // 🔴 2. ĐẶT DEBUG XÁC MINH HÀM FAKE LOST PIN:
+    console.log('\n--- 🐛 DEBUG BACKEND: LOST PIN FAKING ---');
+    console.log('1. Tọa độ Lost GỐC:', petData?.lostLatitude, petData?.lostLongitude);
+    console.log('2. Radius cài đặt:', petData?.lostRadius);
+
     if (
       petData &&
-      !isOwner && // 🌟 CHỈ CÓ CHỦ MỚI ĐƯỢC XEM (Người quét không được phép xem)
+      !isOwner && 
       petData.lostLatitude != null &&
       petData.lostLongitude != null &&
       petData.lostRadius != null &&
@@ -93,7 +102,12 @@ export class TagsService {
       );
       (report as any).tag.pet.lostLatitude = fakeOwnerLost.lat;
       (report as any).tag.pet.lostLongitude = fakeOwnerLost.lng;
+      
+      console.log('3. Đã chạy hàm Fake! Tọa độ SAU KHI FAKE:', fakeOwnerLost.lat, fakeOwnerLost.lng);
+    } else {
+      console.log('3. ⚠️ BỎ QUA FAKE vì: isOwner = true HOẶC thiếu dữ liệu Lost Lat/Lng/Radius');
     }
+    console.log('--------------------------------------\n');
 
     // --- 3. XỬ LÝ LỊCH SỬ QUÉT ---
     const processedScanHistory = scanHistory.map(hist => {
