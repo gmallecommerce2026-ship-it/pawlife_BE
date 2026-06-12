@@ -61,17 +61,12 @@ export class TagsService {
     const isOwner = currentUserId && currentUserId === report.tag?.pet?.ownerId;
     const isMainScanner = currentUserId && currentUserId === report.userId;
 
-    // 🔴 1. ĐẶT DEBUG XÁC MINH QUYỀN:
-    console.log('\n--- 🐛 DEBUG BACKEND: PHÂN QUYỀN ---');
-    console.log('1. Current User ID (Người đang xem):', currentUserId || 'Khách vãng lai (Chưa đăng nhập)');
-    console.log('2. Pet Owner ID (Chủ thú cưng):', report.tag?.pet?.ownerId);
-    console.log('3. Report Scanner ID (Người đã quét):', report.userId);
-    console.log('👉 Kết luận isOwner:', isOwner);
-    console.log('👉 Kết luận isMainScanner:', isMainScanner);
-
+    // --- 1. XỬ LÝ TỌA ĐỘ BÁO CÁO CHÍNH (Của người quét) ---
     let finalLat = report.latitude;
     let finalLng = report.longitude;
-    let isExactLocation = !!(isOwner || isMainScanner);
+    
+    // 🌟 SỬA: CHỈ CÓ NGƯỜI QUÉT MỚI ĐƯỢC XEM TỌA ĐỘ THẬT. Chủ thú cưng cũng bị FAKE.
+    let isExactLocation = !!isMainScanner; 
 
     if (!isExactLocation && radius > 0 && report.latitude && report.longitude) {
       const fakePoint = generateFakePointInRadius(report.latitude, report.longitude, radius, `scan_${report.id}`);
@@ -79,47 +74,17 @@ export class TagsService {
       finalLng = fakePoint.lng;
     }
 
-    const petData = report.tag?.pet;
-    
-    // 🔴 2. ĐẶT DEBUG XÁC MINH HÀM FAKE LOST PIN:
-    console.log('\n--- 🐛 DEBUG BACKEND: LOST PIN FAKING ---');
-    console.log('1. Tọa độ Lost GỐC:', petData?.lostLatitude, petData?.lostLongitude);
-    console.log('2. Radius cài đặt:', petData?.lostRadius);
-
-    if (
-      petData &&
-      !isOwner && 
-      petData.lostLatitude != null &&
-      petData.lostLongitude != null &&
-      petData.lostRadius != null &&
-      petData.lostRadius > 0
-    ) {
-      const fakeOwnerLost = generateFakePointInRadius(
-        petData.lostLatitude,
-        petData.lostLongitude,
-        petData.lostRadius,
-        `lost_${petData.id}`,
-      );
-      (report as any).tag.pet.lostLatitude = fakeOwnerLost.lat;
-      (report as any).tag.pet.lostLongitude = fakeOwnerLost.lng;
-      
-      console.log('3. Đã chạy hàm Fake! Tọa độ SAU KHI FAKE:', fakeOwnerLost.lat, fakeOwnerLost.lng);
-    } else {
-      console.log('3. ⚠️ BỎ QUA FAKE vì: isOwner = true HOẶC thiếu dữ liệu Lost Lat/Lng/Radius');
-    }
-    console.log('--------------------------------------\n');
-
-    // --- 3. XỬ LÝ LỊCH SỬ QUÉT ---
+    // --- 2. XỬ LÝ LỊCH SỬ QUÉT (Các điểm màu cam trên map) ---
     const processedScanHistory = scanHistory.map(hist => {
-      // Check xem user đang xem có phải là người tạo ra lịch sử này không
       const isHistScanner = currentUserId && currentUserId === hist.userId;
-      const canViewHistExact = isOwner || isHistScanner;
+      
+      // 🌟 SỬA: Tương tự, lịch sử quét cũng chỉ người quét đó mới được xem thật
+      const canViewHistExact = isHistScanner; 
 
       if (canViewHistExact || !hist.radius || !hist.latitude || !hist.longitude) {
-        return { ...hist, isEstimated: false }; // Có quyền
+        return { ...hist, isEstimated: false };
       }
 
-      // Trả tọa độ fake nếu không có quyền
       const fakeHistPoint = generateFakePointInRadius(hist.latitude, hist.longitude, hist.radius, `scan_${hist.id}`);
       return {
         ...hist,
@@ -140,15 +105,15 @@ export class TagsService {
     };
   }
 
-  async createTagReport(data: CreateTagReportDto) {
+  async createTagReport(data: CreateTagReportDto, currentUserId?: string) {
     const { tagId, ...reportData } = data;
     const lat = Number(reportData.lat ?? reportData.latitude);
     const lng = Number(reportData.lng ?? reportData.longitude);
 
-    // 1. Lưu report vào database
     const report = await this.prisma.tagReport.create({
       data: {
         tagId: tagId,
+        userId: currentUserId, // 🌟 LƯU ID CỦA NGƯỜI QUÉT VÀO ĐÂY
         latitude: lat,
         longitude: lng,
         radius: reportData.radius,

@@ -21,8 +21,13 @@ export class TagsController {
   }
 
   @Post('report')
-  async createReport(@Body() createTagReportDto: CreateTagReportDto) {
-    return this.tagsService.createTagReport(createTagReportDto);
+  @UseGuards(OptionalJwtAuthGuard)
+  async createReport(
+    @Body() createTagReportDto: CreateTagReportDto,
+    @Request() req: any // 🌟 Hứng request
+  ) {
+    const currentUserId = req.user?.id ?? null; // Trích xuất ID
+    return this.tagsService.createTagReport(createTagReportDto, currentUserId);
   }
 
   @Patch('report/:id/resolve')
