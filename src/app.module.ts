@@ -17,6 +17,7 @@ import { TagsModule } from './modules/tags/tags.module';
 import { PawcareModule } from './modules/pawcare/pawcare.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ApplicationsModule } from './modules/applications/applications.module';
+import { WalletModule } from './modules/wallet/wallet.module';
 
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { Redis } from 'ioredis';
@@ -106,6 +107,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     PawcareModule,
     NotificationsModule,
     ApplicationsModule,
+    WalletModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],

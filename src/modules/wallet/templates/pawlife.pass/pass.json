@@ -1,0 +1,18 @@
+{
+  "formatVersion": 1,
+  "passTypeIdentifier": "pass.com.pawlife.petid",
+  "teamIdentifier": "ZSUSA4XQ95",
+  "organizationName": "PawLife",
+  "description": "Thẻ định danh thú cưng PawLife",
+  "serialNumber": "TEMPLATE",
+  "backgroundColor": "rgb(255, 223, 173)",
+  "foregroundColor": "rgb(74, 53, 34)",
+  "labelColor": "rgb(232, 155, 90)",
+  "generic": {
+    "headerFields": [],
+    "primaryFields": [],
+    "secondaryFields": [],
+    "auxiliaryFields": [],
+    "backFields": []
+  }
+}
