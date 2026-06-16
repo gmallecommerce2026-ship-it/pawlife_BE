@@ -160,7 +160,7 @@ export class WalletService {
         {
           // serialNumber = pet.id (UUID): mỗi bé 1 thẻ riêng trong ví — user nuôi nhiều pet
           // sẽ có nhiều thẻ, tải lại thẻ của cùng 1 bé thì Wallet tự THAY THẾ chứ không nhân đôi
-          serialNumber: pet.id,
+          serialNumber: `${pet.id}_${Math.floor(Date.now() / 1000)}`,
           passTypeIdentifier:
             this.configService.get<string>('WALLET_PASS_TYPE_IDENTIFIER') ??
             'pass.com.pawlife.petid',
