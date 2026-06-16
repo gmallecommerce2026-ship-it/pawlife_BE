@@ -26,7 +26,7 @@ export interface PawHistoryItem {
   id: string;
   type: PawHistoryType;
   title: string;
-  date: Date | string; 
+  date: Date | string;
   description: string;
 }
 // ----------------------------------------------
@@ -49,7 +49,7 @@ export class PetsService {
     private readonly notificationsService: NotificationsService, // Inject NotificationsService
     private readonly redisService: RedisService, // Inject RedisService
     private configService: ConfigService,
-  ) {}
+  ) { }
 
   private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371; // Bán kính trái đất tính bằng km
@@ -65,7 +65,7 @@ export class PetsService {
 
   private async getAvailablePetsByShelterIds(shelterIds: string[]) {
     const cacheKey = `pets:available:shelters:${shelterIds.sort().join('_')}`;
-    
+
     const cached = await this.redisService.get<any[]>(cacheKey);
     if (cached) return cached;
 
@@ -102,17 +102,17 @@ export class PetsService {
     await this.prisma.$transaction([
       this.prisma.tag.update({
         where: { id: tagId },
-        data: { 
-          petId: petId, 
-          status: 'ACTIVE' 
+        data: {
+          petId: petId,
+          status: 'ACTIVE'
         }
       }),
       this.prisma.pet.update({
         where: { id: petId },
-        data: { 
+        data: {
           qrVerificationStatus: 'VERIFIED',
           // Nên lưu Full URL để sau này API trả về là frontend dùng được ngay không cần ghép chuỗi
-          qrCodeUrl: `https://pawcare.app/tag/${tagId}` 
+          qrCodeUrl: `https://pawcare.app/tag/${tagId}`
         }
       })
     ]);
@@ -137,7 +137,7 @@ export class PetsService {
     if (lat && lng) {
       // Chỉ tải userInteractions từ Redis khi thực sự cần thiết (xử lý RAM)
       const interactionCacheKey = `user:${userId}:swiped_pets`;
-      let userInteractions = await this.redisService.get<{petId: string, action: string}[]>(interactionCacheKey) || [];
+      let userInteractions = await this.redisService.get<{ petId: string, action: string }[]>(interactionCacheKey) || [];
       const allSwipedIds = new Set(userInteractions.map(i => i.petId));
       const passActionIds = new Set(userInteractions.filter(i => i.action === 'PASS').map(i => i.petId));
 
@@ -234,7 +234,7 @@ export class PetsService {
   async swipePet(userId: string, petId: string, swipePetDto: SwipePetDto) {
     const petExists = await this.prisma.pet.findUnique({
       where: { id: petId },
-      select: { id: true } 
+      select: { id: true }
     });
 
     if (!petExists) {
@@ -246,13 +246,13 @@ export class PetsService {
     await this.redisService.del(interactionCacheKey);
 
     await this.swipeQueue.add(
-      'process-swipe', 
+      'process-swipe',
       {
         userId,
         petId,
         action: swipePetDto.action,
       },
-      { 
+      {
         removeOnComplete: true,
         removeOnFail: 100,
       }
@@ -264,7 +264,7 @@ export class PetsService {
         userId: userId,
         petId: petId,
         action: swipePetDto.action,
-        createdAt: new Date(), 
+        createdAt: new Date(),
         updatedAt: new Date(),
       },
     };
@@ -330,10 +330,10 @@ export class PetsService {
 
     return { message: 'Đã xóa thú cưng thành công!' };
   }
-  
+
   async toggleLostMode(userId: string, petId: string, dto: ToggleLostModeDto) {
-    const { 
-      isLost, location, dateTime, details, ownerName, 
+    const {
+      isLost, location, dateTime, details, ownerName,
       ownerPhone, ownerAddress, note, photos,
       latitude, longitude, lostDate, radius
     } = dto;
@@ -348,12 +348,12 @@ export class PetsService {
     }
 
     const newStatus = isLost ? 'LOST' : 'ACTIVE';
-    
+
     // --- BƯỚC MỚI: TÌM TAG ĐANG ACTIVE ĐỂ TẠO REPORT ---
     const activeTag = await this.prisma.tag.findFirst({
       where: { petId: petId, status: { not: 'INACTIVE' } }
     });
-    
+
     await this.prisma.$transaction([
       this.prisma.tag.updateMany({
         where: { petId: petId },
@@ -394,7 +394,7 @@ export class PetsService {
         this.prisma.tagReport.updateMany({
           where: {
             tag: { petId: petId },
-            status: 'PENDING' 
+            status: 'PENDING'
           },
           data: { status: 'RESOLVED' }
         })
@@ -408,8 +408,8 @@ export class PetsService {
     await this.redisService.del(`pet:detail:${petId}`);
 
     // 3. ĐỒNG BỘ REDIS GEO MAP DÀNH CHO HỆ THỐNG LỚN
-    const LOST_TAGS_KEY = 'tags:locations:lost'; 
-    
+    const LOST_TAGS_KEY = 'tags:locations:lost';
+
     if (!isLost) {
       // NẾU TẮT BÁO LẠC: Xóa ngay tọa độ khỏi Redis Geo
       for (const tag of tags) {
@@ -427,8 +427,8 @@ export class PetsService {
     await this.notificationsService.createAndSendNotification({
       userId: userId,
       title: isLost ? '🚨 Báo động đi lạc!' : '✅ Thú cưng an toàn',
-      body: isLost 
-        ? `Bạn đã BẬT chế độ báo lạc cho bé ${pet.name}.` 
+      body: isLost
+        ? `Bạn đã BẬT chế độ báo lạc cho bé ${pet.name}.`
         : `Bạn đã TẮT chế độ báo lạc cho bé ${pet.name}.`,
       type: NotificationType.TAG,
       referenceId: petId,
@@ -459,11 +459,11 @@ export class PetsService {
               type: NotificationType.SYSTEM,
               referenceId: petId,
             });
-            
+
             // Gửi realtime qua socket để app của người kia nổ thông báo luôn
             this.notificationsGateway.server.to(`user_${reporter.userId}`).emit('notification', {
-                title: '🎉 Tin vui!',
-                body: `Chủ của bé ${pet.name} đã báo bình an và tìm được bé. Cảm ơn bạn đã hỗ trợ quét vòng cổ!`
+              title: '🎉 Tin vui!',
+              body: `Chủ của bé ${pet.name} đã báo bình an và tìm được bé. Cảm ơn bạn đã hỗ trợ quét vòng cổ!`
             });
           }
         }
@@ -511,7 +511,7 @@ export class PetsService {
     if (!receiver) {
       throw new NotFoundException('Hệ thống không tìm thấy người dùng với thông tin liên lạc này.');
     }
-    
+
     if (receiver.id === senderId) {
       throw new BadRequestException('Không thể tự chuyển nhượng thú cưng cho chính mình.');
     }
@@ -559,14 +559,14 @@ export class PetsService {
     // 1. Cập nhật chủ mới cho thú cưng
     await this.prisma.pet.update({
       where: { id: transferReq.petId },
-      data: { ownerId: receiverId }, 
+      data: { ownerId: receiverId },
     });
 
     await this.redisService.del(`pet:detail:${transferReq.petId}`);
 
     await this.prisma.transferRequest.updateMany({
-      where: { 
-        petId: transferReq.petId, 
+      where: {
+        petId: transferReq.petId,
         status: 'PENDING',
         id: { not: transferId } // Chừa lại cái đang được confirm
       },
@@ -581,10 +581,10 @@ export class PetsService {
 
     // 3. Bắn Socket cho CẢ HAI user để chuyển tab và hiển thị popup complete
     const payload = { petId: transferReq.petId };
-    
+
     // Bắn cho người gửi (chủ cũ)
     this.notificationsGateway.server.to(`user_${transferReq.senderId}`).emit('transfer_completed', payload);
-    
+
     // Bắn cho người nhận (chủ mới)
     this.notificationsGateway.server.to(`user_${receiverId}`).emit('transfer_completed', payload);
 
@@ -645,7 +645,7 @@ export class PetsService {
     });
 
     return {
-      data: favorites.map((fav) => fav.pet), 
+      data: favorites.map((fav) => fav.pet),
       meta: {
         skip,
         take,
@@ -657,16 +657,16 @@ export class PetsService {
   async getMyPets(userId: string) {
     try {
       const pets = await this.prisma.pet.findMany({
-        where: { 
+        where: {
           ownerId: userId,
-          status: 'ADOPTED', 
+          status: 'ADOPTED',
         },
         include: {
           images: {
             orderBy: { createdAt: 'asc' },
           },
           // 1. THÊM DÒNG NÀY ĐỂ LẤY THÔNG TIN VÒNG CỔ
-          tags: true, 
+          tags: true,
         },
       });
 
@@ -677,7 +677,7 @@ export class PetsService {
         return {
           ...pet,
           avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null,
-          isLost, 
+          isLost,
         };
       });
     } catch (error) {
@@ -686,8 +686,22 @@ export class PetsService {
   }
 
   async createPet(userId: string, createPetDto: CreatePetDto) {
-    const { images, tagId, ...petData } = createPetDto;
+    const { images, tagId, medicalRecords, ...petData } = createPetDto;
     const publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN');
+
+    // Format lại data cho medical records
+    const medicalRecordsData = medicalRecords && medicalRecords.length > 0 ? {
+      create: medicalRecords.map(record => ({
+        type: record.type,
+        recordName: record.recordName,
+        recordDate: new Date(record.recordDate),
+        images: record.images || [],
+        hasNextDueDate: record.hasNextDueDate || false,
+        nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null,
+        nextDueName: record.nextDueName,
+      }))
+    } : undefined;
+
     try {
       // NẾU CÓ TRUYỀN MÃ QR TỪ FRONTEND XUỐNG
       if (tagId) {
@@ -712,7 +726,8 @@ export class PetsService {
               qrCodeUrl: `${publicDomain}/qr-codes/${tagId}.svg`,
               ...(images && images.length > 0 && {
                 images: { create: images.map(url => ({ url })) }
-              })
+              }),
+              ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
             },
             include: { images: true }
           });
@@ -720,9 +735,9 @@ export class PetsService {
           // 2.2 Update Tag với ID của Pet vừa tạo
           await prisma.tag.update({
             where: { id: tagId },
-            data: { 
-              petId: newPet.id, 
-              status: 'ACTIVE' 
+            data: {
+              petId: newPet.id,
+              status: 'ACTIVE'
             }
           });
 
@@ -730,17 +745,18 @@ export class PetsService {
         });
 
         return result;
-      } 
-      
+      }
+
       // TRƯỜNG HỢP 2: TẠO PET BÌNH THƯỜNG (KHÔNG CÓ QUÉT QR)
       const newPet = await this.prisma.pet.create({
         data: {
           ...petData,
           ownerId: userId,
-          status: 'ADOPTED', 
+          status: 'ADOPTED',
           ...(images && images.length > 0 && {
             images: { create: images.map(url => ({ url })) }
-          })
+          }),
+          ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
         },
         include: { images: true }
       });
@@ -768,7 +784,7 @@ export class PetsService {
     }
 
     if (type) {
-      whereCondition.species = type.toUpperCase() as any; 
+      whereCondition.species = type.toUpperCase() as any;
     }
 
     const pets = await this.prisma.pet.findMany({
@@ -776,13 +792,13 @@ export class PetsService {
       take: limit,
       include: {
         images: {
-          orderBy: { createdAt: 'asc' } 
+          orderBy: { createdAt: 'asc' }
         },
         shelter: {
           select: { id: true, address: true, name: true, avatarUrl: true }
         }
       },
-      orderBy: {  }
+      orderBy: {}
     });
 
     return {
@@ -793,10 +809,10 @@ export class PetsService {
 
   async getPetById(id: string, userId?: string) {
     const cacheKey = `pet:detail:${id}`;
-    
+
     // 1. Kiểm tra cache (Chỉ lấy phần dữ liệu tĩnh dùng chung)
     let petData = await this.redisService.get<any>(cacheKey);
-    
+
     // 2. Lấy từ DB nếu chưa có cache (Bỏ where PENDING ở transferRequests)
     if (!petData) {
       const pet = await this.prisma.pet.findUnique({
@@ -804,7 +820,7 @@ export class PetsService {
         include: {
           owner: ownerSelectQuery,
           images: {
-            orderBy: { createdAt: 'asc' } 
+            orderBy: { createdAt: 'asc' }
           },
           traitsList: true,
           shelter: {
@@ -852,8 +868,8 @@ export class PetsService {
       }
 
       // Tách transfer request đang PENDING cho các logic trả về cũ
-      const pendingTransfer = pet.transferRequests && pet.transferRequests.length > 0 
-        ? pet.transferRequests.find(tr => tr.status === 'PENDING') 
+      const pendingTransfer = pet.transferRequests && pet.transferRequests.length > 0
+        ? pet.transferRequests.find(tr => tr.status === 'PENDING')
         : null;
 
       // ==============================================================
@@ -897,14 +913,15 @@ export class PetsService {
 
       // Sự kiện 4: Lịch sử Vaccine
       // Type checking an toàn cho Json value từ DB
-      const vaccineUrls = pet.vaccinationRecordUrls as string[];
-      if (Array.isArray(vaccineUrls) && vaccineUrls.length > 0) {
-        pawHistory.push({
-          id: `vaccine_${pet.id}`,
-          type: 'VACCINE',
-          title: 'Vaccination Record Updated',
-          date: pet.updatedAt, 
-          description: `Cập nhật ${vaccineUrls.length} giấy tờ tiêm chủng/y tế.`
+      if (pet.medicalRecords && pet.medicalRecords.length > 0) {
+        pet.medicalRecords.forEach(record => {
+          pawHistory.push({
+            id: `med_${record.id}`,
+            type: 'VACCINE', // Có thể giữ VACCINE hoặc đổi thành MEDICAL
+            title: record.recordName,
+            date: record.recordDate, 
+            description: `Hồ sơ ${record.type}: ${record.recordName}`
+          });
         });
       }
 
@@ -1008,9 +1025,9 @@ export class PetsService {
       if (pet.tags && pet.tags.length > 0) {
         await tx.tag.updateMany({
           where: { petId: pet.id },
-          data: { 
-            petId: null, 
-            status: 'INACTIVE' 
+          data: {
+            petId: null,
+            status: 'INACTIVE'
           },
         });
       }
@@ -1018,18 +1035,18 @@ export class PetsService {
       // 3.2. Gắn Tag mới vào Pet
       await tx.tag.update({
         where: { id: newTagId },
-        data: { 
+        data: {
           petId: pet.id,
-          status: 'ACTIVE' 
+          status: 'ACTIVE'
         },
       });
 
       // 3.3. Cập nhật thông tin Pet
       const qrCodeUrl = `https://yourdomain.com/scan/${newTagId}`;
-      
+
       await tx.pet.update({
         where: { id: pet.id },
-        data: { 
+        data: {
           qrCodeUrl,
           qrVerificationStatus: 'VERIFIED',
           needsQrReplacement: false
@@ -1037,8 +1054,8 @@ export class PetsService {
       });
     });
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       message: 'Thay đổi mã QR thành công!',
       newTagId,
     };
@@ -1089,11 +1106,11 @@ export class PetsService {
   async cancelTransfer(petId: string, userId: string) {
     // 1. SỬA LỖI QUERY: Cho phép cả Sender HOẶC Receiver tìm thấy request
     const transferReq = await this.prisma.transferRequest.findFirst({
-      where: { 
-        petId: petId, 
+      where: {
+        petId: petId,
         status: 'PENDING',
         OR: [
-          { senderId: userId }, 
+          { senderId: userId },
           { receiverId: userId }
         ]
       },
@@ -1117,22 +1134,22 @@ export class PetsService {
     // 4. (Tùy chọn thêm) Bắn Notification hệ thống cho người CÒN LẠI biết giao dịch đã bị hủy
     const targetUserId = userId === transferReq.senderId ? transferReq.receiverId : transferReq.senderId;
     const isSenderCanceling = userId === transferReq.senderId;
-    
+
     await this.notificationsService.createAndSendNotification({
       userId: targetUserId,
       title: '❌ Hủy chuyển nhượng',
-      body: isSenderCanceling 
-        ? 'Chủ cũ đã hủy yêu cầu chuyển nhượng thú cưng cho bạn.' 
+      body: isSenderCanceling
+        ? 'Chủ cũ đã hủy yêu cầu chuyển nhượng thú cưng cho bạn.'
         : 'Người nhận đã từ chối yêu cầu chuyển nhượng thú cưng của bạn.',
-      type: NotificationType.SYSTEM, 
+      type: NotificationType.SYSTEM,
       referenceId: petId,
     });
 
     await this.redisService.del(`pet:detail:${petId}`);
-    
+
     return { success: true, message: 'Đã hủy yêu cầu chuyển nhượng.' };
   }
-  
+
   async updatePet(userId: string, petId: string, updateData: any) {
     const pet = await this.prisma.pet.findUnique({
       where: { id: petId },
@@ -1146,7 +1163,7 @@ export class PetsService {
       throw new ConflictException('Bạn không có quyền chỉnh sửa thông tin thú cưng này!');
     }
 
-    const { images, ...petInfo } = updateData;
+    const { images, medicalRecords, ...petInfo } = updateData;
 
     try {
       const updatedPet = await this.prisma.pet.update({
@@ -1157,6 +1174,20 @@ export class PetsService {
             images: {
               deleteMany: {},
               create: images.map((url: string) => ({ url }))
+            }
+          }),
+          ...(medicalRecords && {
+            medicalRecords: {
+              deleteMany: {}, // Xóa toàn bộ record cũ
+              create: medicalRecords.map((record: any) => ({
+                type: record.type,
+                recordName: record.recordName,
+                recordDate: new Date(record.recordDate),
+                images: record.images || [],
+                hasNextDueDate: record.hasNextDueDate || false,
+                nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null,
+                nextDueName: record.nextDueName,
+              }))
             }
           })
         },

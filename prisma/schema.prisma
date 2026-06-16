@@ -205,7 +205,23 @@ model PetTrait {
   petId String
   pet   Pet    @relation(fields: [petId], references: [id], onDelete: Cascade)
 }
+model MedicalRecord {
+  id             String   @id @default(uuid())
+  type           String   // VD: "vaccination", "deworming", "flea_tick", "general"
+  recordName     String
+  recordDate     DateTime
+  images         Json?    // Lưu mảng URL ảnh [ "https://...", "https://..." ]
+  
+  hasNextDueDate Boolean  @default(false)
+  nextDueDate    DateTime?
+  nextDueName    String?
 
+  petId          String
+  pet            Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
 model Pet {
   id          String   @id @default(uuid())
   name        String
