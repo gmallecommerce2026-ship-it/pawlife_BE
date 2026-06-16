@@ -9,6 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PKPass } from 'passkit-generator';
 import axios from 'axios';
+import sharp from 'sharp';
 import Jimp from 'jimp';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -46,7 +47,7 @@ export class WalletService {
     @Inject(PET_DATA_PROVIDER)
     private readonly petData: PetDataProvider,
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
 
   // Mã định danh hiển thị trên thẻ: PL-XXXXXXXX (8 ký tự đầu của UUID, viết hoa)
   // KHÔNG hiển thị UUID đầy đủ vì 36 ký tự sẽ bị cắt chữ trên mặt thẻ — UUID đầy đủ nằm ở mặt sau
@@ -78,23 +79,27 @@ export class WalletService {
   // Tải ảnh đại diện pet từ R2 rồi crop thành hình tròn (PNG nền trong suốt)
   // → iOS chỉ bo nhẹ góc thumbnail, muốn avatar tròn như thẻ ID thì ảnh phải tròn sẵn
   // Trả về 3 độ phân giải theo chuẩn Apple: 90pt (@1x), 180px (@2x), 270px (@3x)
-  private async buildCircleThumbnails(
-    photoUrl: string,
-  ): Promise<{ x1: Buffer; x2: Buffer; x3: Buffer }> {
+  private async buildCircleThumbnails(photoUrl: string): Promise<{ x1: Buffer; x2: Buffer; x3: Buffer }> {
     const response = await axios.get<ArrayBuffer>(photoUrl, {
       responseType: 'arraybuffer',
-      timeout: 8000, // ảnh treo quá 8s thì bỏ thumbnail, không bắt user chờ
+      timeout: 3000, // Giảm xuống 3s để tránh timeout từ phía Load Balancer
     });
 
-    const image = await Jimp.read(Buffer.from(response.data));
-    image.cover(270, 270); // crop vuông lấy tâm ảnh (như object-fit: cover)
-    image.circle(); // bo tròn, phần ngoài hình tròn thành trong suốt
+    const buffer = Buffer.from(response.data);
 
-    return {
-      x3: await image.getBufferAsync(Jimp.MIME_PNG),
-      x2: await image.clone().resize(180, 180).getBufferAsync(Jimp.MIME_PNG),
-      x1: await image.clone().resize(90, 90).getBufferAsync(Jimp.MIME_PNG),
-    };
+    // Tạo mask hình tròn dạng SVG
+    const circleSvg = Buffer.from('<svg><circle cx="135" cy="135" r="135" /></svg>');
+
+    const x3 = await sharp(buffer)
+      .resize(270, 270, { fit: 'cover' })
+      .composite([{ input: circleSvg, blend: 'dest-in' }])
+      .png()
+      .toBuffer();
+
+    const x2 = await sharp(x3).resize(180, 180).toBuffer();
+    const x1 = await sharp(x3).resize(90, 90).toBuffer();
+
+    return { x1, x2, x3 };
   }
 
   // Đọc bộ chứng chỉ từ thư mục certs/ (cấu hình qua env WALLET_CERTS_DIR, mặc định ./certs)
