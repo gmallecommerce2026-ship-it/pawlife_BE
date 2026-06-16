@@ -35,10 +35,12 @@ export class WalletController {
   @Public()
   async downloadPassByToken(
     @Param('token') token: string,
-    @Res({ passthrough: true }) res: Response, // FIX 1: Thêm passthrough: true
-  ): Promise<StreamableFile> { // FIX 2: Khai báo kiểu trả về
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
 
-    const data = await this.redisService.get<{ userId: string, petId: string }>(`pass_token:${token}`);
+    const data = await this.redisService.get<{ userId: string; petId: string }>(
+      `pass_token:${token}`,
+    );
 
     if (!data) {
       throw new HttpException('Token expired or invalid', HttpStatus.FORBIDDEN);
@@ -47,23 +49,18 @@ export class WalletController {
     const { userId, petId } = data;
     await this.redisService.del(`pass_token:${token}`);
 
-    try {
-      const { buffer, fileName } = await this.walletService.generatePetPass(userId, petId);
+    const { buffer, fileName } = await this.walletService.generatePetPass(userId, petId);
 
-      // FIX 3: Thêm Content-Length (Apple Wallet RẤT CẦN header này để hiển thị thanh tiến trình tải)
-      res.set({
-        'Content-Type': 'application/vnd.apple.pkpass',
-        'Content-Disposition': `attachment; filename="${fileName}"`,
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Content-Length': buffer.length.toString(),
-      });
+    res.set({
+      // ① MIME type chính xác — iOS dùng cái này để quyết định mở PassKit
+      'Content-Type': 'application/vnd.apple.pkpass',
+      // ② inline thay vì attachment — không trigger "save file" dialog
+      'Content-Disposition': `inline; filename="${fileName}"`,
+      // ③ Content-Length bắt buộc — thiếu thì iOS timeout hoặc hiện lỗi
+      'Content-Length': buffer.length.toString(),
+      'Cache-Control': 'no-store',
+    });
 
-      // FIX 4: Trả về StreamableFile thay vì res.send()
-      return new StreamableFile(buffer);
-
-    } catch (error) {
-      // Bắt lỗi để tránh crash app dẫn đến 502
-      throw new HttpException('Lỗi khi tạo thẻ', HttpStatus.INTERNAL_SERVER_ERROR);
-    }
+    return new StreamableFile(buffer);
   }
 }
