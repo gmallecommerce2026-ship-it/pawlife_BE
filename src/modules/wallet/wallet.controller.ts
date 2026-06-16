@@ -13,7 +13,7 @@ export class WalletController {
   constructor(
     private readonly walletService: WalletService,
     private readonly redisService: RedisService,
-  ) {}
+  ) { }
 
 
   // Bước 1: App gọi endpoint này (CÓ AUTH) để xin URL tải pass
@@ -24,15 +24,10 @@ export class WalletController {
     @Param('petId') petId: string,
   ) {
     const token = uuidv4();
-    
-    // Lưu vào Redis, hết hạn sau 60 giây. 
-    // Do redisService.set của bạn tự động stringify nên truyền thẳng object vào
     await this.redisService.set(`pass_token:${token}`, { userId, petId }, 60);
-    
-    // Trả về URL public đính kèm token (Nhớ cấu hình API_BASE_URL trong .env)
-    return { 
-      url: `${process.env.API_BASE_URL}/wallet/download-pass/${token}` 
-    };
+
+    // Chỉ trả về token, không trả về URL đầy đủ
+    return { token };
   }
 
   // Bước 2: OS gọi endpoint này (PUBLIC) để tải file binary
@@ -42,13 +37,13 @@ export class WalletController {
     @Param('token') token: string,
     @Res({ passthrough: true }) res: Response, // FIX 1: Thêm passthrough: true
   ): Promise<StreamableFile> { // FIX 2: Khai báo kiểu trả về
-    
-    const data = await this.redisService.get<{userId: string, petId: string}>(`pass_token:${token}`);
-    
+
+    const data = await this.redisService.get<{ userId: string, petId: string }>(`pass_token:${token}`);
+
     if (!data) {
       throw new HttpException('Token expired or invalid', HttpStatus.FORBIDDEN);
     }
-    
+
     const { userId, petId } = data;
     await this.redisService.del(`pass_token:${token}`);
 
@@ -60,12 +55,12 @@ export class WalletController {
         'Content-Type': 'application/vnd.apple.pkpass',
         'Content-Disposition': `attachment; filename="${fileName}"`,
         'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Content-Length': buffer.length.toString(), 
+        'Content-Length': buffer.length.toString(),
       });
 
       // FIX 4: Trả về StreamableFile thay vì res.send()
       return new StreamableFile(buffer);
-      
+
     } catch (error) {
       // Bắt lỗi để tránh crash app dẫn đến 502
       throw new HttpException('Lỗi khi tạo thẻ', HttpStatus.INTERNAL_SERVER_ERROR);
