@@ -1,9 +1,12 @@
 // src/modules/wallet/wallet.controller.ts
 import { Controller, Get, Post, Param, Res, UseGuards, HttpException, HttpStatus } from '@nestjs/common';
+import type { Response } from 'express'; // FIX: Lấy Response từ express để dùng được res.set và res.send
 import { v4 as uuidv4 } from 'uuid';
-import { RedisService } from '../../database/redis/redis.service'; // Dịch vụ Redis của bạn
-import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { WalletService } from './wallet.service';
+import { RedisService } from '../../database/redis/redis.service';
+import { JwtAuthGuard } from '../auth/guards/jwt.guard';
+import { User } from '../../common/decorators/user.decorator'; // FIX: Import decorator @User
+import { Public } from '../../common/decorators/public.decorator'; // Thêm nếu bạn có decorator @Public để bypass JwtAuthGuard
 
 @Controller('wallet')
 export class WalletController {
@@ -20,10 +23,12 @@ export class WalletController {
     @Param('petId') petId: string,
   ) {
     const token = uuidv4();
-    // Lưu thông tin vào Redis, hết hạn sau 60 giây (ngăn chặn chia sẻ link trái phép)
-    await this.redisService.set(`pass_token:${token}`, JSON.stringify({ userId, petId }), 60);
     
-    // Trả về URL public đính kèm token
+    // Lưu vào Redis, hết hạn sau 60 giây. 
+    // Do redisService.set của bạn tự động stringify nên truyền thẳng object vào
+    await this.redisService.set(`pass_token:${token}`, { userId, petId }, 60);
+    
+    // Trả về URL public đính kèm token (Nhớ cấu hình API_BASE_URL trong .env)
     return { 
       url: `${process.env.API_BASE_URL}/wallet/download-pass/${token}` 
     };
@@ -31,17 +36,20 @@ export class WalletController {
 
   // Bước 2: OS gọi endpoint này (PUBLIC) để tải file binary
   @Get('download-pass/:token')
-  // @Public() - Đảm bảo không gắn JwtAuthGuard
+  @Public() // Nếu bạn để UseGuards ở class level thì phải có @Public() ở đây
   async downloadPassByToken(
     @Param('token') token: string,
     @Res() res: Response,
   ) {
-    const dataStr = await this.redisService.get(`pass_token:${token}`);
-    if (!dataStr) {
+    // FIX: redisService.get đã tự động trả về Object (vì bên trong hàm get đã có JSON.parse)
+    const data = await this.redisService.get<{userId: string, petId: string}>(`pass_token:${token}`);
+    
+    if (!data) {
       throw new HttpException('Token expired or invalid', HttpStatus.FORBIDDEN);
     }
     
-    const { userId, petId } = JSON.parse(dataStr);
+    // Lấy thông tin từ object
+    const { userId, petId } = data;
     
     // Xóa token ngay lập tức (One-time use)
     await this.redisService.del(`pass_token:${token}`);
