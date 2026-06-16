@@ -1,33 +1,54 @@
 // src/modules/wallet/wallet.controller.ts
-import { Controller, Get, Param, Res, UseGuards } from '@nestjs/common';
-import type { Response } from 'express';
-import { WalletService } from './wallet.service';
-import { JwtAuthGuard } from '../auth/guards/jwt.guard';
-import { User } from '../../common/decorators/user.decorator';
+import { Controller, Get, Post, Param, Res, UseGuards, HttpException, HttpStatus } from '@nestjs/common';
+import { v4 as uuidv4 } from 'uuid';
+import { RedisService } from '../../database/redis/redis.service'; // Dịch vụ Redis của bạn
 
 @Controller('wallet')
-@UseGuards(JwtAuthGuard)
 export class WalletController {
-  constructor(private readonly walletService: WalletService) {}
+  constructor(
+    private readonly walletService: WalletService,
+    private readonly redisService: RedisService,
+  ) {}
 
-  // Tải thẻ định danh .pkpass của 1 bé pet để thêm vào Apple Wallet
-  // FE (React Native) gọi kèm Bearer token rồi present file qua PassKit
-  @Get('pets/:petId/pass')
-  async downloadPetPass(
+  // Bước 1: App gọi endpoint này (CÓ AUTH) để xin URL tải pass
+  @Post('pets/:petId/pass-token')
+  @UseGuards(JwtAuthGuard)
+  async generatePassDownloadToken(
     @User('id') userId: string,
     @Param('petId') petId: string,
+  ) {
+    const token = uuidv4();
+    // Lưu thông tin vào Redis, hết hạn sau 60 giây (ngăn chặn chia sẻ link trái phép)
+    await this.redisService.set(`pass_token:${token}`, JSON.stringify({ userId, petId }), 60);
+    
+    // Trả về URL public đính kèm token
+    return { 
+      url: `${process.env.API_BASE_URL}/wallet/download-pass/${token}` 
+    };
+  }
+
+  // Bước 2: OS gọi endpoint này (PUBLIC) để tải file binary
+  @Get('download-pass/:token')
+  // @Public() - Đảm bảo không gắn JwtAuthGuard
+  async downloadPassByToken(
+    @Param('token') token: string,
     @Res() res: Response,
   ) {
-    const { buffer, fileName } = await this.walletService.generatePetPass(
-      userId,
-      petId,
-    );
+    const dataStr = await this.redisService.get(`pass_token:${token}`);
+    if (!dataStr) {
+      throw new HttpException('Token expired or invalid', HttpStatus.FORBIDDEN);
+    }
+    
+    const { userId, petId } = JSON.parse(dataStr);
+    
+    // Xóa token ngay lập tức (One-time use)
+    await this.redisService.del(`pass_token:${token}`);
+
+    const { buffer, fileName } = await this.walletService.generatePetPass(userId, petId);
 
     res.set({
-      // Content-Type chuẩn Apple — Safari/iOS dựa vào header này để mở preview "Add to Wallet"
       'Content-Type': 'application/vnd.apple.pkpass',
       'Content-Disposition': `attachment; filename="${fileName}"`,
-      // Thẻ là snapshot tại thời điểm tải — không cho cache để lần tải sau luôn là data mới nhất
       'Cache-Control': 'no-cache, no-store, must-revalidate',
     });
     res.send(buffer);
