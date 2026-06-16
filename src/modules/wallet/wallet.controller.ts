@@ -2,6 +2,8 @@
 import { Controller, Get, Post, Param, Res, UseGuards, HttpException, HttpStatus } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { RedisService } from '../../database/redis/redis.service'; // Dịch vụ Redis của bạn
+import { JwtAuthGuard } from '../auth/guards/jwt.guard';
+import { WalletService } from './wallet.service';
 
 @Controller('wallet')
 export class WalletController {
