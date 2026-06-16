@@ -14,6 +14,7 @@ export class WalletController {
     private readonly walletService: WalletService,
     private readonly redisService: RedisService,
   ) {}
+  
 
   // Bước 1: App gọi endpoint này (CÓ AUTH) để xin URL tải pass
   @Post('pets/:petId/pass-token')
