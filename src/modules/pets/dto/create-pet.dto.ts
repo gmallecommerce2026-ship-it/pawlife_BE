@@ -1,5 +1,5 @@
 import { IsString, IsNotEmpty, IsOptional, IsNumber, IsArray, IsEnum, IsBoolean, IsDateString, ArrayMaxSize, ValidateNested } from 'class-validator';
-import { PetGender, PetSize } from '@prisma/client'; // Import Enum từ Prisma
+import { PetGender, PetSize, VerificationStatus } from '@prisma/client'; // Import Enum từ Prisma
 import { Type } from 'class-transformer';
 export class MedicalRecordDto {
   @IsString()
@@ -29,6 +29,10 @@ export class MedicalRecordDto {
   @IsString()
   @IsOptional()
   nextDueName?: string;
+
+  @IsEnum(VerificationStatus)
+  @IsOptional()
+  verificationStatus?: VerificationStatus;
 }
 export class CreatePetDto {
   @IsString()
@@ -73,7 +77,7 @@ export class CreatePetDto {
   images?: string[];
 
   // --- CÁC TRƯỜNG MỚI THÊM ---
-  
+
   @IsEnum(PetGender)
   @IsOptional()
   gender?: PetGender; // MALE, FEMALE, UNKNOWN
@@ -92,11 +96,11 @@ export class CreatePetDto {
 
   @IsBoolean()
   @IsOptional()
-  isVaccinated?: boolean; 
+  isVaccinated?: boolean;
 
   @IsBoolean()
   @IsOptional()
-  isSpayedNeutered?: boolean; 
+  isSpayedNeutered?: boolean;
 
   @IsArray()
   @ValidateNested({ each: true })
