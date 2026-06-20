@@ -163,6 +163,7 @@ model Shelter {
   contactInfo String
   
   emailAddress String?
+  shelterType  String?   @default("Animal Shelter & Rescue")
   isVerified   Boolean   @default(false)
   createdAt    DateTime  @default(now())
   verifiedAt   DateTime?

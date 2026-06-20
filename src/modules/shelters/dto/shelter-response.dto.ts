@@ -8,6 +8,9 @@ export class ShelterResponseDto {
   @Expose()
   name!: string; // Thêm dấu ! ở đây
 
+  @Expose()
+  shelterType?: string;
+
   // Luôn luôn map về avatarUrl cho toàn bộ hệ thống
   @Expose()
   avatarUrl!: string; // Thêm dấu ! ở đây
