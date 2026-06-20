@@ -124,7 +124,8 @@ export class PetsService {
         where: { id: tagId },
         data: {
           petId: petId,
-          status: 'ACTIVE'
+          status: 'ACTIVE',
+          linkedAt: new Date()
         }
       }),
       this.prisma.pet.update({
@@ -758,7 +759,8 @@ export class PetsService {
             where: { id: tagId },
             data: {
               petId: newPet.id,
-              status: 'ACTIVE'
+              status: 'ACTIVE',
+              linkedAt: new Date()
             }
           });
 
@@ -932,16 +934,23 @@ export class PetsService {
 
       // Sự kiện 3: Vòng cổ QR
       if (pet.tags && pet.tags.length > 0) {
-        const activeTag = pet.tags.find(t => t.status !== 'INACTIVE');
-        if (activeTag) {
+        // Chỉ lấy những tag đã từng được link với Pet này
+        const linkedTags = pet.tags.filter(t => t.linkedAt !== null);
+
+        linkedTags.forEach(tag => {
+          // Nếu tag đang INACTIVE, nghĩa là nó là vòng cổ cũ đã bị Replace
+          const isActiveTag = tag.status !== 'INACTIVE';
+
           pawHistory.push({
-            id: `tag_${activeTag.id}`,
+            id: `tag_${tag.id}`,
             type: 'QR_LINKED',
-            title: 'QR Code Registered',
-            date: activeTag.status === 'ACTIVE' ? pet.updatedAt : pet.createdAt,
-            description: `Vòng cổ thông minh được kích hoạt cho ${pet.name}.`
+            title: isActiveTag ? 'QR Code Registered' : 'QR Code Replaced',
+            date: tag.linkedAt, // Dùng mốc thời gian cố định, không bao giờ bị nhảy
+            description: isActiveTag
+              ? `Vòng cổ thông minh được kích hoạt cho ${pet.name}.`
+              : `Vòng cổ thông minh cũ đã được thay thế.`,
           });
-        }
+        });
       }
 
       // Sự kiện 4: Lịch sử Vaccine
@@ -1070,7 +1079,8 @@ export class PetsService {
         where: { id: newTagId },
         data: {
           petId: pet.id,
-          status: 'ACTIVE'
+          status: 'ACTIVE',
+          linkedAt: new Date()
         },
       });
 

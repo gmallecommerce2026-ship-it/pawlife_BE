@@ -363,8 +363,10 @@ model Tag {
 
   petId String?
   pet   Pet?    @relation(fields: [petId], references: [id], onDelete: SetNull)
-
+  linkedAt  DateTime?
   reports TagReport[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 // ==========================================
