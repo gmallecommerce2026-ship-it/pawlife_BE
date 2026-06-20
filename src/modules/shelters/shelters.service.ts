@@ -171,14 +171,6 @@ export class SheltersService {
         },
       });
 
-      await this.notificationsService.createAndSendNotification({
-        userId: userId,
-        title: '🏠 Followed shelter',
-        body: `You have started following the shelter ${shelter.name}. You will receive the latest updates from them.`,
-        type: NotificationType.SYSTEM,
-        referenceId: shelterId,
-      });
-
       return { message: 'Successfully followed the shelter' };
     } catch (error: any) {
       if (error.code === 'P2002') {

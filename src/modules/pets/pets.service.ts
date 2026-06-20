@@ -364,14 +364,14 @@ export class PetsService {
     }
 
     // The Notifications Service part below already applies i18n well
-    await this.notificationsService.createAndSendNotification({
-      userId: userId,
-      title: isLost ? '🚨 Lost alarm!' : '✅ Pet is safe',
-      body: isLost ? `You have TURNED ON lost mode for ${pet.name}.` : `You have TURNED OFF lost mode for ${pet.name}.`,
-      type: NotificationType.TAG,
-      referenceId: petId,
-      metadata: { i18n: { titleKey: isLost ? 'notification.lost_mode_on_title' : 'notification.lost_mode_off_title', bodyKey: isLost ? 'notification.lost_mode_on_body' : 'notification.lost_mode_off_body', params: { petName: pet.name } } }
-    });
+    // await this.notificationsService.createAndSendNotification({
+    //   userId: userId,
+    //   title: isLost ? '🚨 Lost alarm!' : '✅ Pet is safe',
+    //   body: isLost ? `You have TURNED ON lost mode for ${pet.name}.` : `You have TURNED OFF lost mode for ${pet.name}.`,
+    //   type: NotificationType.TAG,
+    //   referenceId: petId,
+    //   metadata: { i18n: { titleKey: isLost ? 'notification.lost_mode_on_title' : 'notification.lost_mode_off_title', bodyKey: isLost ? 'notification.lost_mode_on_body' : 'notification.lost_mode_off_body', params: { petName: pet.name } } }
+    // });
 
     if (!isLost) {
       try {
