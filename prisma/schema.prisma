@@ -255,7 +255,9 @@ model Pet {
   vetVerificationStatus VerificationStatus @default(PENDING)
   qrCodeUrl             String?
   qrVerificationStatus  VerificationStatus @default(PENDING)
-
+  
+  idSetByShelter String? @unique
+  
   interactions PetInteraction[]
   favoritedBy  FavoritePet[]    @relation("PetFavoritedBy")
   transferRequests  TransferRequest[]

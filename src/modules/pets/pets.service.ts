@@ -63,6 +63,26 @@ export class PetsService {
     return R * c;
   }
 
+  private generateShelterCode(): string {
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const randomLetter = letters[Math.floor(Math.random() * letters.length)];
+    const randomDigits = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `SH-${randomLetter}${randomDigits}`;
+  }
+
+  private async generateUniqueShelterCode(): Promise<string> {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const code = this.generateShelterCode();
+      const existing = await this.prisma.pet.findUnique({
+        where: { idSetByShelter: code },
+        select: { id: true },
+      });
+      if (!existing) return code;
+    }
+    // Fallback cuối nếu đụng mã liên tục 5 lần (cực hiếm): thêm timestamp đảm bảo unique
+    return `${this.generateShelterCode()}-${Date.now().toString().slice(-4)}`;
+  }
+
   private async getAvailablePetsByShelterIds(shelterIds: string[]) {
     const cacheKey = `pets:available:shelters:${shelterIds.sort().join('_')}`;
 
@@ -688,7 +708,7 @@ export class PetsService {
   async createPet(userId: string, createPetDto: CreatePetDto) {
     const { images, tagId, medicalRecords, ...petData } = createPetDto;
     const publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN');
-
+    const idSetByShelter = await this.generateUniqueShelterCode();
     // Format lại data cho medical records
     const medicalRecordsData = medicalRecords && medicalRecords.length > 0 ? {
       create: medicalRecords.map(record => ({
@@ -724,6 +744,7 @@ export class PetsService {
               status: 'ADOPTED',
               qrVerificationStatus: 'VERIFIED',
               qrCodeUrl: `${publicDomain}/qr-codes/${tagId}.svg`,
+              idSetByShelter,
               ...(images && images.length > 0 && {
                 images: { create: images.map(url => ({ url })) }
               }),
@@ -753,6 +774,7 @@ export class PetsService {
           ...petData,
           ownerId: userId,
           status: 'ADOPTED',
+          idSetByShelter,
           ...(images && images.length > 0 && {
             images: { create: images.map(url => ({ url })) }
           }),
@@ -852,6 +874,16 @@ export class PetsService {
 
       if (!pet) throw new NotFoundException('Không tìm thấy thông tin thú cưng này!');
 
+      if (!pet.idSetByShelter) {
+        const newCode = await this.generateUniqueShelterCode();
+        await this.prisma.pet.update({
+          where: { id: pet.id },
+          data: { idSetByShelter: newCode },
+        });
+        pet.idSetByShelter = newCode; // gán lại vào object đang xử lý để response có ngay, không cần fetch lại
+      }
+
+
       let formattedShelter: any = null;
       if (pet.shelter) {
         formattedShelter = {
@@ -920,7 +952,7 @@ export class PetsService {
             id: `med_${record.id}`,
             type: 'VACCINE', // Có thể giữ VACCINE hoặc đổi thành MEDICAL
             title: record.recordName,
-            date: record.recordDate, 
+            date: record.recordDate,
             description: `Hồ sơ ${record.type}: ${record.recordName}`
           });
         });
