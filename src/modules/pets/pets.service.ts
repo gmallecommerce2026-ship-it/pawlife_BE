@@ -62,7 +62,10 @@ export class PetsService {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
-
+  private diffInDays(date1: Date, date2: Date): number {
+    const diffTime = Math.abs(date2.getTime() - date1.getTime());
+    return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  }
   private generateShelterCode(): string {
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const randomLetter = letters[Math.floor(Math.random() * letters.length)];
@@ -1198,21 +1201,60 @@ export class PetsService {
       where: { id: petId },
     });
 
-    if (!pet) {
-      throw new NotFoundException('Không tìm thấy thú cưng này!');
-    }
-
+    if (!pet) throw new NotFoundException('Không tìm thấy thú cưng này!');
     if (pet.ownerId !== userId && pet.shelterId !== userId) {
       throw new ConflictException('Bạn không có quyền chỉnh sửa thông tin thú cưng này!');
     }
 
-    const { images, medicalRecords, ...petInfo } = updateData;
+    const now = new Date();
+
+    // 1. LOGIC KHÓA TÊN (NAME)
+    if (updateData.name && updateData.name !== pet.name) {
+      const isAdopted = pet.status === 'ADOPTED';
+      const daysSinceAdoption = pet.adoptedAt ? this.diffInDays(now, pet.adoptedAt) : 999;
+
+      // Nếu ĐÃ nhận nuôi và TRONG VÒNG 30 ngày -> Cho phép đổi vô hạn
+      const isUnlimitedNameChange = isAdopted && daysSinceAdoption <= 30;
+
+      if (!isUnlimitedNameChange) {
+        // Nếu không nằm trong tuần trăng mật 30 ngày -> Check rule 14 ngày
+        if (pet.nameLastUpdatedAt) {
+          const daysSinceLastNameChange = this.diffInDays(now, pet.nameLastUpdatedAt);
+          if (daysSinceLastNameChange < 14) {
+            throw new BadRequestException(`Bạn chỉ có thể đổi tên 1 lần mỗi 14 ngày. Cần đợi thêm ${14 - daysSinceLastNameChange} ngày nữa.`);
+          }
+        }
+      }
+      // Ghi nhận lại thời gian đổi tên lần này
+      updateData.nameLastUpdatedAt = now;
+    }
+
+    // 2. LOGIC KHÓA THÔNG TIN CỐ ĐỊNH (DOB, BREED, GENDER) SAU 7 NGÀY
+    const daysSinceCreation = this.diffInDays(now, pet.createdAt);
+    const isCoreInfoLocked = daysSinceCreation >= 7;
+
+    if (isCoreInfoLocked) {
+      // Chỉ ném lỗi nếu user cố tình thay đổi dữ liệu ĐÃ CÓ (khác null và khác giá trị cũ)
+      // Nếu giá trị cũ là null (chưa set) thì vẫn cho phép set lần đầu.
+      if (updateData.dob && pet.dob && new Date(updateData.dob).getTime() !== pet.dob.getTime()) {
+        throw new BadRequestException('Ngày sinh không thể thay đổi sau 7 ngày tạo hồ sơ.');
+      }
+      if (updateData.breed && pet.breed && updateData.breed !== pet.breed) {
+        throw new BadRequestException('Giống thú cưng không thể thay đổi sau 7 ngày tạo hồ sơ.');
+      }
+      if (updateData.gender && pet.gender && updateData.gender !== pet.gender) {
+        throw new BadRequestException('Giới tính không thể thay đổi sau 7 ngày tạo hồ sơ.');
+      }
+    }
+
+    const { images, medicalRecords, nameLastUpdatedAt, ...petInfo } = updateData;
 
     try {
       const updatedPet = await this.prisma.pet.update({
         where: { id: petId },
         data: {
           ...petInfo,
+          ...(nameLastUpdatedAt && { nameLastUpdatedAt }),
           ...(images && images.length > 0 && {
             images: {
               deleteMany: {},

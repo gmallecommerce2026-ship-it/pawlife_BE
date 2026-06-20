@@ -2,13 +2,13 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { GetNotificationsDto, CreateNotificationDto } from './dto/notification.dto';
 import { NotificationsGateway } from './notifications.gateway';
-import { NotificationType } from '@prisma/client'; 
+import { NotificationType } from '@prisma/client';
 
 export interface PushNotificationPayload {
   title: string;
   body: string;
   referenceId?: string;
-  data?: any;           
+  data?: any;
 }
 
 @Injectable()
@@ -18,7 +18,7 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsGateway: NotificationsGateway,
-  ) {}
+  ) { }
 
   async createAndSendNotification(data: CreateNotificationDto) {
     const notification = await this.prisma.notification.create({
@@ -41,18 +41,18 @@ export class NotificationsService {
     try {
       await this.createAndSendNotification({
         userId: userId,
-        type: NotificationType.TAG_SCANNED, 
+        type: NotificationType.TAG_SCANNED,
         title: payload.title,
         body: payload.body,
-        referenceId: payload.referenceId, 
+        referenceId: payload.referenceId,
         metadata: payload.data || {},
-      } as unknown as CreateNotificationDto); 
+      } as unknown as CreateNotificationDto);
 
       this.logger.log(`[Push Notification] Đã gửi thông báo tới user: ${userId}`);
       return true;
     } catch (error) {
       this.logger.error(`Lỗi gửi Push Notification:`, error);
-      return false; 
+      return false;
     }
   }
 
@@ -112,16 +112,16 @@ export class NotificationsService {
 
     if (notification.referenceId) {
       switch (notification.type) {
-        case 'TAG_SCANNED': 
+        case 'TAG_SCANNED':
           detailData = await this.prisma.tagReport.findUnique({
-          where: { id: notification.referenceId },
-          include: {
-            tag: {
-              include: { pet: { include: { owner: true, images: true } } },
+            where: { id: notification.referenceId },
+            include: {
+              tag: {
+                include: { pet: { include: { owner: true, images: true } } },
+              },
             },
-          },
-        });
-        break;
+          });
+          break;
 
         case 'EVENT':
           detailData = await this.prisma.event.findUnique({
@@ -133,7 +133,7 @@ export class NotificationsService {
 
         case 'SECURITY':
         case 'PASSWORD':
-          detailData = notification.metadata || { 
+          detailData = notification.metadata || {
             actionRequired: "Vui lòng kiểm tra lại lịch sử đăng nhập. Nếu có bất thường, hãy đổi mật khẩu ngay.",
             suggestedRoute: "/account-security"
           };
@@ -178,19 +178,30 @@ export class NotificationsService {
       }
 
       const isPrecise = report.radius <= 5;
-      const title = '📍 Vị trí mới của thú cưng!';
-      const body = isPrecise
+
+      // Vẫn giữ text mặc định (fallback) cho DB/Push notification hệ thống cũ
+      const titleFallback = '📍 Vị trí mới của thú cưng!';
+      const bodyFallback = isPrecise
         ? `Ai đó vừa tìm thấy ${petName} tại vị trí chính xác của họ.`
         : `Ai đó vừa chia sẻ khu vực nghi vấn của ${petName} trong bán kính ${report.radius}m.`;
 
+      // Khai báo Key dịch thuật tương ứng
+      const titleKey = 'notification.tag_scanned_title';
+      const bodyKey = isPrecise ? 'notification.tag_scanned_precise' : 'notification.tag_scanned_radius';
+
       await this.sendPushNotification(ownerId, {
-        title,
-        body,
-        referenceId: report.id, 
+        title: titleFallback,
+        body: bodyFallback,
+        referenceId: report.id,
         data: {
           type: 'TAG_SCANNED',
           reportId: report.id,
-          petName: petName,
+          // BỔ SUNG THÊM I18N DATA CHO FRONTEND
+          i18n: {
+            titleKey: titleKey,
+            bodyKey: bodyKey,
+            params: { petName, radius: report.radius }
+          }
         }
       });
 

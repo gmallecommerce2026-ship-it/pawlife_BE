@@ -286,6 +286,8 @@ model Pet {
   lostDateTime       String?  // Thời gian thất lạc
   lostDetails        String?  // Đặc điểm nhận dạng / Lời nhắn
   needsQrReplacement Boolean @default(false)
+  nameLastUpdatedAt DateTime? 
+  adoptedAt         DateTime?
 }
 
 model AdoptionApplication {
