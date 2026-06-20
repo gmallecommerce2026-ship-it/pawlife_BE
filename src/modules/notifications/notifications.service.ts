@@ -37,11 +37,20 @@ export class NotificationsService {
     return notification;
   }
 
-  async sendPushNotification(userId: string, payload: PushNotificationPayload) {
+  /**
+   * type cho phép truyền vào để không bị "khoá cứng" vào TAG_SCANNED như trước.
+   * Mặc định vẫn là TAG_SCANNED để không phá vỡ những nơi đang gọi hàm này mà
+   * không truyền type (giữ tương thích ngược).
+   */
+  async sendPushNotification(
+    userId: string,
+    payload: PushNotificationPayload,
+    type: NotificationType = NotificationType.TAG_SCANNED,
+  ) {
     try {
       await this.createAndSendNotification({
         userId: userId,
-        type: NotificationType.TAG_SCANNED,
+        type,
         title: payload.title,
         body: payload.body,
         referenceId: payload.referenceId,
@@ -82,7 +91,6 @@ export class NotificationsService {
   }
 
   async deleteNotification(userId: string, notificationId: string) {
-    // Find the notification by id and ensure it belongs to the requesting user
     const notification = await this.prisma.notification.findUnique({
       where: { id: notificationId, userId },
     });
@@ -91,7 +99,6 @@ export class NotificationsService {
       throw new NotFoundException('Notification not found or you do not have permission to delete it');
     }
 
-    // Execute deletion
     await this.prisma.notification.delete({
       where: { id: notificationId },
     });
@@ -126,7 +133,6 @@ export class NotificationsService {
         case 'EVENT':
           detailData = await this.prisma.event.findUnique({
             where: { id: notification.referenceId },
-            // BUG FIX HERE: Use organizer instead of shelter
             include: { organizer: true },
           });
           break;
@@ -177,33 +183,42 @@ export class NotificationsService {
         return;
       }
 
-      const isPrecise = report.radius <= 5;
+      // Ép kiểu number an toàn — report.radius có thể là Prisma.Decimal hoặc string từ DB
+      const safeRadius = Number(report.radius) || 0;
+      const isPrecise = safeRadius <= 5;
 
-      // Keep default text (fallback) for legacy DB/Push notification systems
+      // Fallback text tiếng Anh — dùng cho push notification (tray noti) và cho các
+      // client cũ chưa hỗ trợ đọc metadata.i18n
       const titleFallback = '📍 New location of the pet!';
       const bodyFallback = isPrecise
         ? `Someone just found ${petName} at their exact location.`
-        : `Someone just shared a suspected area for ${petName} within a ${report.radius}m radius.`;
+        : `Someone just shared a suspected area for ${petName} within a ${safeRadius}m radius.`;
 
-      // Declare corresponding translation Key
+      // Key dịch tương ứng + params động — FE sẽ dùng để render song ngữ theo
+      // ngôn ngữ hiện tại của người dùng tại THỜI ĐIỂM HIỂN THỊ
       const titleKey = 'notification.tag_scanned_title';
-      const bodyKey = isPrecise ? 'notification.tag_scanned_precise' : 'notification.tag_scanned_radius';
+      const bodyKey = isPrecise
+        ? 'notification.tag_scanned_precise'
+        : 'notification.tag_scanned_radius';
 
-      await this.sendPushNotification(ownerId, {
-        title: titleFallback,
-        body: bodyFallback,
-        referenceId: report.id,
-        data: {
-          type: 'TAG_SCANNED',
-          reportId: report.id,
-          // APPEND ADDITIONAL I18N DATA FOR FRONTEND
-          i18n: {
-            titleKey: titleKey,
-            bodyKey: bodyKey,
-            params: { petName, radius: report.radius }
-          }
-        }
-      });
+      await this.sendPushNotification(
+        ownerId,
+        {
+          title: titleFallback,
+          body: bodyFallback,
+          referenceId: report.id,
+          data: {
+            type: 'TAG_SCANNED',
+            reportId: report.id,
+            i18n: {
+              titleKey,
+              bodyKey,
+              params: { petName, radius: safeRadius },
+            },
+          },
+        },
+        NotificationType.TAG_SCANNED,
+      );
 
       this.logger.log(`[notifyOwner] Sent notification to owner ${ownerId} about report ${report.id}`);
     } catch (error) {
