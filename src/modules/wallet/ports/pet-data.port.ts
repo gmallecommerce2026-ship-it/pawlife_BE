@@ -1,6 +1,5 @@
 // src/modules/wallet/ports/pet-data.port.ts
 //
-// "Cổng" (port) dữ liệu pet cho module Wallet — đây là HỢP ĐỒNG duy nhất mà
 // wallet.service được phép phụ thuộc. Service KHÔNG biết dữ liệu đến từ Prisma,
 // từ HTTP API hay từ mock test. Muốn tách Wallet thành service riêng sau này
 // thì chỉ cần viết adapter mới cài đặt interface này — code service giữ nguyên.

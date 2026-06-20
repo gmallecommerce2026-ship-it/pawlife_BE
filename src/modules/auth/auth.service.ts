@@ -16,10 +16,12 @@ import * as geoip from 'geoip-lite';
 import * as speakeasy from 'speakeasy';
 import * as qrcode from 'qrcode';
 import { RedisService } from 'src/database/redis/redis.service';
-import { InjectQueue } from '@nestjs/bullmq'; // <-- BỔ SUNG
-import { Queue } from 'bullmq'; // <-- BỔ SUNG
+import { InjectQueue } from '@nestjs/bullmq'; // <-- ADDED
+import { Queue } from 'bullmq'; // <-- ADDED
 import * as https from 'https';
+
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
 @Injectable()
 export class AuthService {
   private googleClient: OAuth2Client;
@@ -31,48 +33,48 @@ export class AuthService {
     private readonly r2Service: R2Service,
     private readonly notificationsService: NotificationsService,
     private readonly redisService: RedisService,
-    @InjectQueue('mail') private readonly mailQueue: Queue // <-- BỔ SUNG
+    @InjectQueue('mail') private readonly mailQueue: Queue // <-- ADDED
   ) {
     this.googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
   }
 
   // =======================================================
-  // HÀM ĐÃ NÂNG CẤP: DÙNG BULLMQ CHẠY NGẦM GỬI EMAIL OTP
+  // UPGRADED FUNCTION: USE BULLMQ TO SEND OTP EMAIL IN BACKGROUND
   // =======================================================
   async sendOtp(dto: SendOtpDto) {
     const { email, type } = dto;
     
     if (type === OtpType.FORGOT_PASSWORD) {
       const userExists = await this.prisma.user.findUnique({ where: { email } });
-      if (!userExists) throw new BadRequestException('Email không tồn tại trong hệ thống');
+      if (!userExists) throw new BadRequestException('Email not found');
     }
 
     const otp = this.generateOTP();
-    const redisKey = `auth:otp:${type}:${email}`; // Tạo key duy nhất cho redis
+    const redisKey = `auth:otp:${type}:${email}`; // Create unique key for redis
 
-    // 1. Lưu OTP vào Redis với TTL là 300 giây (5 phút)
+    // 1. Save OTP to Redis with a TTL of 300 seconds (5 minutes)
     await this.redisService.set(redisKey, { otp }, 300);
 
     const isSignUp = type === OtpType.SIGNUP;
-    const subject = isSignUp ? 'Mã xác nhận đăng ký tài khoản' : 'Mã xác nhận khôi phục mật khẩu';
+    const subject = isSignUp ? 'Verification code' : 'Password reset verification code';
     
-    // 2. NÉM CÔNG VIỆC VÀO BACKGROUND JOB
-    // Server sẽ đẩy đi ngay lập tức (1ms) mà không cần đợi MailerService chạy xong
+    // 2. PUSH TASK TO BACKGROUND JOB
+    // Server will dispatch immediately (1ms) without waiting for MailerService to finish
     await this.mailQueue.add(
-      'send-otp', // Tên job
-      { email, subject, otp, isSignUp }, // Payload dữ liệu
+      'send-otp', // Job name
+      { email, subject, otp, isSignUp }, // Data payload
       {
-        removeOnComplete: true, // Chạy xong xóa khỏi RAM
-        attempts: 3, // Thử gửi lại 3 lần nếu Google SMTP bị lỗi mạng
+        removeOnComplete: true, // Remove from RAM when completed
+        attempts: 3, // Retry 3 times if Google SMTP encounters a network error
       }
     );
 
-    // 3. Trả về thành công cho điện thoại ngay lập tức
-    return { message: 'Mã OTP đang được gửi đến email của bạn.' };
+    // 3. Return success to the phone immediately
+    return { message: 'The OTP code is being sent to your email.' };
   }
 
   // =======================================================
-  // TOÀN BỘ CÁC HÀM BÊN DƯỚI GIỮ NGUYÊN HOÀN TOÀN
+  // ALL FUNCTIONS BELOW REMAIN COMPLETELY UNCHANGED
   // =======================================================
   async verifyGoogleSignIn(idToken: string) {
     const ticket = await googleClient.verifyIdToken({ idToken, audience: process.env.GOOGLE_CLIENT_ID, });
@@ -96,11 +98,11 @@ export class AuthService {
 
   async logoutDevice(userId: string, deviceId: string) {
     const device = await this.prisma.deviceSession.findUnique({ where: { id: deviceId }, });
-    if (!device || device.userId !== userId) throw new BadRequestException('Thiết bị không tồn tại hoặc không thuộc quyền sở hữu của bạn.');
+    if (!device || device.userId !== userId) throw new BadRequestException('The device does not exist or does not belong to you.');
     await this.prisma.deviceSession.delete({ where: { id: deviceId } });
-      // VÔ HIỆU HÓA SESSION TRONG REDIS
+      // INVALIDATE SESSION IN REDIS
     await this.redisService.del(`auth:session:${deviceId}`);
-    return { success: true, message: 'Đã đăng xuất khỏi thiết bị.' };
+    return { success: true, message: 'Logged out of device.' };
   }
 
   private generateOTP(): string { return Math.floor(100000 + Math.random() * 900000).toString(); }
@@ -108,32 +110,32 @@ export class AuthService {
   async changePassword(userId: string, dto: ChangePasswordDto) {
     const { currentPassword, newPassword } = dto;
     const user = await this.prisma.user.findUnique({ where: { id: userId }, });
-    if (!user) throw new UnauthorizedException('Người dùng không tồn tại.');
-    if (!user.password) throw new BadRequestException('Tài khoản này đăng nhập bằng mạng xã hội, không thể đổi mật khẩu.');
+    if (!user) throw new UnauthorizedException('User does not exist.');
+    if (!user.password) throw new BadRequestException('This account was created using a social login and cannot change its password.');
     const isPasswordMatch = await bcrypt.compare(currentPassword, user.password);
-    if (!isPasswordMatch) throw new BadRequestException('Mật khẩu hiện tại không chính xác.');
+    if (!isPasswordMatch) throw new BadRequestException('The current password is incorrect.');
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
     await this.prisma.user.update({ where: { id: userId }, data: { password: hashedNewPassword }, });
-    await this.notificationsService.createAndSendNotification({ userId: user.id, title: '🔒 Cập nhật mật khẩu', body: 'Bạn vừa thay đổi mật khẩu thành công. Nếu không phải bạn thực hiện, vui lòng liên hệ hỗ trợ ngay.', type: NotificationType.SECURITY, });
+    await this.notificationsService.createAndSendNotification({ userId: user.id, title: '🔒 Update password', body: 'You have successfully changed your password. If you did not initiate this change, please contact support immediately.', type: NotificationType.SECURITY, });
     await this.redisService.del(`auth:user_profile:${userId}`);
-    return { message: 'Mật khẩu của bạn đã được thay đổi thành công.' };
+    return { message: 'Your password has been successfully changed.' };
   }
 
   async register(dto: RegisterDto) {
     const { email, otp, password, name, phone, gender, dob, avatarUrl } = dto;
     const existingUser = await this.prisma.user.findUnique({ where: { email: email } });
-    if (existingUser) throw new ConflictException('Địa chỉ email này đã được sử dụng!');
+    if (existingUser) throw new ConflictException('This email address is already in use!');
     const redisKey = `auth:otp:${OtpType.SIGNUP}:${email}`;
     const otpRecord = await this.redisService.get<{ otp: string }>(redisKey);
-    if (!otpRecord) throw new BadRequestException('Vui lòng gửi mã OTP trước khi đăng ký hoặc mã đã hết hạn');
-    if (otpRecord.otp !== otp) throw new BadRequestException('Mã OTP không chính xác');
+    if (!otpRecord) throw new BadRequestException('Please request a new OTP before registering, as the previous one has expired.');
+    if (otpRecord.otp !== otp) throw new BadRequestException('The OTP is incorrect');
     const hashedPassword = await bcrypt.hash(password, 10);
     const newUser = await this.prisma.$transaction(async (tx) => {
       return await tx.user.create({ data: { email, password: hashedPassword, name, phone, gender, dob, avatarUrl, }, });
     });
     await this.redisService.del(redisKey);
-    await this.notificationsService.createAndSendNotification({ userId: newUser.id, title: '🎉 Chào mừng đến với PawLife', body: 'Tài khoản của bạn đã được bảo mật thành công. Hãy bắt đầu hành trình cùng thú cưng nhé!', type: NotificationType.SECURITY, });
-    return { message: 'Đăng ký thành công', user: newUser };
+    await this.notificationsService.createAndSendNotification({ userId: newUser.id, title: '🎉 Welcome to PawLife', body: 'Your account has been securely set up. Let the pet journey begin!', type: NotificationType.SECURITY, });
+    return { message: 'Registration successful', user: newUser };
   }
 
   async resetPassword(dto: ResetPasswordDto) {
@@ -141,8 +143,8 @@ export class AuthService {
     const redisKey = `auth:otp:${OtpType.FORGOT_PASSWORD}:${email}`;
     const otpRecord = await this.redisService.get<{ otp: string }>(redisKey);
     
-    if (!otpRecord) throw new BadRequestException('Vui lòng gửi yêu cầu quên mật khẩu trước hoặc mã đã hết hạn.');
-    if (otpRecord.otp !== otp) throw new BadRequestException('Mã OTP không chính xác.');
+    if (!otpRecord) throw new BadRequestException('Please submit a new password reset request or the code has expired.');
+    if (otpRecord.otp !== otp) throw new BadRequestException('The OTP you entered is invalid.');
     
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     const updatedUser = await this.prisma.$transaction(async (tx) => { 
@@ -152,45 +154,45 @@ export class AuthService {
       }); 
     });
     
-    // 1. Xóa OTP đã sử dụng
+    // 1. Delete used OTP
     await this.redisService.del(redisKey);
     
     // =========================================================================
-    // 2. BỔ SUNG: XÓA CACHE USER PROFILE ĐỂ VÔ HIỆU HÓA JWT TOKEN CŨ
+    // 2. ADDED: CLEAR USER PROFILE CACHE TO INVALIDATE OLD JWT TOKEN
     // =========================================================================
     await this.redisService.del(`auth:user_profile:${updatedUser.id}`);
     
-    // 3. Gửi thông báo
+    // 3. Send notification
     await this.notificationsService.createAndSendNotification({ 
       userId: updatedUser.id, 
-      title: '🔒 Đổi mật khẩu thành công', 
-      body: 'Mật khẩu tài khoản của bạn vừa được cập nhật. Nếu bạn không thực hiện việc này, vui lòng liên hệ với chúng tôi ngay lập tức.', 
+      title: '🔒 Password changed successfully', 
+      body: 'Your account password has just been updated. If you did not do this, please contact us immediately.', 
       type: NotificationType.SECURITY, 
     });
     
-    return { message: 'Mật khẩu đã được thay đổi thành công. Bạn có thể đăng nhập bằng mật khẩu mới.' };
+    return { message: 'Password has been changed successfully. You can log in with the new password.' };
   }
   
   async generateTwoFactorAuthenticationSecret(userId: string, email: string) {
     const secret = speakeasy.generateSecret({ name: `PawLife (${email})`, });
     await this.prisma.user.update({ where: { id: userId }, data: { twoFactorSecret: secret.base32 }, });
-    if (!secret.otpauth_url) throw new InternalServerErrorException('Lỗi hệ thống: Không thể tạo URL cho 2FA.');
+    if (!secret.otpauth_url) throw new InternalServerErrorException('System error: Cannot generate URL for 2FA.');
     const qrCodeDataUrl = await qrcode.toDataURL(secret.otpauth_url);
     return { secret: secret.base32, qrCodeUrl: qrCodeDataUrl };
   }
 
   async turnOnTwoFactorAuthentication(userId: string, code: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user?.twoFactorSecret) throw new BadRequestException('Chưa tạo mã bí mật 2FA.');
+    if (!user?.twoFactorSecret) throw new BadRequestException('2FA secret code has not been generated.');
     const isCodeValid = speakeasy.totp.verify({ secret: user.twoFactorSecret, encoding: 'base32', token: code, window: 1, });
-    if (!isCodeValid) throw new BadRequestException('Mã 2FA không chính xác.');
+    if (!isCodeValid) throw new BadRequestException('Incorrect 2FA code.');
     await this.prisma.user.update({ where: { id: userId }, data: { isTwoFactorEnabled: true }, });
-    return { message: 'Đã bật xác thực 2 bước thành công.' };
+    return { message: 'Two-factor authentication enabled successfully.' };
   }
 
   async turnOffTwoFactorAuthentication(userId: string) {
     await this.prisma.user.update({ where: { id: userId }, data: { isTwoFactorEnabled: false, twoFactorSecret: null }, });
-    return { message: 'Đã tắt xác thực 2 bước.' };
+    return { message: 'Two-factor authentication disabled.' };
   }
 
   async login(
@@ -199,26 +201,26 @@ export class AuthService {
     ip: string, 
     deviceNameHeader?: string, 
     deviceOsHeader?: string, 
-    deviceIdHeader?: string // <-- 1. THÊM THAM SỐ NÀY
+    deviceIdHeader?: string // <-- 1. ADD THIS PARAMETER
   ) {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
     
-    if (!user || !user.password) throw new UnauthorizedException('Tài khoản hoặc mật khẩu không chính xác.');
+    if (!user || !user.password) throw new UnauthorizedException('Incorrect account or password.');
     
     const isPasswordMatch = await bcrypt.compare(dto.password, user.password);
-    if (!isPasswordMatch) throw new UnauthorizedException('Tài khoản hoặc mật khẩu không chính xác.');
+    if (!isPasswordMatch) throw new UnauthorizedException('Incorrect account or password.');
     
     if (user.isTwoFactorEnabled) {
       const tempToken = this.jwtService.sign({ userId: user.id, is2FAPending: true }, { expiresIn: '5m' });
-      return { requires2FA: true, tempToken, message: 'Vui lòng nhập mã Authenticator để tiếp tục.', };
+      return { requires2FA: true, tempToken, message: 'Please enter the Authenticator code to continue.', };
     }
     
-    // <-- 2. TRUYỀN TIẾP XUỐNG HÀM XỬ LÝ CHÍNH
+    // <-- 2. PASS DOWN TO MAIN HANDLER FUNCTION
     return await this.generateAuthResponse(user, userAgent, ip, deviceNameHeader, deviceOsHeader, deviceIdHeader, dto.rememberMe);
   }
 
   async updateProfile(userId: string, updateData: any) {
-    // Tránh việc user gửi các field nhạy cảm như password, role, isDeleted...
+    // Prevent users from sending sensitive fields like password, role, isDeleted...
     const allowedUpdates = {
       name: updateData.name,
       phone: updateData.phone,
@@ -227,7 +229,7 @@ export class AuthService {
       avatarUrl: updateData.avatarUrl,
     };
 
-    // Loại bỏ các key undefined
+    // Remove undefined keys
     Object.keys(allowedUpdates).forEach(key => allowedUpdates[key] === undefined && delete allowedUpdates[key]);
 
     const updatedUser = await this.prisma.user.update({
@@ -236,26 +238,26 @@ export class AuthService {
     });
 
     // =========================================================================
-    // FIX BUG Ở ĐÂY: Xóa cache Redis để invalidate data cũ. 
-    // Lần gọi API /me hoặc login tiếp theo hệ thống buộc phải query lại DB mới nhất.
+    // FIX BUG HERE: Clear Redis cache to invalidate old data. 
+    // The next /me or login API call will force a fresh DB query.
     // =========================================================================
     await this.redisService.del(`auth:user_profile:${userId}`);
 
     return {
-      message: 'Cập nhật thành công',
+      message: 'Update successful',
       user: updatedUser
     };
   }
 
   async loginWith2fa(tempToken: string, code: string, userAgent: string, ip: string, deviceNameHeader?: string, deviceOsHeader?: string) {
     let decoded;
-    try { decoded = this.jwtService.verify(tempToken); } catch (error) { throw new UnauthorizedException('Phiên đăng nhập 2FA đã hết hạn. Vui lòng đăng nhập lại.'); }
-    if (!decoded.is2FAPending) throw new UnauthorizedException('Token không hợp lệ.');
+    try { decoded = this.jwtService.verify(tempToken); } catch (error) { throw new UnauthorizedException('The 2FA session has expired. Please log in again.'); }
+    if (!decoded.is2FAPending) throw new UnauthorizedException('Invalid token.');
     const user = await this.prisma.user.findUnique({ where: { id: decoded.userId } });
-    if (!user) throw new UnauthorizedException('Người dùng không tồn tại.');
-    if (!user.twoFactorSecret) throw new UnauthorizedException('Tài khoản này chưa cài đặt mã bảo mật 2FA.');
+    if (!user) throw new UnauthorizedException('User does not exist.');
+    if (!user.twoFactorSecret) throw new UnauthorizedException('This account has not set up a 2FA security code.');
     const isCodeValid = speakeasy.totp.verify({ secret: user.twoFactorSecret, encoding: 'base32', token: code, window: 1, });
-    if (!isCodeValid) throw new UnauthorizedException('Mã 2FA không chính xác.');
+    if (!isCodeValid) throw new UnauthorizedException('Incorrect 2FA code.');
     return await this.generateAuthResponse(user, userAgent, ip, deviceNameHeader, deviceOsHeader);
   }
 
@@ -272,8 +274,8 @@ export class AuthService {
         await tx.user.update({ where: { id: userId }, data: { email: deletedEmail, password: '', avatarUrl: null, name: 'Deleted User', phone: null, isDeleted: true, deletedAt: new Date(), }, });
       });
       await this.redisService.del(`auth:user_profile:${userId}`);
-      return { success: true, message: 'Tài khoản đã được xóa vĩnh viễn.' };
-    } catch (error) { throw new InternalServerErrorException('Không thể xóa tài khoản lúc này'); }
+      return { success: true, message: 'Account has been permanently deleted.' };
+    } catch (error) { throw new InternalServerErrorException('Cannot delete account at this time'); }
   }
 
   private extractFileKey(url: string): string { const urlObj = new URL(url); return urlObj.pathname.substring(1); }
@@ -285,21 +287,21 @@ export class AuthService {
         case 'GOOGLE': {
           const ticket = await this.googleClient.verifyIdToken({ idToken: dto.token, audience: process.env.GOOGLE_CLIENT_ID, });
           const payload = ticket.getPayload();
-          if (!payload || !payload.email) throw new BadRequestException('Google token không hợp lệ.');
+          if (!payload || !payload.email) throw new BadRequestException('Invalid Google token.');
           email = payload.email; if (!name) name = payload.name || email.split('@')[0]; picture = payload.picture || null; break;
         }
         case 'FACEBOOK': {
-          // Gọi API của Facebook để lấy thông tin
-          const httpsAgent = new https.Agent({ family: 4 }); // Ép dùng IPv4
+          // Call Facebook API to get info
+          const httpsAgent = new https.Agent({ family: 4 }); // Force IPv4
           const { data } = await axios.get(
             `https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${dto.token}`,
             { httpsAgent }
           );
           
-          if (!data) throw new BadRequestException('Không thể kết nối với hệ thống Facebook.');
+          if (!data) throw new BadRequestException('Cannot connect to the Facebook system.');
           
-          // CHIẾN LƯỢC FALLBACK EMAIL: 
-          // Rất nhiều user tạo FB bằng SĐT nên sẽ không có email. Ta tạo email ảo để không làm gián đoạn luồng đăng nhập.
+          // EMAIL FALLBACK STRATEGY: 
+          // Many users create FB with a phone number so they won't have an email. We create a dummy email to avoid disrupting the login flow.
           email = data.email || `${data.id}@facebook.pawlife.local`; 
           
           if (!name) name = data.name || `User_${data.id.substring(0, 6)}`; 
@@ -308,22 +310,22 @@ export class AuthService {
         }
         case 'APPLE': {
           const payload = await appleSignin.verifyIdToken(dto.token, { audience: process.env.APPLE_CLIENT_ID, ignoreExpiration: true, });
-          if (!payload || typeof payload.email !== 'string') throw new BadRequestException('Apple token lỗi.');
+          if (!payload || typeof payload.email !== 'string') throw new BadRequestException('Apple token error.');
           email = payload.email; if (!name) name = email.split('@')[0]; break;
         }
-        default: throw new BadRequestException('Provider không được hỗ trợ.');
+        default: throw new BadRequestException('Unsupported provider.');
       }
     } catch (error: any) { 
-      // 1. Ghi log chi tiết lỗi từ Axios (Facebook API) để dễ debug
-      const realError = error?.response?.data?.error?.message || error?.message || 'Lỗi không xác định';
-      console.error('Lỗi Social Login Thật:', realError);
+      // 1. Log detailed errors from Axios (Facebook API) for easy debugging
+      const realError = error?.response?.data?.error?.message || error?.message || 'Unknown error';
+      console.error('Real Social Login Error:', realError);
 
       if (error instanceof HttpException) {
         throw error;
       }
 
-      // TẠM THỜI TRẢ LỖI THẬT VỀ FRONTEND ĐỂ FIX BUG
-      throw new UnauthorizedException(`Lỗi thật: ${realError}`);
+      // TEMPORARILY RETURN REAL ERROR TO FRONTEND TO FIX BUG
+      throw new UnauthorizedException(`Real error: ${realError}`);
     }
 
     let user = await this.prisma.user.findUnique({ where: { email }, });
@@ -346,8 +348,8 @@ export class AuthService {
     ip: string, 
     deviceNameHeader?: string, 
     deviceOsHeader?: string,
-    deviceIdHeader?: string, // <-- BỔ SUNG THAM SỐ THỨ 6: ID thiết bị vật lý
-    rememberMe?: boolean // <-- BỔ SUNG THAM SỐ THỨ 7: Ghi nhớ đăng nhập
+    deviceIdHeader?: string, // <-- ADDED 6TH PARAMETER: Physical device ID
+    rememberMe?: boolean // <-- ADDED 7TH PARAMETER: Remember login
   ) {
     
     let updatedData: any = {}; let needsUpdate = false;
@@ -368,16 +370,16 @@ export class AuthService {
     const geo = geoip.lookup(ip);
     const location = geo ? `${geo.city || ''}, ${geo.country || ''}`.replace(/^, |, $/g, '') || 'Unknown Location' : 'Unknown Location';
     
-    // Ưu tiên Header từ Mobile gửi lên vì nó chính xác hơn User-Agent mặc định
+    // Prioritize Header sent from Mobile because it is more accurate than the default User-Agent
     const finalDeviceName = deviceNameHeader || device.model || os.name || 'Unknown Device';
     const finalOsName = deviceOsHeader || `${os.name || ''} ${os.version || ''}`.trim() || 'Unknown OS';
 
     // =========================================================================
-    // 🔴 BẮT ĐẦU FIX: LOGIC XỬ LÝ DEVICE SESSION CHUẨN XÁC NHẤT
+    // 🔴 START FIX: MOST ACCURATE DEVICE SESSION LOGIC
     // =========================================================================
     let session: any = null;
 
-    // 1. Ưu tiên cao nhất: Tìm bằng ID vật lý duy nhất của thiết bị
+    // 1. Highest priority: Find by the unique physical ID of the device
     if (deviceIdHeader) {
       session = await this.prisma.deviceSession.findFirst({
         where: {
@@ -387,7 +389,7 @@ export class AuthService {
       });
     }
 
-    // 2. Fallback: Dành cho trình duyệt web hoặc App version cũ chưa truyền ID
+    // 2. Fallback: For web browsers or old App versions that do not send ID
     if (!session) {
       session = await this.prisma.deviceSession.findFirst({
         where: {
@@ -399,23 +401,23 @@ export class AuthService {
     }
 
     if (session) {
-      // NẾU ĐÃ CÓ: Cập nhật trạng thái mới nhất
+      // IF EXISTS: Update to the latest state
       session = await this.prisma.deviceSession.update({
         where: { id: session.id },
         data: {
           lastActive: new Date(),
           ipAddress: ip,
           location: location,
-          deviceIdentifier: deviceIdHeader || session.deviceIdentifier, // Đồng bộ ID vào DB nếu record cũ chưa có
+          deviceIdentifier: deviceIdHeader || session.deviceIdentifier, // Sync ID to DB if old record does not have it
           deviceName: finalDeviceName, 
-          os: finalOsName // Luôn cập nhật OS phòng khi họ mới update iOS/Android
+          os: finalOsName // Always update OS in case they just updated iOS/Android
         }
       });
     } else {
-      // NẾU CHƯA CÓ: Kiểm tra dung lượng hệ thống (Limit 10 sessions)
+      // IF NOT EXISTS: Check system capacity (Limit 10 sessions)
       const currentSessionsCount = await this.prisma.deviceSession.count({ where: { userId: user.id } });
       if (currentSessionsCount >= 10) {
-        // Xóa thiết bị cũ nhất nếu vượt quá giới hạn
+        // Delete the oldest device if the limit is exceeded
         const oldestSession = await this.prisma.deviceSession.findFirst({
           where: { userId: user.id },
           orderBy: { lastActive: 'asc' }
@@ -425,11 +427,11 @@ export class AuthService {
         }
       }
 
-      // Tạo mới thiết bị lần đầu đăng nhập
+      // Create a new device on first login
       session = await this.prisma.deviceSession.create({ 
         data: { 
           userId: user.id, 
-          deviceIdentifier: deviceIdHeader, // Lưu thêm ID thiết bị vào DB
+          deviceIdentifier: deviceIdHeader, // Save additional device ID to DB
           deviceName: finalDeviceName, 
           deviceType: deviceType, 
           os: finalOsName, 
@@ -441,7 +443,7 @@ export class AuthService {
     // =========================================================================
     const expiresIn = rememberMe ? '30d' : '1d'; 
     const redisTtlSeconds = rememberMe ? (30 * 24 * 60 * 60) : (24 * 60 * 60);
-    await this.redisService.set(`auth:session:${session.id}`, "active", redisTtlSeconds); // TTL bằng thời gian sống của JWT
+    await this.redisService.set(`auth:session:${session.id}`, "active", redisTtlSeconds); // TTL equals JWT lifespan
 
     const payload = { userId: user.id, sessionId: session.id, email: user.email, role: user.role };
     const accessToken = this.jwtService.sign(payload, { expiresIn });
@@ -449,7 +451,7 @@ export class AuthService {
     const isProfileComplete = !!(
       user.name && 
       user.name !== 'User' && 
-      user.name !== user.email.split('@')[0] && // Loại trừ trường hợp tên mặc định lấy từ email
+      user.name !== user.email.split('@')[0] && // Exclude the case of default name taken from email
       user.phone &&
       user.gender && 
       user.gender !== 'UNKNOWN' &&
@@ -458,7 +460,7 @@ export class AuthService {
     );
     
     return {
-      message: 'Đăng nhập thành công',
+      message: 'Login successful',
       accessToken,
       user: { id: user.id, email: user.email, name: user.name, phone: user.phone, gender: user.gender, dob: user.dob, avatarUrl: user.avatarUrl, isTwoFactorEnabled: user.isTwoFactorEnabled, isProfileComplete, },
     };

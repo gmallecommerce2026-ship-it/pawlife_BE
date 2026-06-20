@@ -19,7 +19,7 @@ export class ApplicationsService {
 
     if (activeApplicationsCount >= 5) {
       throw new BadRequestException(
-        'Bạn đang có 5 đơn đăng ký đang chờ xử lý. Vui lòng đợi kết quả hoặc đóng các đơn cũ trước khi gửi đơn mới.'
+        'You have 5 pending applications. Please wait for the results or close your old applications before submitting a new one.'
       );
     }
 
@@ -34,7 +34,7 @@ export class ApplicationsService {
     if (existingApp) {
       // Nếu có đơn đang mở -> Chặn lại
       if (existingApp.status !== 'CLOSED' && existingApp.status !== 'ADOPTION_COMPLETED') {
-        throw new BadRequestException('Bạn đã gửi đơn đăng ký cho thú cưng này rồi.');
+        throw new BadRequestException('You have already submitted an application for this pet.');
       }
       
       // Nếu có đơn nhưng đã bị CLOSED -> Tái sử dụng (Update) bản ghi cũ để không vi phạm luật Unique P2002
@@ -103,7 +103,7 @@ export class ApplicationsService {
     });
 
     if (!application) {
-      throw new NotFoundException('Không tìm thấy đơn đăng ký nhận nuôi này!');
+      throw new NotFoundException('This adoption application was not found!');
     }
 
     return application;
@@ -119,12 +119,12 @@ export class ApplicationsService {
     });
 
     if (!application) {
-      throw new NotFoundException('Không tìm thấy đơn đăng ký nhận nuôi này!');
+      throw new NotFoundException('This adoption application was not found!');
     }
 
     // 2. Tùy chọn: Validate trạng thái (chỉ cho phép upload khi đang cần thêm thông tin)
     if (application.status !== 'NEED_MORE_INFO') {
-      throw new BadRequestException('Đơn đăng ký hiện không yêu cầu bổ sung thông tin.');
+      throw new BadRequestException('The application currently requires no additional information.');
     }
 
     // 3. Cập nhật ảnh và chuyển trạng thái về PENDING
@@ -147,12 +147,12 @@ export class ApplicationsService {
     });
 
     if (!application) {
-      throw new NotFoundException('Không tìm thấy đơn đăng ký nhận nuôi này!');
+      throw new NotFoundException('This adoption application was not found!');
     }
 
     // Không cho phép rút đơn nếu đã đóng hoặc đã hoàn thành
     if (application.status === 'CLOSED' || application.status === 'ADOPTION_COMPLETED') {
-      throw new BadRequestException('Không thể thu hồi đơn đăng ký ở trạng thái này!');
+      throw new BadRequestException('The application cannot be withdrawn in this status!');
     }
 
     // Cập nhật trạng thái thành CLOSED

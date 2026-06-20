@@ -27,7 +27,7 @@ export class EventsService {
       orderBy: { startDate: 'asc' },
       take: limit,
       include: {
-        // FIX: Đổi từ shelter sang organizer
+        // FIX: Changed from shelter to organizer
         organizer: {
           select: { id: true, name: true, avatarUrl: true },
         },
@@ -45,7 +45,7 @@ export class EventsService {
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
       include: {
-        // FIX: Đổi từ shelter sang organizer
+        // FIX: Changed from shelter to organizer
         organizer: {
           select: { id: true, name: true, avatarUrl: true },
         },
@@ -54,7 +54,7 @@ export class EventsService {
     });
 
     if (!event) {
-      throw new NotFoundException('Không tìm thấy sự kiện');
+      throw new NotFoundException('Event not found');
     }
 
     let isInterested = false;
@@ -106,8 +106,8 @@ export class EventsService {
       if (event) {
         await this.notificationsService.createAndSendNotification({
           userId: userId,
-          title: '📅 Quan tâm sự kiện',
-          body: `Bạn đã đăng ký quan tâm sự kiện "${event.title}". Chúng tôi sẽ nhắc bạn khi sự kiện sắp bắt đầu!`,
+          title: '📅 Interested in event',
+          body: `You have registered your interest in the event "${event.title}". We will remind you when the event is about to start!`,
           type: NotificationType.EVENT,
           referenceId: eventId,
         });
@@ -123,7 +123,7 @@ export class EventsService {
       include: {
         event: {
           include: {
-            // FIX: Đổi từ shelter sang organizer
+            // FIX: Changed from shelter to organizer
             organizer: {
               select: { id: true, name: true, avatarUrl: true },
             },
@@ -161,7 +161,7 @@ export class EventsService {
       where: whereCondition,
       take: limit,
       include: {
-        // FIX: Đổi từ shelter sang organizer
+        // FIX: Changed from shelter to organizer
         organizer: {
           select: { id: true, name: true, avatarUrl: true },
         },

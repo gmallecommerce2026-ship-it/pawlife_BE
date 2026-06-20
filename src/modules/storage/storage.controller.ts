@@ -20,31 +20,31 @@ export class StorageController {
   @UseGuards(ThrottlerGuard)
   @Post('presigned-url')
   async getUploadUrl(@Body() body: GetPresignedUrlDto) {
-    // 1. IN LOG ĐỂ XEM REQUEST CÓ VÀO TỚI ĐÂY KHÔNG
-    console.log('--- [STORAGE] NHẬN REQUEST TẠO URL ---', body);
+    // 1. PRINT LOG TO SEE IF THE REQUEST REACHES HERE
+    console.log('--- [STORAGE] RECEIVED REQUEST TO GENERATE URL ---', body);
 
-    // 2. CHỐNG CRASH SERVER NẾU THIẾU DỮ LIỆU
+    // 2. PREVENT SERVER CRASH IF DATA IS MISSING
     if (!body || !body.fileType) {
-      console.log('❌ Lỗi: Payload Frontend gửi lên bị thiếu fileType!');
-      throw new BadRequestException('Thiếu tham số fileType');
+      console.log('❌ Error: Payload sent from Frontend is missing fileType!');
+      throw new BadRequestException('Missing fileType parameter');
     }
 
     try {
       const defaultFolder = body.fileType.startsWith('video/') ? 'videos' : 'avatars';
       const folder = body.folder || defaultFolder;
       
-      console.log(`Đang gọi R2 Service với folder: ${folder}...`);
+      console.log(`Calling R2 Service with folder: ${folder}...`);
       
-      // 3. GỌI R2 SERVICE
+      // 3. CALL R2 SERVICE
       const result = await this.r2Service.generatePresignedUrl(body.fileName, body.fileType, folder);
       
-      console.log('✅ Tạo URL thành công!');
+      console.log('✅ Successfully generated URL!');
       return result;
 
     } catch (error) {
-      // 4. BẮT LỖI R2 (NẾU CÓ) ĐỂ KHÔNG LÀM SẬP SERVER
-      console.error('❌ LỖI KHI GỌI R2 SERVICE:', error);
-      throw new InternalServerErrorException('Không thể kết nối đến Cloudflare R2. Vui lòng kiểm tra lại cấu hình .env');
+      // 4. CATCH R2 ERROR (IF ANY) TO AVOID CRASHING THE SERVER
+      console.error('❌ ERROR WHEN CALLING R2 SERVICE:', error);
+      throw new InternalServerErrorException('Cannot connect to Cloudflare R2. Please check your .env configuration');
     }
   }
 }

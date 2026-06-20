@@ -19,7 +19,6 @@ export interface FeedFilters {
   species?: string;
 }
 
-// --- KHAI BÁO TYPE CHO PAW HISTORY TẠI ĐÂY ---
 export type PawHistoryType = 'CREATED' | 'BIRTH' | 'QR_LINKED' | 'TRANSFER' | 'VACCINE';
 
 export interface PawHistoryItem {
@@ -29,14 +28,13 @@ export interface PawHistoryItem {
   date: Date | string;
   description: string;
 }
-// ----------------------------------------------
 
 const ownerSelectQuery = {
   select: {
     id: true,
-    name: true,       // Đã sửa thành name
-    avatarUrl: true,  // Đã sửa thành avatarUrl
-    phone: true,      // Chỉ trả về khi cần thiết (ví dụ: pet đang bị thất lạc)
+    name: true,
+    avatarUrl: true,
+    phone: true,
   },
 };
 
@@ -46,13 +44,13 @@ export class PetsService {
     private readonly prisma: PrismaService,
     @InjectQueue('swipe-queue') private readonly swipeQueue: Queue,
     private notificationsGateway: NotificationsGateway,
-    private readonly notificationsService: NotificationsService, // Inject NotificationsService
-    private readonly redisService: RedisService, // Inject RedisService
+    private readonly notificationsService: NotificationsService,
+    private readonly redisService: RedisService,
     private configService: ConfigService,
   ) { }
 
   private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371; // Bán kính trái đất tính bằng km
+    const R = 6371;
     const dLat = (lat2 - lat1) * (Math.PI / 180);
     const dLon = (lon2 - lon1) * (Math.PI / 180);
     const a =
@@ -62,10 +60,12 @@ export class PetsService {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
+
   private diffInDays(date1: Date, date2: Date): number {
     const diffTime = Math.abs(date2.getTime() - date1.getTime());
     return Math.floor(diffTime / (1000 * 60 * 60 * 24));
   }
+
   private generateShelterCode(): string {
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const randomLetter = letters[Math.floor(Math.random() * letters.length)];
@@ -82,7 +82,6 @@ export class PetsService {
       });
       if (!existing) return code;
     }
-    // Fallback cuối nếu đụng mã liên tục 5 lần (cực hiếm): thêm timestamp đảm bảo unique
     return `${this.generateShelterCode()}-${Date.now().toString().slice(-4)}`;
   }
 
@@ -97,57 +96,50 @@ export class PetsService {
       include: { images: true, shelter: true }
     });
 
-    await this.redisService.set(cacheKey, pets, 300); // Cache 5 phút
+    await this.redisService.set(cacheKey, pets, 300);
     return pets;
   }
 
   async linkQrCode(userId: string, petId: string, tagId: string) {
-    // 1. Kiểm tra Pet có tồn tại và thuộc quyền sở hữu của user không
     const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
-    if (!pet) throw new NotFoundException('Không tìm thấy thú cưng này!');
+    if (!pet) throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
+    
     if (pet.ownerId !== userId && pet.shelterId !== userId) {
-      throw new ConflictException('Bạn không có quyền thao tác trên thú cưng này!');
+      throw new ConflictException({ message: 'You do not have permission to perform actions on this pet!', i18n: { key: 'error.pet_unauthorized' } });
     }
 
-    // 2. Kiểm tra Tag (Mã QR) có tồn tại trong hệ thống không
     const tag = await this.prisma.tag.findUnique({ where: { id: tagId } });
     if (!tag) {
-      throw new BadRequestException('Mã QR này không thuộc hệ thống PawLife hoặc không tồn tại!');
+      throw new BadRequestException({ message: 'This QR code does not belong to the PawLife system or does not exist!', i18n: { key: 'error.qr_invalid' } });
     }
 
-    // 3. Kiểm tra xem Tag này đã được gán cho con pet nào chưa
     if (tag.petId) {
-      if (tag.petId === petId) throw new BadRequestException('Mã QR này đã được gán cho bé này rồi!');
-      throw new BadRequestException('Mã QR này đã được sử dụng cho một thú cưng khác!');
+      if (tag.petId === petId) throw new BadRequestException({ message: 'This QR code is already assigned to this pet!', i18n: { key: 'error.qr_already_assigned' } });
+      throw new BadRequestException({ message: 'This QR code is already in use for another pet!', i18n: { key: 'error.qr_in_use' } });
     }
 
-    // 4. Thực hiện gán Tag vào Pet (Dùng Transaction để đảm bảo tính toàn vẹn)
     await this.prisma.$transaction([
       this.prisma.tag.update({
         where: { id: tagId },
-        data: {
-          petId: petId,
-          status: 'ACTIVE',
-          linkedAt: new Date()
-        }
+        data: { petId: petId, status: 'ACTIVE', linkedAt: new Date() }
       }),
       this.prisma.pet.update({
         where: { id: petId },
-        data: {
-          qrVerificationStatus: 'VERIFIED',
-          // Nên lưu Full URL để sau này API trả về là frontend dùng được ngay không cần ghép chuỗi
-          qrCodeUrl: `https://pawcare.app/tag/${tagId}`
-        }
+        data: { qrVerificationStatus: 'VERIFIED', qrCodeUrl: `https://pawcare.app/tag/${tagId}` }
       })
     ]);
 
-    // 5. Xóa cache
     await this.redisService.del(`pet:detail:${petId}`);
 
-    return { success: true, message: 'Liên kết vòng cổ thành công!' };
+    return { 
+      success: true, 
+      message: 'Smart collar linked successfully!', 
+      i18n: { key: 'success.qr_linked' } 
+    };
   }
 
   async getFeed(userId: string, limit: number, filters?: FeedFilters, lat?: number, lng?: number) {
+    // Feed logic (Returns pure data, errors handled in Controller if any)
     const { gender, size, species } = filters || {};
 
     const matchesFilters = (pet: any) => {
@@ -157,9 +149,7 @@ export class PetsService {
       return true;
     };
 
-    // TRƯỜNG HỢP 1: CÓ TỌA ĐỘ (Xử lý trên RAM)
     if (lat && lng) {
-      // Chỉ tải userInteractions từ Redis khi thực sự cần thiết (xử lý RAM)
       const interactionCacheKey = `user:${userId}:swiped_pets`;
       let userInteractions = await this.redisService.get<{ petId: string, action: string }[]>(interactionCacheKey) || [];
       const allSwipedIds = new Set(userInteractions.map(i => i.petId));
@@ -197,9 +187,9 @@ export class PetsService {
             distance_val: distanceVal,
             distance: `${distanceVal.toFixed(1)} km`,
             shelter: {
-              name: shelter?.name || 'Trạm chưa đặt tên',
+              name: shelter?.name || 'Unnamed shelter',
               avatarUrl: shelter?.avatarUrl || null,
-              address: shelter?.address || 'Chưa cập nhật'
+              address: shelter?.address || 'Not updated yet'
             }
           };
         });
@@ -214,13 +204,9 @@ export class PetsService {
       }
     }
 
-    // TRƯỜNG HỢP 2: KHÔNG CÓ GPS (Dùng DB Tối ưu)
-    // SỬA Ở ĐÂY: KHÔNG dùng `notIn: Array.from(allSwipedIds)`
-    // Thay vào đó dùng liên kết ngược (Relational Filter) của Prisma để tạo câu lệnh SQL tối ưu:
     let dbPets = await this.prisma.pet.findMany({
       where: {
         status: 'AVAILABLE',
-        // Prisma sẽ tự động build câu lệnh SQL "WHERE NOT EXISTS (SELECT ...)" thay vì "WHERE id NOT IN (...hàng nghìn ID...)"
         interactions: { none: { userId: userId } },
         ...(gender && { gender }),
         ...(size && { size }),
@@ -235,7 +221,6 @@ export class PetsService {
     });
 
     if (dbPets.length === 0) {
-      // Fallback lấy thú cưng đã PASS bằng Join Table
       dbPets = await this.prisma.pet.findMany({
         where: {
           status: 'AVAILABLE',
@@ -262,383 +247,252 @@ export class PetsService {
     });
 
     if (!petExists) {
-      throw new NotFoundException('Không tìm thấy thú cưng này!');
+      throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
     }
 
-    // XÓA CACHE SWIPE CỦA USER ĐỂ LẦN GET FEED TỚI SẼ LẤY DATA MỚI
     const interactionCacheKey = `user:${userId}:swiped_pets`;
     await this.redisService.del(interactionCacheKey);
 
-    await this.swipeQueue.add(
-      'process-swipe',
-      {
-        userId,
-        petId,
-        action: swipePetDto.action,
-      },
-      {
-        removeOnComplete: true,
-        removeOnFail: 100,
-      }
-    );
+    await this.swipeQueue.add('process-swipe', { userId, petId, action: swipePetDto.action }, { removeOnComplete: true, removeOnFail: 100 });
 
     return {
-      message: `Đã ${swipePetDto.action.toLowerCase()} thú cưng thành công!`,
+      message: `Successfully ${swipePetDto.action.toLowerCase()} pet!`,
+      i18n: { key: 'success.pet_swiped', params: { action: swipePetDto.action.toLowerCase() } },
       data: {
-        userId: userId,
-        petId: petId,
-        action: swipePetDto.action,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        userId: userId, petId: petId, action: swipePetDto.action,
+        createdAt: new Date(), updatedAt: new Date(),
       },
     };
   }
 
   async addFavorite(userId: string, petId: string) {
-    const pet = await this.prisma.pet.findUnique({
-      where: { id: petId },
-    });
+    const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
 
     if (!pet) {
-      throw new NotFoundException('Không tìm thấy thú cưng này!');
+      throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
     }
 
     const existingFavorite = await this.prisma.favoritePet.findUnique({
-      where: {
-        userId_petId: {
-          userId: userId,
-          petId: petId,
-        },
-      },
+      where: { userId_petId: { userId: userId, petId: petId } },
     });
 
     if (existingFavorite) {
       return {
-        message: 'Thú cưng này đã nằm trong danh sách yêu thích của bạn từ trước.',
+        message: 'This pet is already in your favorites list.',
+        i18n: { key: 'success.already_favorited' },
         data: existingFavorite,
       };
     }
 
     const favorite = await this.prisma.favoritePet.create({
-      data: {
-        userId: userId,
-        petId: petId,
-      },
+      data: { userId: userId, petId: petId },
     });
 
     return {
-      message: 'Đã lưu thú cưng vào danh sách yêu thích thành công!',
+      message: 'Pet successfully saved to favorites!',
+      i18n: { key: 'success.added_to_favorites' },
       data: favorite,
     };
   }
 
   async removePet(userId: string, petId: string) {
-    const pet = await this.prisma.pet.findUnique({
-      where: { id: petId },
-    });
+    const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
 
-    if (!pet) {
-      throw new NotFoundException('Không tìm thấy thú cưng này!');
-    }
-
+    if (!pet) throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
+    
     if (pet.ownerId !== userId && pet.shelterId !== userId) {
-      throw new ConflictException('Bạn không có quyền xóa thú cưng này!');
+      throw new ConflictException({ message: 'You do not have permission to delete this pet!', i18n: { key: 'error.pet_unauthorized' } });
     }
 
-    await this.prisma.pet.delete({
-      where: { id: petId },
-    });
-
-    // XÓA CACHE SAU KHI XÓA
+    await this.prisma.pet.delete({ where: { id: petId } });
     await this.redisService.del(`pet:detail:${petId}`);
 
-    return { message: 'Đã xóa thú cưng thành công!' };
+    return { 
+      message: 'Pet deleted successfully!', 
+      i18n: { key: 'success.pet_deleted' } 
+    };
   }
 
   async toggleLostMode(userId: string, petId: string, dto: ToggleLostModeDto) {
-    const {
-      isLost, location, dateTime, details, ownerName,
-      ownerPhone, ownerAddress, note, photos,
-      latitude, longitude, lostDate, radius
-    } = dto;
+    const { isLost, location, dateTime, details, ownerName, ownerPhone, ownerAddress, note, photos, latitude, longitude, lostDate, radius } = dto;
+    const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
 
-    const pet = await this.prisma.pet.findUnique({
-      where: { id: petId },
-    });
-
-    if (!pet) throw new NotFoundException('Không tìm thấy thú cưng này!');
+    if (!pet) throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
     if (pet.ownerId !== userId && pet.shelterId !== userId) {
-      throw new ConflictException('Bạn không có quyền thay đổi trạng thái!');
+      throw new ConflictException({ message: 'You do not have permission to change the status!', i18n: { key: 'error.pet_unauthorized' } });
     }
 
     const newStatus = isLost ? 'LOST' : 'ACTIVE';
-
-    // --- BƯỚC MỚI: TÌM TAG ĐANG ACTIVE ĐỂ TẠO REPORT ---
-    const activeTag = await this.prisma.tag.findFirst({
-      where: { petId: petId, status: { not: 'INACTIVE' } }
-    });
+    const activeTag = await this.prisma.tag.findFirst({ where: { petId: petId, status: { not: 'INACTIVE' } } });
 
     await this.prisma.$transaction([
-      this.prisma.tag.updateMany({
-        where: { petId: petId },
-        data: { status: newStatus },
-      }),
+      this.prisma.tag.updateMany({ where: { petId: petId }, data: { status: newStatus } }),
       this.prisma.pet.update({
         where: { id: petId },
         data: {
-          lostContactName: isLost ? ownerName : null,
-          lostContactPhone: isLost ? ownerPhone : null,
-          lostContactAddress: isLost ? ownerAddress : null,
-          lostLocation: isLost ? location : null,
-          lostDateTime: isLost ? dateTime : null,
-          lostDetails: isLost ? `${note || ''}`.trim() : null,
-          lostPhotos: isLost ? JSON.stringify(photos || []) : null,
-          lostLatitude: isLost && latitude ? latitude : null,
-          lostLongitude: isLost && longitude ? longitude : null,
-          lostRadius: isLost && radius ? radius : null,
+          lostContactName: isLost ? ownerName : null, lostContactPhone: isLost ? ownerPhone : null,
+          lostContactAddress: isLost ? ownerAddress : null, lostLocation: isLost ? location : null,
+          lostDateTime: isLost ? dateTime : null, lostDetails: isLost ? `${note || ''}`.trim() : null,
+          lostPhotos: isLost ? JSON.stringify(photos || []) : null, lostLatitude: isLost && latitude ? latitude : null,
+          lostLongitude: isLost && longitude ? longitude : null, lostRadius: isLost && radius ? radius : null,
           lostDate: isLost && lostDate ? new Date(lostDate) : null,
         }
       }),
-      // --- BƯỚC MỚI: TẠO TAG_REPORT "POINT ZERO" KHI BÁO LẠC ---
       ...(isLost && activeTag ? [
         this.prisma.tagReport.create({
           data: {
-            tagId: activeTag.id,
-            userId: userId,
-            latitude: latitude || null,
-            longitude: longitude || null,
-            message: note ? `Báo mất: ${note}` : 'Chủ nhân đã báo mất thú cưng',
-            scannedBy: ownerName || 'Chủ nhân',
-            status: 'PENDING',
+            tagId: activeTag.id, userId: userId, latitude: latitude || null, longitude: longitude || null,
+            message: note ? `Lost report: ${note}` : 'The owner has reported the pet missing', scannedBy: ownerName || 'Owner', status: 'PENDING',
           }
         })
       ] : []),
-      // Đóng các report khi tìm thấy
       ...(isLost ? [] : [
         this.prisma.tagReport.updateMany({
-          where: {
-            tag: { petId: petId },
-            status: 'PENDING'
-          },
-          data: { status: 'RESOLVED' }
+          where: { tag: { petId: petId }, status: 'PENDING' }, data: { status: 'RESOLVED' }
         })
       ])
     ]);
 
-    // Lấy danh sách tag để xử lý Geo Redis
     const tags = await this.prisma.tag.findMany({ where: { petId: petId } });
-
-    // 2. Xóa Cache chi tiết Pet
     await this.redisService.del(`pet:detail:${petId}`);
 
-    // 3. ĐỒNG BỘ REDIS GEO MAP DÀNH CHO HỆ THỐNG LỚN
     const LOST_TAGS_KEY = 'tags:locations:lost';
-
     if (!isLost) {
-      // NẾU TẮT BÁO LẠC: Xóa ngay tọa độ khỏi Redis Geo
-      for (const tag of tags) {
-        await this.redisService.removeLocation(LOST_TAGS_KEY, tag.id);
-      }
+      for (const tag of tags) await this.redisService.removeLocation(LOST_TAGS_KEY, tag.id);
     } else if (latitude && longitude) {
-      // 3.1. BỔ SUNG LƯU VÀO REDIS: Khi bật báo lạc, ném ngay toạ độ vào Redis
-      // Để chức năng lấy danh sách Pets quanh đây chạy ngon lành lập tức
-      for (const tag of tags) {
-        await this.redisService.addLocation(LOST_TAGS_KEY, longitude, latitude, tag.id);
-      }
+      for (const tag of tags) await this.redisService.addLocation(LOST_TAGS_KEY, longitude, latitude, tag.id);
     }
 
-    // 4. Bắn Notification
+    // The Notifications Service part below already applies i18n well
     await this.notificationsService.createAndSendNotification({
       userId: userId,
-      title: isLost ? '🚨 Báo động đi lạc!' : '✅ Thú cưng an toàn',
-      body: isLost
-        ? `Bạn đã BẬT chế độ báo lạc cho bé ${pet.name}.`
-        : `Bạn đã TẮT chế độ báo lạc cho bé ${pet.name}.`,
+      title: isLost ? '🚨 Lost alarm!' : '✅ Pet is safe',
+      body: isLost ? `You have TURNED ON lost mode for ${pet.name}.` : `You have TURNED OFF lost mode for ${pet.name}.`,
       type: NotificationType.TAG,
       referenceId: petId,
+      metadata: { i18n: { titleKey: isLost ? 'notification.lost_mode_on_title' : 'notification.lost_mode_off_title', bodyKey: isLost ? 'notification.lost_mode_on_body' : 'notification.lost_mode_off_body', params: { petName: pet.name } } }
     });
 
-    // 4.2 LOGIC MỚI: Bắn thông báo Cảm ơn cho những người đã hỗ trợ scan QR
     if (!isLost) {
       try {
-        // Tìm danh sách những User (có tài khoản) đã quét/report mã QR này
         const recentReporters = await this.prisma.tagReport.findMany({
-          where: {
-            tag: { petId: petId },
-            userId: { not: null }, // Chỉ lấy những scan từ user đăng nhập
-            // createdAt: { gte: pet.lostDateTime } // Có thể uncomment nếu muốn chỉ gửi cho người scan sau lúc bị lạc
-          },
-          distinct: ['userId'], // Đảm bảo 1 user chỉ nhận 1 thông báo dù họ scan nhiều lần
-          select: { userId: true }
+          where: { tag: { petId: petId }, userId: { not: null } },
+          distinct: ['userId'], select: { userId: true }
         });
 
-        // Lặp qua và gửi Push Notification
         for (const reporter of recentReporters) {
-          // Không gửi lại cho chính người chủ nếu họ tự quét
           if (reporter.userId && reporter.userId !== userId) {
             await this.notificationsService.createAndSendNotification({
               userId: reporter.userId,
-              title: '🎉 Tin vui!',
-              body: `Chủ của bé ${pet.name} đã báo bình an và tìm được bé. Cảm ơn bạn đã hỗ trợ quét vòng cổ!`,
-              type: NotificationType.SYSTEM,
-              referenceId: petId,
+              title: '🎉 Good news!', body: `The owner of ${pet.name} has reported them safe. Thank you!`,
+              type: NotificationType.SYSTEM, referenceId: petId,
+              metadata: { i18n: { titleKey: 'notification.pet_safe_title', bodyKey: 'notification.pet_safe_body', params: { petName: pet.name } } }
             });
-
-            // Gửi realtime qua socket để app của người kia nổ thông báo luôn
             this.notificationsGateway.server.to(`user_${reporter.userId}`).emit('notification', {
-              title: '🎉 Tin vui!',
-              body: `Chủ của bé ${pet.name} đã báo bình an và tìm được bé. Cảm ơn bạn đã hỗ trợ quét vòng cổ!`
+              title: '🎉 Good news!', body: `The owner of ${pet.name} has reported them safe.`
             });
           }
         }
-      } catch (err) {
-        console.error("Lỗi khi gửi thông báo cho những người đã scan:", err);
-      }
+      } catch (err) { console.error(err); }
     }
 
     return {
-      message: isLost ? 'Đã bật chế độ báo lạc!' : 'Đã tắt chế độ báo lạc, thú cưng an toàn.',
+      message: isLost ? 'Lost mode enabled!' : 'Lost mode disabled, pet is safe.',
+      i18n: { key: isLost ? 'success.lost_mode_enabled' : 'success.lost_mode_disabled' },
       isLost: isLost,
     };
   }
 
   async requestTransfer(petId: string, payload: { email?: string; phone?: string }, senderId: string) {
     if (!payload.email && !payload.phone) {
-      throw new BadRequestException('Vui lòng cung cấp email hoặc số điện thoại người nhận');
+      throw new BadRequestException({ message: 'Please provide the recipient\'s email or phone number', i18n: { key: 'error.missing_transfer_contact' } });
     }
 
     const orConditions: Prisma.UserWhereInput[] = [];
-
-    // Xử lý Email
-    if (payload.email) {
-      orConditions.push({ email: payload.email.trim().toLowerCase() });
-    }
-
-    // Xử lý Số điện thoại (Tự động Normalize)
+    if (payload.email) orConditions.push({ email: payload.email.trim().toLowerCase() });
     if (payload.phone) {
       let rawPhone = payload.phone.replace(/[\s-]/g, '');
       orConditions.push({ phone: rawPhone });
-
-      if (rawPhone.startsWith('0')) {
-        orConditions.push({ phone: '+84' + rawPhone.substring(1) });
-      } else if (rawPhone.startsWith('+84')) {
-        orConditions.push({ phone: '0' + rawPhone.substring(3) });
-      }
+      if (rawPhone.startsWith('0')) orConditions.push({ phone: '+84' + rawPhone.substring(1) });
+      else if (rawPhone.startsWith('+84')) orConditions.push({ phone: '0' + rawPhone.substring(3) });
     }
 
-    const receiver = await this.prisma.user.findFirst({
-      where: {
-        OR: orConditions,
-      },
-    });
-
+    const receiver = await this.prisma.user.findFirst({ where: { OR: orConditions } });
     if (!receiver) {
-      throw new NotFoundException('Hệ thống không tìm thấy người dùng với thông tin liên lạc này.');
+      throw new NotFoundException({ message: 'The system could not find a user with this contact information.', i18n: { key: 'error.user_not_found' } });
     }
-
     if (receiver.id === senderId) {
-      throw new BadRequestException('Không thể tự chuyển nhượng thú cưng cho chính mình.');
+      throw new BadRequestException({ message: 'Cannot transfer a pet to yourself.', i18n: { key: 'error.transfer_to_self' } });
     }
 
-    // Xóa các request PENDING cũ
-    await this.prisma.transferRequest.updateMany({
-      where: { petId, status: 'PENDING' },
-      data: { status: 'CANCELED' },
-    });
+    await this.prisma.transferRequest.updateMany({ where: { petId, status: 'PENDING' }, data: { status: 'CANCELED' } });
 
-    // Tạo record Transfer Request trong DB
     const transferRequest = await this.prisma.transferRequest.create({
       data: { petId, senderId, receiverId: receiver.id, status: 'PENDING' },
     });
 
-    // Gửi thông báo
     await this.notificationsService.createAndSendNotification({
-      userId: receiver.id,
-      title: '🎁 Yêu cầu chuyển nhượng mới',
-      body: 'Bạn nhận được yêu cầu nhận nuôi từ chủ cũ của thú cưng.',
-      type: NotificationType.SYSTEM,
-      referenceId: petId,
+      userId: receiver.id, title: '🎁 New transfer request', body: 'You have received an adoption request from the pet\'s previous owner.',
+      type: NotificationType.SYSTEM, referenceId: petId,
+      metadata: { i18n: { titleKey: 'notification.transfer_request_title', bodyKey: 'notification.transfer_request_body' } }
     });
 
-    // Bắn Socket real-time
-    this.notificationsGateway.server.to(`user_${receiver.id}`).emit('transfer_requested', {
-      transferId: transferRequest.id,
-      petId,
-    });
-
+    this.notificationsGateway.server.to(`user_${receiver.id}`).emit('transfer_requested', { transferId: transferRequest.id, petId });
     await this.redisService.del(`pet:detail:${petId}`);
 
-    return { success: true, message: 'Đã gửi yêu cầu' };
-  }
-
-  async confirmTransfer(transferId: string, receiverId: string) {
-    const transferReq = await this.prisma.transferRequest.findUnique({
-      where: { id: transferId },
-    });
-
-    if (!transferReq || transferReq.status !== 'PENDING') {
-      throw new BadRequestException('Yêu cầu không hợp lệ hoặc đã được xử lý');
-    }
-
-    // 1. Cập nhật chủ mới cho thú cưng
-    await this.prisma.pet.update({
-      where: { id: transferReq.petId },
-      data: { ownerId: receiverId },
-    });
-
-    await this.redisService.del(`pet:detail:${transferReq.petId}`);
-
-    await this.prisma.transferRequest.updateMany({
-      where: {
-        petId: transferReq.petId,
-        status: 'PENDING',
-        id: { not: transferId } // Chừa lại cái đang được confirm
-      },
-      data: { status: 'CANCELED' },
-    });
-
-    // 2. Cập nhật trạng thái Request
-    await this.prisma.transferRequest.update({
-      where: { id: transferId },
-      data: { status: 'COMPLETED' },
-    });
-
-    // 3. Bắn Socket cho CẢ HAI user để chuyển tab và hiển thị popup complete
-    const payload = { petId: transferReq.petId };
-
-    // Bắn cho người gửi (chủ cũ)
-    this.notificationsGateway.server.to(`user_${transferReq.senderId}`).emit('transfer_completed', payload);
-
-    // Bắn cho người nhận (chủ mới)
-    this.notificationsGateway.server.to(`user_${receiverId}`).emit('transfer_completed', payload);
-
-    return { success: true, message: 'Chuyển nhượng thành công' };
-  }
-
-  async removeFavorite(userId: string, petId: string) {
-    const existingFavorite = await this.prisma.favoritePet.findUnique({
-      where: {
-        userId_petId: { userId, petId },
-      },
-    });
-
-    if (!existingFavorite) {
-      throw new NotFoundException('Thú cưng này không nằm trong danh sách yêu thích của bạn!');
-    }
-
-    await this.prisma.favoritePet.delete({
-      where: {
-        userId_petId: { userId, petId },
-      },
-    });
-
-    return {
-      message: 'Đã bỏ yêu thích thú cưng này!',
+    return { 
+      success: true, 
+      message: 'Request sent', 
+      i18n: { key: 'success.transfer_requested' } 
     };
   }
 
-  async getFavorites(userId: string, skip: number, take: number) {
-    const favorites = await this.prisma.favoritePet.findMany({
+  async confirmTransfer(transferId: string, receiverId: string) {
+    const transferReq = await this.prisma.transferRequest.findUnique({ where: { id: transferId } });
+
+    if (!transferReq || transferReq.status !== 'PENDING') {
+      throw new BadRequestException({ message: 'Invalid or already processed request', i18n: { key: 'error.invalid_transfer_request' } });
+    }
+
+    await this.prisma.pet.update({ where: { id: transferReq.petId }, data: { ownerId: receiverId } });
+    await this.redisService.del(`pet:detail:${transferReq.petId}`);
+
+    await this.prisma.transferRequest.updateMany({
+      where: { petId: transferReq.petId, status: 'PENDING', id: { not: transferId } },
+      data: { status: 'CANCELED' },
+    });
+
+    await this.prisma.transferRequest.update({ where: { id: transferId }, data: { status: 'COMPLETED' } });
+
+    const payload = { petId: transferReq.petId };
+    this.notificationsGateway.server.to(`user_${transferReq.senderId}`).emit('transfer_completed', payload);
+    this.notificationsGateway.server.to(`user_${receiverId}`).emit('transfer_completed', payload);
+
+    return { 
+      success: true, 
+      message: 'Transfer successful', 
+      i18n: { key: 'success.transfer_completed' } 
+    };
+  }
+
+  async removeFavorite(userId: string, petId: string) {
+    const existingFavorite = await this.prisma.favoritePet.findUnique({ where: { userId_petId: { userId, petId } } });
+
+    if (!existingFavorite) {
+      throw new NotFoundException({ message: 'This pet is not in your favorites list!', i18n: { key: 'error.not_in_favorites' } });
+    }
+
+    await this.prisma.favoritePet.delete({ where: { userId_petId: { userId, petId } } });
+
+    return { 
+      message: 'Removed from favorites!', 
+      i18n: { key: 'success.removed_from_favorites' } 
+    };
+  }
+
+  // Pure Get/Search functions returning Models don't need translation except for Internal errors
+  async getFavorites(userId: string, skip: number, take: number) { /* ... Logic unchanged ... */ 
+      const favorites = await this.prisma.favoritePet.findMany({
       where: { userId: userId },
       skip: skip,
       take: take,
@@ -681,124 +535,72 @@ export class PetsService {
   async getMyPets(userId: string) {
     try {
       const pets = await this.prisma.pet.findMany({
-        where: {
-          ownerId: userId,
-          status: 'ADOPTED',
-        },
-        include: {
-          images: {
-            orderBy: { createdAt: 'asc' },
-          },
-          // 1. THÊM DÒNG NÀY ĐỂ LẤY THÔNG TIN VÒNG CỔ
-          tags: true,
-        },
+        where: { ownerId: userId, status: 'ADOPTED' },
+        include: { images: { orderBy: { createdAt: 'asc' } }, tags: true },
       });
 
       return pets.map((pet) => {
-        // 2. KIỂM TRA XEM CÓ THẺ NÀO ĐANG BÁO LẠC KHÔNG
         const isLost = pet.tags?.some((tag: any) => tag.status === 'LOST') || false;
-
-        return {
-          ...pet,
-          avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null,
-          isLost,
-        };
+        return { ...pet, avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null, isLost };
       });
     } catch (error) {
-      throw new InternalServerErrorException('Lỗi khi lấy danh sách thú cưng của người dùng');
+      throw new InternalServerErrorException({ message: 'Error fetching user\'s pet list', i18n: { key: 'error.get_my_pets_failed' } });
     }
   }
 
   async createPet(userId: string, createPetDto: CreatePetDto) {
+    // ... Initialize variables as before
     const { images, tagId, medicalRecords, ...petData } = createPetDto;
     const publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN');
     const idSetByShelter = await this.generateUniqueShelterCode();
-    // Format lại data cho medical records
     const medicalRecordsData = medicalRecords && medicalRecords.length > 0 ? {
       create: medicalRecords.map(record => ({
-        type: record.type,
-        recordName: record.recordName,
-        recordDate: new Date(record.recordDate),
-        images: record.images || [],
-        hasNextDueDate: record.hasNextDueDate || false,
-        nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null,
-        nextDueName: record.nextDueName,
+        type: record.type, recordName: record.recordName, recordDate: new Date(record.recordDate),
+        images: record.images || [], hasNextDueDate: record.hasNextDueDate || false,
+        nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null, nextDueName: record.nextDueName,
       }))
     } : undefined;
 
     try {
-      // NẾU CÓ TRUYỀN MÃ QR TỪ FRONTEND XUỐNG
       if (tagId) {
-        // 1. Kiểm tra Tag có hợp lệ không trước khi làm gì khác
         const tag = await this.prisma.tag.findUnique({ where: { id: tagId } });
-        if (!tag) {
-          throw new BadRequestException('Mã QR này không tồn tại trong hệ thống!');
-        }
-        if (tag.petId) {
-          throw new BadRequestException('Mã QR này đã được sử dụng cho một bé khác!');
-        }
+        if (!tag) throw new BadRequestException({ message: 'This QR code does not exist in the system!', i18n: { key: 'error.qr_not_found' } });
+        if (tag.petId) throw new BadRequestException({ message: 'This QR code is already in use for another pet!', i18n: { key: 'error.qr_in_use' } });
 
-        // 2. Gom 2 hành động vào Transaction: Tạo Pet + Update Tag
         const result = await this.prisma.$transaction(async (prisma) => {
-          // 2.1 Tạo Pet trước
           const newPet = await prisma.pet.create({
             data: {
-              ...petData,
-              ownerId: userId,
-              status: 'ADOPTED',
-              qrVerificationStatus: 'VERIFIED',
-              qrCodeUrl: `${publicDomain}/qr-codes/${tagId}.svg`,
-              idSetByShelter,
-              ...(images && images.length > 0 && {
-                images: { create: images.map(url => ({ url })) }
-              }),
+              ...petData, ownerId: userId, status: 'ADOPTED', qrVerificationStatus: 'VERIFIED',
+              qrCodeUrl: `${publicDomain}/qr-codes/${tagId}.svg`, idSetByShelter,
+              ...(images && images.length > 0 && { images: { create: images.map(url => ({ url })) } }),
               ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
             },
             include: { images: true }
           });
-
-          // 2.2 Update Tag với ID của Pet vừa tạo
-          await prisma.tag.update({
-            where: { id: tagId },
-            data: {
-              petId: newPet.id,
-              status: 'ACTIVE',
-              linkedAt: new Date()
-            }
-          });
-
+          await prisma.tag.update({ where: { id: tagId }, data: { petId: newPet.id, status: 'ACTIVE', linkedAt: new Date() } });
           return newPet;
         });
-
         return result;
       }
 
-      // TRƯỜNG HỢP 2: TẠO PET BÌNH THƯỜNG (KHÔNG CÓ QUÉT QR)
       const newPet = await this.prisma.pet.create({
         data: {
-          ...petData,
-          ownerId: userId,
-          status: 'ADOPTED',
-          idSetByShelter,
-          ...(images && images.length > 0 && {
-            images: { create: images.map(url => ({ url })) }
-          }),
+          ...petData, ownerId: userId, status: 'ADOPTED', idSetByShelter,
+          ...(images && images.length > 0 && { images: { create: images.map(url => ({ url })) } }),
           ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
         },
         include: { images: true }
       });
-
       return newPet;
 
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      throw new InternalServerErrorException('Lỗi hệ thống khi thêm thú cưng');
+      throw new InternalServerErrorException({ message: 'System error when creating pet', i18n: { key: 'error.create_pet_failed' } });
     }
   }
 
-  async searchPets(params: { search?: string; type?: string; limit?: number }) {
+  async searchPets(params: { search?: string; type?: string; limit?: number }) { /* Query logic unchanged */ 
     const { search, type, limit = 20 } = params;
-
     const whereCondition: Prisma.PetWhereInput = {
       status: 'AVAILABLE',
     };
@@ -836,58 +638,35 @@ export class PetsService {
 
   async getPetById(id: string, userId?: string) {
     const cacheKey = `pet:detail:${id}`;
-
-    // 1. Kiểm tra cache (Chỉ lấy phần dữ liệu tĩnh dùng chung)
     let petData = await this.redisService.get<any>(cacheKey);
 
-    // 2. Lấy từ DB nếu chưa có cache (Bỏ where PENDING ở transferRequests)
     if (!petData) {
       const pet = await this.prisma.pet.findUnique({
         where: { id },
         include: {
           owner: ownerSelectQuery,
-          images: {
-            orderBy: { createdAt: 'asc' }
-          },
-          medicalRecords: true,
-          traitsList: true,
-          shelter: {
-            select: { id: true, name: true, contactInfo: true, address: true, avatarUrl: true }
-          },
+          images: { orderBy: { createdAt: 'asc' } },
+          medicalRecords: true, traitsList: true,
+          shelter: { select: { id: true, name: true, contactInfo: true, address: true, avatarUrl: true } },
           transferRequests: {
             orderBy: { updatedAt: 'desc' },
-            include: {
-              receiver: {
-                select: { id: true, name: true, email: true, phone: true, avatarUrl: true }
-              },
-              sender: {
-                select: { id: true, name: true } // Cần lấy sender để parse history
-              }
-            }
+            include: { receiver: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } }, sender: { select: { id: true, name: true } } }
           },
-          tags: {
-            include: {
-              reports: {
-                orderBy: { scannedAt: 'desc' },
-                take: 1, // Chỉ lấy report gần nhất để tiết kiệm RAM
-                select: { id: true }
-              }
-            }
-          },
+          tags: { include: { reports: { orderBy: { scannedAt: 'desc' }, take: 1, select: { id: true } } } },
         },
       });
 
-      if (!pet) throw new NotFoundException('Không tìm thấy thông tin thú cưng này!');
+      if (!pet) throw new NotFoundException({ message: 'Pet information not found!', i18n: { key: 'error.pet_not_found' } });
 
+      // ... Your History formatting logic remains unchanged, does not affect Error
       if (!pet.idSetByShelter) {
         const newCode = await this.generateUniqueShelterCode();
         await this.prisma.pet.update({
           where: { id: pet.id },
           data: { idSetByShelter: newCode },
         });
-        pet.idSetByShelter = newCode; // gán lại vào object đang xử lý để response có ngay, không cần fetch lại
+        pet.idSetByShelter = newCode;
       }
-
 
       let formattedShelter: any = null;
       if (pet.shelter) {
@@ -901,97 +680,62 @@ export class PetsService {
       if (pet.owner) {
         formattedOwner = {
           ...pet.owner,
-          address: 'Chưa cập nhật',
+          address: 'Not updated yet',
         };
       }
 
-      // Tách transfer request đang PENDING cho các logic trả về cũ
       const pendingTransfer = pet.transferRequests && pet.transferRequests.length > 0
         ? pet.transferRequests.find(tr => tr.status === 'PENDING')
         : null;
 
-      // ==============================================================
-      // --- BUILD PAW HISTORY DYNAMICALLY (TYPE-SAFE) ---
-      // ==============================================================
       const pawHistory: PawHistoryItem[] = [];
 
-      // Sự kiện 1: Tham gia hệ thống
       pawHistory.push({
-        id: `join_${pet.id}`,
-        type: 'CREATED',
-        title: 'Joined PawLife',
-        date: pet.createdAt,
-        description: `Hồ sơ của ${pet.name} được tạo trên hệ thống.`
+        id: `join_${pet.id}`, type: 'CREATED', title: 'Joined PawLife',
+        date: pet.createdAt, description: `The profile for ${pet.name} was created on the system.`
       });
 
-      // Sự kiện 2: Ngày sinh
       if (pet.dob) {
         pawHistory.push({
-          id: `dob_${pet.id}`,
-          type: 'BIRTH',
-          title: 'Date of Birth',
-          date: pet.dob,
-          description: `${pet.name} cất tiếng gấu/meo chào đời.`
+          id: `dob_${pet.id}`, type: 'BIRTH', title: 'Date of Birth',
+          date: pet.dob, description: `${pet.name} barked/meowed into the world.`
         });
       }
 
-      // Sự kiện 3: Vòng cổ QR
       if (pet.tags && pet.tags.length > 0) {
-        // Chỉ lấy những tag đã từng được link với Pet này
         const linkedTags = pet.tags.filter(t => t.linkedAt !== null);
-
         linkedTags.forEach(tag => {
-          // Nếu tag đang INACTIVE, nghĩa là nó là vòng cổ cũ đã bị Replace
           const isActiveTag = tag.status !== 'INACTIVE';
-
           pawHistory.push({
-            id: `tag_${tag.id}`,
-            type: 'QR_LINKED',
-            title: isActiveTag ? 'QR Code Registered' : 'QR Code Replaced',
-            date: tag.linkedAt || tag.createdAt, // Dùng mốc thời gian cố định, không bao giờ bị nhảy
-            description: isActiveTag
-              ? `Vòng cổ thông minh được kích hoạt cho ${pet.name}.`
-              : `Vòng cổ thông minh cũ đã được thay thế.`,
+            id: `tag_${tag.id}`, type: 'QR_LINKED', title: isActiveTag ? 'QR Code Registered' : 'QR Code Replaced',
+            date: tag.linkedAt || tag.createdAt,
+            description: isActiveTag ? `Smart collar activated for ${pet.name}.` : `Old smart collar replaced.`,
           });
         });
       }
 
-      // Sự kiện 4: Lịch sử Vaccine
-      // Type checking an toàn cho Json value từ DB
       if (pet.medicalRecords && pet.medicalRecords.length > 0) {
         pet.medicalRecords.forEach(record => {
           pawHistory.push({
-            id: `med_${record.id}`,
-            type: 'VACCINE', // Có thể giữ VACCINE hoặc đổi thành MEDICAL
-            title: record.recordName,
-            date: record.recordDate,
-            description: `Hồ sơ ${record.type}: ${record.recordName}`
+            id: `med_${record.id}`, type: 'VACCINE', title: record.recordName,
+            date: record.recordDate, description: `Record ${record.type}: ${record.recordName}`
           });
         });
       }
 
-      // Sự kiện 5: Lịch sử chuyển nhượng / Nhận nuôi
       if (pet.transferRequests) {
-        pet.transferRequests
-          .filter(tr => tr.status === 'COMPLETED')
-          .forEach(tr => {
-            pawHistory.push({
-              id: `transfer_${tr.id}`,
-              type: 'TRANSFER',
-              title: 'Ownership Transferred',
-              date: tr.updatedAt,
-              description: `Được chuyển nhượng thành công cho chủ mới (${tr.receiver?.name || 'Ẩn danh'}).`
-            });
+        pet.transferRequests.filter(tr => tr.status === 'COMPLETED').forEach(tr => {
+          pawHistory.push({
+            id: `transfer_${tr.id}`, type: 'TRANSFER', title: 'Ownership Transferred',
+            date: tr.updatedAt, description: `Successfully transferred to the new owner (${tr.receiver?.name || 'Anonymous'}).`
           });
+        });
       }
 
-      // Sort an toàn
       pawHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      // ==============================================================
 
       let latestReportId: any = null;
       if (pet.tags && pet.tags.length > 0) {
-        // Tìm tag đang dùng
         const activeTag = pet.tags.find(t => t.status !== 'INACTIVE') || pet.tags[0];
         if (activeTag && activeTag.reports && activeTag.reports.length > 0) {
           latestReportId = activeTag.reports[0].id;
@@ -999,110 +743,69 @@ export class PetsService {
       }
 
       petData = {
-        ...pet,
-        shelter: formattedShelter,
-        owner: formattedOwner,
-        pawHistory, // <--- BỔ SUNG PAW HISTORY VÀO RESPONSE
-        avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null,
-        latestReportId,
+        ...pet, shelter: formattedShelter, owner: formattedOwner, pawHistory,
+        avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null, latestReportId,
         transferStatus: pendingTransfer ? pendingTransfer.status : null,
         pendingContact: pendingTransfer ? (pendingTransfer.receiver.email || pendingTransfer.receiver.phone) : null,
-        transferRequestId: pendingTransfer ? pendingTransfer.id : null,
-        receiverId: pendingTransfer ? pendingTransfer.receiverId : null,
-        senderId: pendingTransfer ? pendingTransfer.senderId : null,
-        receiver: pendingTransfer ? pendingTransfer.receiver : null,
+        transferRequestId: pendingTransfer ? pendingTransfer.id : null, receiverId: pendingTransfer ? pendingTransfer.receiverId : null,
+        senderId: pendingTransfer ? pendingTransfer.senderId : null, receiver: pendingTransfer ? pendingTransfer.receiver : null,
       };
 
-      // 3. Set Cache chung (Lưu trong 10 phút = 600s)
       await this.redisService.set(cacheKey, petData, 600);
     }
 
-    // 4. Kiểm tra trạng thái thả tim (Favorite) cho User cụ thể
-    // Truy vấn cực nhẹ qua SQL Index, luôn trả về kết quả mới nhất cho dù cache pet chưa hết hạn
     let isFavorited = false;
     if (userId) {
       const favoriteRecord = await this.prisma.favoritePet.findUnique({
-        where: {
-          userId_petId: {
-            userId: userId,
-            petId: id,
-          }
-        }
+        where: { userId_petId: { userId: userId, petId: id } }
       });
       isFavorited = !!favoriteRecord;
     }
 
-    // 5. Trộn dữ liệu tĩnh và trạng thái cá nhân rồi trả về cho Frontend
-    return {
-      ...petData,
-      isFavorited
-    };
+    return { ...petData, isFavorited };
   }
 
   async replaceQrCode(userId: string, petId: string, dto: ReplaceQrDto) {
     const { newTagId } = dto;
-
-    // 1. Kiểm tra Pet có tồn tại và thuộc quyền sở hữu của User không
     const pet = await this.prisma.pet.findUnique({
-      where: { id: petId },
-      include: { tags: true }, // Lấy kèm các tag cũ để xử lý
+      where: { id: petId }, include: { tags: true },
     });
 
-    if (!pet) throw new NotFoundException('Không tìm thấy thú cưng.');
-    if (pet.ownerId !== userId) throw new ForbiddenException('Bạn không có quyền thao tác trên thú cưng này.');
+    if (!pet) throw new NotFoundException({ message: 'Pet not found.', i18n: { key: 'error.pet_not_found' } });
+    if (pet.ownerId !== userId) throw new ForbiddenException({ message: 'You do not have permission to perform actions on this pet.', i18n: { key: 'error.pet_unauthorized' } });
 
-    // 2. Kiểm tra Tag mới có hợp lệ không
-    const newTag = await this.prisma.tag.findUnique({
-      where: { id: newTagId },
-    });
+    const newTag = await this.prisma.tag.findUnique({ where: { id: newTagId } });
 
-    if (!newTag) throw new NotFoundException('Mã QR này không tồn tại trong hệ thống.');
+    if (!newTag) throw new NotFoundException({ message: 'This QR code does not exist in the system.', i18n: { key: 'error.qr_not_found' } });
     if (newTag.petId && newTag.petId !== petId) {
-      throw new ConflictException('Mã QR này đã được sử dụng cho một thú cưng khác.');
+      throw new ConflictException({ message: 'This QR code is already in use for another pet.', i18n: { key: 'error.qr_in_use' } });
     }
     if (newTag.petId === petId) {
-      return { message: 'Mã QR này hiện đã được gắn cho thú cưng này.' };
+      return { message: 'This QR code is already assigned to this pet.', i18n: { key: 'error.qr_already_assigned' } };
     }
 
-    // 3. Thực thi Transaction để đảm bảo tính toàn vẹn
     await this.prisma.$transaction(async (tx) => {
-      // 3.1. Hủy liên kết tất cả Tag cũ (nếu có)
       if (pet.tags && pet.tags.length > 0) {
         await tx.tag.updateMany({
-          where: { petId: pet.id },
-          data: {
-            petId: null,
-            status: 'INACTIVE'
-          },
+          where: { petId: pet.id }, data: { petId: null, status: 'INACTIVE' },
         });
       }
-
-      // 3.2. Gắn Tag mới vào Pet
       await tx.tag.update({
-        where: { id: newTagId },
-        data: {
-          petId: pet.id,
-          status: 'ACTIVE',
-          linkedAt: new Date()
-        },
+        where: { id: newTagId }, data: { petId: pet.id, status: 'ACTIVE', linkedAt: new Date() },
       });
 
-      // 3.3. Cập nhật thông tin Pet
       const qrCodeUrl = `https://yourdomain.com/scan/${newTagId}`;
 
       await tx.pet.update({
         where: { id: pet.id },
-        data: {
-          qrCodeUrl,
-          qrVerificationStatus: 'VERIFIED',
-          needsQrReplacement: false
-        },
+        data: { qrCodeUrl, qrVerificationStatus: 'VERIFIED', needsQrReplacement: false },
       });
     });
 
     return {
       success: true,
-      message: 'Thay đổi mã QR thành công!',
+      message: 'QR code replaced successfully!',
+      i18n: { key: 'success.qr_replaced' },
       newTagId,
     };
   }
@@ -1111,19 +814,12 @@ export class PetsService {
     const tag = await this.prisma.tag.findUnique({
       where: { id: tagId },
       include: {
-        pet: {
-          include: {
-            owner: {
-              select: { id: true, name: true, avatarUrl: true, phone: true },
-            },
-            images: { orderBy: { createdAt: 'asc' } },
-          },
-        },
+        pet: { include: { owner: { select: { id: true, name: true, avatarUrl: true, phone: true } }, images: { orderBy: { createdAt: 'asc' } } } },
       },
     });
 
     if (!tag || !tag.pet) {
-      throw new NotFoundException('Không tìm thấy thú cưng với mã thẻ này');
+      throw new NotFoundException({ message: 'No pet found with this tag code', i18n: { key: 'error.pet_not_found_by_qr' } });
     }
 
     const pet = tag.pet;
@@ -1134,116 +830,96 @@ export class PetsService {
     }
 
     return {
-      ...pet,
-      // ✅ Normalize về 'dob' để frontend dùng thống nhất
-      dob: pet.dob ?? null,
-      avatarUrl: pet.images?.length > 0 ? pet.images[0].url : null,
-      isLost,
-      // ✅ Trả thêm lostInfo gom lại cho frontend dễ dùng
+      ...pet, dob: pet.dob ?? null,
+      avatarUrl: pet.images?.length > 0 ? pet.images[0].url : null, isLost,
       lostInfo: isLost ? {
         ownerName: pet.lostContactName ?? pet.owner?.name ?? null,
         ownerPhone: pet.lostContactPhone ?? pet.owner?.phone ?? null,
-        ownerAddress: pet.lostContactAddress ?? null,
-        note: pet.lostDetails ?? null,
+        ownerAddress: pet.lostContactAddress ?? null, note: pet.lostDetails ?? null,
       } : null,
     };
   }
 
   async cancelTransfer(petId: string, userId: string) {
-    // 1. SỬA LỖI QUERY: Cho phép cả Sender HOẶC Receiver tìm thấy request
     const transferReq = await this.prisma.transferRequest.findFirst({
       where: {
-        petId: petId,
-        status: 'PENDING',
-        OR: [
-          { senderId: userId },
-          { receiverId: userId }
-        ]
+        petId: petId, status: 'PENDING',
+        OR: [{ senderId: userId }, { receiverId: userId }]
       },
     });
 
     if (!transferReq) {
-      throw new BadRequestException('Không tìm thấy yêu cầu chuyển nhượng nào đang chờ xử lý.');
+      throw new BadRequestException({ message: 'No pending transfer request found.', i18n: { key: 'error.transfer_not_found' } });
     }
 
-    // 2. Cập nhật trạng thái thành CANCELED
     await this.prisma.transferRequest.update({
-      where: { id: transferReq.id },
-      data: { status: 'CANCELED' },
+      where: { id: transferReq.id }, data: { status: 'CANCELED' },
     });
 
-    // 3. THÊM MỚI: Bắn Socket Real-time cho CẢ HAI bên để cập nhật UI ngay lập tức
     const payload = { petId: petId };
     this.notificationsGateway.server.to(`user_${transferReq.senderId}`).emit('transfer_cancelled', payload);
     this.notificationsGateway.server.to(`user_${transferReq.receiverId}`).emit('transfer_cancelled', payload);
 
-    // 4. (Tùy chọn thêm) Bắn Notification hệ thống cho người CÒN LẠI biết giao dịch đã bị hủy
     const targetUserId = userId === transferReq.senderId ? transferReq.receiverId : transferReq.senderId;
     const isSenderCanceling = userId === transferReq.senderId;
 
     await this.notificationsService.createAndSendNotification({
-      userId: targetUserId,
-      title: '❌ Hủy chuyển nhượng',
-      body: isSenderCanceling
-        ? 'Chủ cũ đã hủy yêu cầu chuyển nhượng thú cưng cho bạn.'
-        : 'Người nhận đã từ chối yêu cầu chuyển nhượng thú cưng của bạn.',
-      type: NotificationType.SYSTEM,
-      referenceId: petId,
+      userId: targetUserId, title: '❌ Transfer cancelled',
+      body: isSenderCanceling ? 'The previous owner has cancelled the pet transfer request to you.' : 'The recipient has declined your pet transfer request.',
+      type: NotificationType.SYSTEM, referenceId: petId,
+      metadata: { i18n: { titleKey: 'notification.transfer_cancelled_title', bodyKey: isSenderCanceling ? 'notification.transfer_cancelled_by_sender' : 'notification.transfer_cancelled_by_receiver' } }
     });
 
     await this.redisService.del(`pet:detail:${petId}`);
 
-    return { success: true, message: 'Đã hủy yêu cầu chuyển nhượng.' };
+    return { 
+      success: true, 
+      message: 'Transfer request cancelled.', 
+      i18n: { key: 'success.transfer_cancelled' } 
+    };
   }
 
   async updatePet(userId: string, petId: string, updateData: any) {
-    const pet = await this.prisma.pet.findUnique({
-      where: { id: petId },
-    });
+    const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
 
-    if (!pet) throw new NotFoundException('Không tìm thấy thú cưng này!');
+    if (!pet) throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
     if (pet.ownerId !== userId && pet.shelterId !== userId) {
-      throw new ConflictException('Bạn không có quyền chỉnh sửa thông tin thú cưng này!');
+      throw new ConflictException({ message: 'You do not have permission to edit this pet\'s information!', i18n: { key: 'error.pet_unauthorized' } });
     }
 
     const now = new Date();
 
-    // 1. LOGIC KHÓA TÊN (NAME)
     if (updateData.name && updateData.name !== pet.name) {
       const isAdopted = pet.status === 'ADOPTED';
       const daysSinceAdoption = pet.adoptedAt ? this.diffInDays(now, pet.adoptedAt) : 999;
-
-      // Nếu ĐÃ nhận nuôi và TRONG VÒNG 30 ngày -> Cho phép đổi vô hạn
       const isUnlimitedNameChange = isAdopted && daysSinceAdoption <= 30;
 
       if (!isUnlimitedNameChange) {
-        // Nếu không nằm trong tuần trăng mật 30 ngày -> Check rule 14 ngày
         if (pet.nameLastUpdatedAt) {
           const daysSinceLastNameChange = this.diffInDays(now, pet.nameLastUpdatedAt);
           if (daysSinceLastNameChange < 14) {
-            throw new BadRequestException(`Bạn chỉ có thể đổi tên 1 lần mỗi 14 ngày. Cần đợi thêm ${14 - daysSinceLastNameChange} ngày nữa.`);
+            throw new BadRequestException({
+              message: `You can only change the name once every 14 days. Please wait ${14 - daysSinceLastNameChange} more days.`,
+              i18n: { key: 'error.name_change_limit', params: { daysLeft: 14 - daysSinceLastNameChange } }
+            });
           }
         }
       }
-      // Ghi nhận lại thời gian đổi tên lần này
       updateData.nameLastUpdatedAt = now;
     }
 
-    // 2. LOGIC KHÓA THÔNG TIN CỐ ĐỊNH (DOB, BREED, GENDER) SAU 7 NGÀY
     const daysSinceCreation = this.diffInDays(now, pet.createdAt);
     const isCoreInfoLocked = daysSinceCreation >= 7;
 
     if (isCoreInfoLocked) {
-      // Chỉ ném lỗi nếu user cố tình thay đổi dữ liệu ĐÃ CÓ (khác null và khác giá trị cũ)
-      // Nếu giá trị cũ là null (chưa set) thì vẫn cho phép set lần đầu.
       if (updateData.dob && pet.dob && new Date(updateData.dob).getTime() !== pet.dob.getTime()) {
-        throw new BadRequestException('Ngày sinh không thể thay đổi sau 7 ngày tạo hồ sơ.');
+        throw new BadRequestException({ message: 'Date of birth cannot be changed after 7 days of profile creation.', i18n: { key: 'error.dob_locked' } });
       }
       if (updateData.breed && pet.breed && updateData.breed !== pet.breed) {
-        throw new BadRequestException('Giống thú cưng không thể thay đổi sau 7 ngày tạo hồ sơ.');
+        throw new BadRequestException({ message: 'Pet breed cannot be changed after 7 days of profile creation.', i18n: { key: 'error.breed_locked' } });
       }
       if (updateData.gender && pet.gender && updateData.gender !== pet.gender) {
-        throw new BadRequestException('Giới tính không thể thay đổi sau 7 ngày tạo hồ sơ.');
+        throw new BadRequestException({ message: 'Gender cannot be changed after 7 days of profile creation.', i18n: { key: 'error.gender_locked' } });
       }
     }
 
@@ -1253,25 +929,15 @@ export class PetsService {
       const updatedPet = await this.prisma.pet.update({
         where: { id: petId },
         data: {
-          ...petInfo,
-          ...(nameLastUpdatedAt && { nameLastUpdatedAt }),
-          ...(images && images.length > 0 && {
-            images: {
-              deleteMany: {},
-              create: images.map((url: string) => ({ url }))
-            }
-          }),
+          ...petInfo, ...(nameLastUpdatedAt && { nameLastUpdatedAt }),
+          ...(images && images.length > 0 && { images: { deleteMany: {}, create: images.map((url: string) => ({ url })) } }),
           ...(medicalRecords && {
             medicalRecords: {
-              deleteMany: {}, // Xóa toàn bộ record cũ
+              deleteMany: {},
               create: medicalRecords.map((record: any) => ({
-                type: record.type,
-                recordName: record.recordName,
-                recordDate: new Date(record.recordDate),
-                images: record.images || [],
-                hasNextDueDate: record.hasNextDueDate || false,
-                nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null,
-                nextDueName: record.nextDueName,
+                type: record.type, recordName: record.recordName, recordDate: new Date(record.recordDate),
+                images: record.images || [], hasNextDueDate: record.hasNextDueDate || false,
+                nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null, nextDueName: record.nextDueName,
               }))
             }
           })
@@ -1282,11 +948,12 @@ export class PetsService {
       await this.redisService.del(`pet:detail:${petId}`);
 
       return {
-        message: 'Cập nhật thông tin thú cưng thành công',
+        message: 'Pet information updated successfully',
+        i18n: { key: 'success.pet_updated' },
         data: updatedPet
       };
     } catch (error) {
-      throw new InternalServerErrorException('Lỗi khi cập nhật thông tin thú cưng');
+      throw new InternalServerErrorException({ message: 'Error updating pet information', i18n: { key: 'error.update_pet_failed' } });
     }
   }
 }

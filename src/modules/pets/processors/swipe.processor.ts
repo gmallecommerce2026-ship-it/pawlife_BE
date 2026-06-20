@@ -9,12 +9,12 @@ export class SwipeProcessor extends WorkerHost {
     super();
   }
 
-  // Hàm này sẽ tự động chạy ngầm ở Background
+  // This function will automatically run in the Background
   async process(job: Job<any>) {
     const { userId, petId, action } = job.data;
 
     try {
-      // Bắt đầu ghi xuống DB
+      // Start writing to DB
       await this.prisma.petInteraction.upsert({
         where: {
           userId_petId: { userId, petId },
@@ -29,11 +29,11 @@ export class SwipeProcessor extends WorkerHost {
         },
       });
       
-      // Bạn có thể log ra để debug (nên tắt khi lên Production)
-      // console.log(`[SwipeProcessor] Đã ghi nhận ${action} của user ${userId} cho pet ${petId}`);
+      // You can log this for debugging (should be disabled in Production)
+      // console.log(`[SwipeProcessor] Recorded ${action} by user ${userId} for pet ${petId}`);
     } catch (error) {
-      console.error(`[SwipeProcessor] Lỗi khi xử lý swipe userId: ${userId}, petId: ${petId}`, error);
-      throw error; // Ném lỗi để BullMQ biết job này thất bại và có thể retry
+      console.error(`[SwipeProcessor] Error processing swipe userId: ${userId}, petId: ${petId}`, error);
+      throw error; // Throw error so BullMQ knows this job failed and can retry
     }
   }
 }

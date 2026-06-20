@@ -14,7 +14,7 @@ export class SheltersService {
   ) {}
 
   // =====================================================================
-  // FIX: HÀM NÀY ĐÃ ĐƯỢC CHUYỂN SANG TRUY VẤN BẢNG ORGANIZER
+  // FIX: THIS FUNCTION HAS BEEN MOVED TO QUERY THE ORGANIZER TABLE
   // =====================================================================
   async getOrganizerProfile(organizerId: string, userId?: string) {
     const organizer = await this.prisma.organizer.findUnique({
@@ -27,14 +27,14 @@ export class SheltersService {
     });
 
     if (!organizer) {
-      throw new NotFoundException('Không tìm thấy ban tổ chức (Organizer)');
+      throw new NotFoundException('Organizer not found');
     }
 
-    // Do hiện tại hệ thống chưa thiết kế bảng FollowedOrganizer riêng (chỉ mới có FollowedShelter), 
-    // ta tạm thời để isFollowing = false. Sau này làm tính năng follow organizer thì sẽ query bảng phụ ở đây.
+    // Because the system currently does not have a separate FollowedOrganizer table (only FollowedShelter), 
+    // we temporarily set isFollowing = false. Later, when implementing the follow organizer feature, we will query the secondary table here.
     let isFollowing = false;
 
-    // Mapping dữ liệu trả về theo format FE yêu cầu
+    // Mapping returned data to the format requested by FE
     return {
       success: true,
       data: {
@@ -45,7 +45,7 @@ export class SheltersService {
         coverImg: organizer.coverUrl || 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?q=80&w=1000&auto=format&fit=crop',
         followers: organizer.followers,
         totalEvents: organizer.events.length,
-        about: organizer.about || 'Chưa có thông tin giới thiệu về ban tổ chức này.',
+        about: organizer.about || 'No introductory information about this organizer yet.',
         isFollowing,
         events: organizer.events,
       },
@@ -53,7 +53,7 @@ export class SheltersService {
   }
 
   // =====================================================================
-  // CÁC HÀM CÒN LẠI ĐƯỢC GIỮ NGUYÊN HOÀN TOÀN
+  // THE REMAINING FUNCTIONS ARE KEPT COMPLETELY UNCHANGED
   // =====================================================================
   async findAll(query: GetSheltersDto) {
     const { search, page = 1, limit = 10 } = query;
@@ -126,7 +126,7 @@ export class SheltersService {
     });
 
     if (!shelter) {
-      throw new NotFoundException('Không tìm thấy trạm cứu hộ');
+      throw new NotFoundException('Shelter not found');
     }
 
     const adoptedCount = await this.prisma.pet.count({
@@ -160,7 +160,7 @@ export class SheltersService {
   async follow(shelterId: string, userId: string) {
     const shelter = await this.prisma.shelter.findUnique({ where: { id: shelterId } });
     if (!shelter) {
-      throw new NotFoundException('Không tìm thấy trạm cứu hộ');
+      throw new NotFoundException('Shelter not found');
     }
 
     try {
@@ -173,16 +173,16 @@ export class SheltersService {
 
       await this.notificationsService.createAndSendNotification({
         userId: userId,
-        title: '🏠 Đã theo dõi trạm cứu hộ',
-        body: `Bạn đã bắt đầu theo dõi trạm cứu hộ ${shelter.name}. Bạn sẽ nhận được các thông tin mới nhất từ họ.`,
+        title: '🏠 Followed shelter',
+        body: `You have started following the shelter ${shelter.name}. You will receive the latest updates from them.`,
         type: NotificationType.SYSTEM,
         referenceId: shelterId,
       });
 
-      return { message: 'Đã theo dõi trạm cứu hộ thành công' };
+      return { message: 'Successfully followed the shelter' };
     } catch (error: any) {
       if (error.code === 'P2002') {
-        throw new ConflictException('Bạn đã theo dõi trạm cứu hộ này rồi');
+        throw new ConflictException('You are already following this shelter');
       }
       throw error;
     }
@@ -198,10 +198,10 @@ export class SheltersService {
           },
         },
       });
-      return { message: 'Đã bỏ theo dõi trạm cứu hộ thành công' };
+      return { message: 'Successfully unfollowed the shelter' };
     } catch (error: any) {
       if (error.code === 'P2025') {
-        throw new NotFoundException('Bạn chưa theo dõi trạm cứu hộ này');
+        throw new NotFoundException('You are not following this shelter yet');
       }
       throw error;
     }
@@ -213,7 +213,7 @@ export class SheltersService {
     });
 
     if (!shelter) {
-      throw new NotFoundException('Không tìm thấy trạm cứu hộ');
+      throw new NotFoundException('Shelter not found');
     }
 
     const existingFollow = await this.prisma.followedShelter.findUnique({
@@ -248,8 +248,8 @@ export class SheltersService {
 
       await this.notificationsService.createAndSendNotification({
         userId: userId,
-        title: '🏠 Đã theo dõi trạm cứu hộ',
-        body: `Bạn đã bắt đầu theo dõi ${shelter.name}. Bạn sẽ nhận được các thông tin mới nhất từ họ.`,
+        title: '🏠 Followed shelter',
+        body: `You have started following ${shelter.name}. You will receive the latest updates from them.`,
         type: NotificationType.SYSTEM,
         referenceId: shelterId,
       });

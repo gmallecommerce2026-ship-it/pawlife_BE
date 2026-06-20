@@ -3,12 +3,12 @@ import { PrismaService } from '../../database/prisma/prisma.service';
 import { SwipeAction } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 
-// Đã thêm dấu `!` để fix lỗi TS2564
+// Added `!` to fix TS2564 error
 export class ShareLocationDto {
   petId!: string;
   lat!: number;
   lng!: number;
-  radius!: number; // Gửi lên từ Frontend để nhét vào push notification (Deeplink)
+  radius!: number; // Sent from Frontend to put into push notification (Deeplink)
   scannedBy?: string;
   phoneNumber?: string;
   message?: string;
@@ -22,41 +22,41 @@ export class UserInteractionsService {
   ) {}
 
   async shareLocation(dto: ShareLocationDto) {
-    // A. Lấy tagId tương ứng với petId vì TagReport yêu cầu tagId
+    // A. Get corresponding tagId for petId because TagReport requires tagId
     const tag = await this.prisma.tag.findFirst({
       where: { petId: dto.petId },
       select: { id: true }
     });
 
     if (!tag) {
-      throw new NotFoundException('Không tìm thấy Tag (vòng cổ) nào được gắn với thú cưng này');
+      throw new NotFoundException('No Tag (collar) found attached to this pet');
     }
 
-    // 1. Lưu location vào database (Đã loại bỏ petId, radius, scannerId cho khớp với DB)
+    // 1. Save location to database (Removed petId, radius, scannerId to match DB)
     const savedReport = await this.prisma.tagReport.create({
       data: {
-        tagId: tag.id,            // SỬA: Dùng tagId thay vì petId
+        tagId: tag.id,            // FIX: Use tagId instead of petId
         latitude: dto.lat,
         longitude: dto.lng,
         radius: dto.radius,
-        scannedBy: dto.scannedBy, // Frontend: Tên người quét (Sarah John)
+        scannedBy: dto.scannedBy, // Frontend: Scanner name (Sarah John)
         phoneNumber: dto.phoneNumber,
         message: dto.message,
-        // radius: Dữ liệu này DB bạn không có bảng để lưu, nên chỉ dùng cho Notification ở dưới
+        // radius: Your DB doesn't have a table to save this data, so only use for Notification below
       }
     });
 
-    // 2. Tìm chủ của thú cưng
+    // 2. Find pet owner
     const petOwnerId = await this.getPetOwnerId(dto.petId);
 
-    // 3. Gửi Push Notification tới chủ thú cưng
+    // 3. Send Push Notification to pet owner
     const notificationPayload = {
-      title: 'Vị trí thú cưng của bạn đã được chia sẻ!',
-      body: dto.message ? `Lời nhắn: ${dto.message}` : 'Một người nào đó vừa cập nhật vị trí của thú cưng.',
+      title: 'Your pet\'s location has been shared!',
+      body: dto.message ? `Message: ${dto.message}` : 'Someone just updated the pet\'s location.',
       referenceId: savedReport.id, 
       data: {
         type: 'SHARED_LOCATION',
-        // Dù đã lưu vào DB, vẫn truyền params lên url đề phòng frontend lấy từ params cho nhanh
+        // Even though saved to DB, still pass params to url in case frontend reads from params for speed
         url: `/tag-report-detail?reportId=${savedReport.id}&lat=${dto.lat}&lng=${dto.lng}&radius=${dto.radius}`, 
       },
     };
@@ -75,20 +75,20 @@ export class UserInteractionsService {
     });
 
     if (!pet || !pet.ownerId) {
-      throw new NotFoundException('Không tìm thấy thông tin thú cưng hoặc chủ sở hữu');
+      throw new NotFoundException('Pet or owner information not found');
     }
 
     return pet.ownerId;
   }
 
-  // 1. Chức năng Quẹt (Like/Pass)
+  // 1. Swipe function (Like/Pass)
   async swipePet(userId: string, petId: string, action: SwipeAction) {
     const existing = await this.prisma.petInteraction.findUnique({
       where: { userId_petId: { userId, petId } }
     });
 
     if (existing) {
-      throw new ConflictException('Đã tương tác với thú cưng này');
+      throw new ConflictException('Already interacted with this pet');
     }
 
     return this.prisma.petInteraction.create({
@@ -96,7 +96,7 @@ export class UserInteractionsService {
     });
   }
 
-  // 2. Chức năng Thêm/Xóa Yêu thích
+  // 2. Add/Remove Favorite function
   async toggleFavorite(userId: string, petId: string) {
     const existing = await this.prisma.favoritePet.findUnique({
       where: { userId_petId: { userId, petId } }
@@ -115,7 +115,7 @@ export class UserInteractionsService {
     }
   }
 
-  // 3. Chức năng Theo dõi Trạm cứu hộ
+  // 3. Follow Shelter function
   async toggleFollowShelter(userId: string, shelterId: string) {
     const existing = await this.prisma.followedShelter.findUnique({
       where: { userId_shelterId: { userId, shelterId } }

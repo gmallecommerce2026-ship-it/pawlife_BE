@@ -8,15 +8,15 @@ export enum OtpType {
 
 export class SocialLoginDto {
   @IsString()
-  @IsNotEmpty({ message: 'Provider không được để trống' })
-  @IsIn(['GOOGLE', 'APPLE', 'FACEBOOK'], { message: 'Provider không hợp lệ' })
+  @IsNotEmpty({ message: 'Provider cannot be empty' })
+  @IsIn(['GOOGLE', 'APPLE', 'FACEBOOK'], { message: 'Invalid provider' })
   provider: 'GOOGLE' | 'APPLE' | 'FACEBOOK';
 
   @IsString()
-  @IsNotEmpty({ message: 'Token không được để trống' })
+  @IsNotEmpty({ message: 'Token cannot be empty' })
   token: string;
 
-  // Thêm các trường này để App React Native có thể truyền xuống
+  // Add these fields so the React Native App can pass them down
   @IsOptional()
   @IsString()
   name?: string;
@@ -28,31 +28,32 @@ export class SocialLoginDto {
   @IsOptional()
   dob?: string | Date; 
 }
-// Dùng cho Đăng ký
+
+// Used for Registration
 export class RegisterDto {
-  @IsEmail({}, { message: 'Email không hợp lệ' })
+  @IsEmail({}, { message: 'Invalid email format' })
   @IsNotEmpty()
   email: string;
 
   @IsString()
-  @Length(6, 6, { message: 'Mã OTP phải có 6 ký tự' }) // Bổ sung trường này
+  @Length(6, 6, { message: 'The OTP code must be 6 characters long' }) // Added this field
   otp: string;
 
   @IsString()
-  @MinLength(6, { message: 'Mật khẩu phải có ít nhất 6 ký tự' })
+  @MinLength(6, { message: 'Password must be at least 6 characters long' })
   password: string;
 
   @IsString()
-  @IsNotEmpty({ message: 'Vui lòng nhập họ tên' })
+  @IsNotEmpty({ message: 'Please enter your full name' })
   name: string;
 
   @IsString()
   @IsOptional()
-  phone?: string;  // Bổ sung
+  phone?: string;  // Added
 
   @IsString()
   @IsOptional()
-  gender?: string; // Bổ sung
+  gender?: string; // Added
 
   @IsString()
   @IsOptional()
@@ -63,15 +64,14 @@ export class RegisterDto {
   avatarUrl?: string;
 }
 
-
-// Dùng cho Đăng nhập
+// Used for Login
 export class LoginDto {
-  @IsEmail({}, { message: 'Email không hợp lệ' })
+  @IsEmail({}, { message: 'Invalid email format' })
   @IsNotEmpty()
   email: string;
 
   @IsString()
-  @IsNotEmpty({ message: 'Vui lòng nhập mật khẩu' })
+  @IsNotEmpty({ message: 'Please enter your password' })
   password: string;
 
   @IsOptional()
@@ -80,53 +80,53 @@ export class LoginDto {
 }
 
 export class SendOtpDto {
-  @IsEmail({}, { message: 'Email không hợp lệ' })
+  @IsEmail({}, { message: 'Invalid email format' })
   @IsNotEmpty()
   email: string;
 
-  @IsEnum(OtpType, { message: 'Loại OTP không hợp lệ (SIGNUP hoặc FORGOT_PASSWORD)' })
+  @IsEnum(OtpType, { message: 'Invalid OTP type (SIGNUP or FORGOT_PASSWORD)' })
   @IsNotEmpty()
   type: OtpType;
 }
 
-// Dùng cho Xác thực OTP
+// Used for OTP Verification
 export class VerifyOtpDto {
-  @IsEmail({}, { message: 'Email không hợp lệ' })
+  @IsEmail({}, { message: 'Invalid email format' })
   @IsNotEmpty()
   email: string;
 
   @IsString()
-  @Length(6, 6, { message: 'Mã OTP phải có 6 ký tự' })
+  @Length(6, 6, { message: 'The OTP code must be 6 characters long' })
   otp: string;
 }
 
 export class ResetPasswordDto {
-  @IsEmail({}, { message: 'Email không hợp lệ' })
+  @IsEmail({}, { message: 'Invalid email format' })
   @IsNotEmpty()
   email: string;
 
   @IsString()
-  @Length(6, 6, { message: 'Mã OTP phải có 6 ký tự' })
+  @Length(6, 6, { message: 'The OTP code must be 6 characters long' })
   otp: string;
 
   @IsString()
-  @MinLength(6, { message: 'Mật khẩu mới phải có ít nhất 6 ký tự' })
+  @MinLength(6, { message: 'New password must be at least 6 characters long' })
   newPassword: string;
 }
 
 export class ChangePasswordDto {
   @IsString()
-  @IsNotEmpty({ message: 'Vui lòng nhập mật khẩu hiện tại' })
+  @IsNotEmpty({ message: 'Please enter your current password' })
   currentPassword: string;
 
   @IsString()
-  @MinLength(6, { message: 'Mật khẩu mới phải có ít nhất 6 ký tự' })
+  @MinLength(6, { message: 'New password must be at least 6 characters long' })
   newPassword: string;
 }
 
 export class UpdateProfileDto {
   @IsOptional()
-  @IsString({ message: 'Tên phải là chuỗi' })
+  @IsString({ message: 'Name must be a string' })
   name?: string;
 
   @IsOptional()

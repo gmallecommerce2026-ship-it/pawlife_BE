@@ -1,15 +1,15 @@
 import { Transform } from 'class-transformer';
 import { IsEnum, IsNotEmpty, IsNumber, IsOptional } from 'class-validator';
 
-// Nếu bạn đã định nghĩa enum này trong Prisma (ví dụ: enum SwipeAction { LIKE PASS }) 
-// thì có thể import trực tiếp từ @prisma/client. Ở đây mình tạo enum TS để dùng tạm.
+// If you have defined this enum in Prisma (e.g.: enum SwipeAction { LIKE PASS }) 
+// you can import it directly from @prisma/client. Here I created a TS enum for temporary use.
 export enum SwipeAction {
   LIKE = 'LIKE',
   PASS = 'PASS',
 }
 
 export class SwipePetDto {
-  @IsEnum(SwipeAction, { message: 'Action phải là LIKE hoặc PASS' })
+  @IsEnum(SwipeAction, { message: 'Action must be LIKE or PASS' })
   @IsNotEmpty()
   action: SwipeAction;
 

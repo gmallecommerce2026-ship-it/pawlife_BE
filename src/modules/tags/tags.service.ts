@@ -5,6 +5,7 @@ import { TagStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateTagReportDto } from './dto/create-tag-report.dto';
 import { RedisService } from '../../database/redis/redis.service'; // IMPORT REDIS
+
 function seededRandom(seed: string): number {
   let h = 0;
   for (let i = 0; i < seed.length; i++) {
@@ -29,11 +30,9 @@ function generateFakePointInRadius(
   return { lat: lat + latOffset, lng: lng + lngOffset };
 }
 
-
-
 @Injectable()
 export class TagsService {
-  private readonly LOST_TAGS_KEY = 'tags:locations:lost'; // Key lưu trong Redis
+  private readonly LOST_TAGS_KEY = 'tags:locations:lost'; // Key saved in Redis
 
   constructor(
     private prisma: PrismaService,
@@ -49,7 +48,7 @@ export class TagsService {
       },
     });
 
-    if (!report) throw new NotFoundException('Không tìm thấy báo cáo quét thẻ này.');
+    if (!report) throw new NotFoundException('Tag scan report not found.');
 
     const scanHistory = await this.prisma.tagReport.findMany({
       where: { tagId: report.tagId, id: { not: report.id } },
@@ -61,11 +60,11 @@ export class TagsService {
     const isOwner = currentUserId && currentUserId === report.tag?.pet?.ownerId;
     const isMainScanner = currentUserId && currentUserId === report.userId;
 
-    // --- 1. XỬ LÝ TỌA ĐỘ BÁO CÁO CHÍNH (Của người quét) ---
+    // --- 1. PROCESS MAIN REPORT COORDINATES (Of the scanner) ---
     let finalLat = report.latitude;
     let finalLng = report.longitude;
     
-    // 🌟 SỬA: CHỈ CÓ NGƯỜI QUÉT MỚI ĐƯỢC XEM TỌA ĐỘ THẬT. Chủ thú cưng cũng bị FAKE.
+    // 🌟 FIX: ONLY THE SCANNER CAN VIEW EXACT COORDINATES. Pet owner also sees FAKE.
     let isExactLocation = !!isMainScanner; 
 
     if (!isExactLocation && radius > 0 && report.latitude && report.longitude) {
@@ -74,11 +73,11 @@ export class TagsService {
       finalLng = fakePoint.lng;
     }
 
-    // --- 2. XỬ LÝ LỊCH SỬ QUÉT (Các điểm màu cam trên map) ---
+    // --- 2. PROCESS SCAN HISTORY (Orange points on map) ---
     const processedScanHistory = scanHistory.map(hist => {
       const isHistScanner = currentUserId && currentUserId === hist.userId;
       
-      // 🌟 SỬA: Tương tự, lịch sử quét cũng chỉ người quét đó mới được xem thật
+      // 🌟 FIX: Similarly, scan history can only be viewed exactly by that specific scanner
       const canViewHistExact = isHistScanner; 
 
       if (canViewHistExact || !hist.radius || !hist.latitude || !hist.longitude) {
@@ -96,11 +95,11 @@ export class TagsService {
 
     return {
       ...report,
-      latitude: finalLat,     
+      latitude: finalLat,    
       longitude: finalLng,
       radius: radius,
       isExactLocation,        
-      isOwner, // 🌟 Truyền cờ này xuống cho Frontend
+      isOwner, // 🌟 Pass this flag down to Frontend
       scanHistory: processedScanHistory
     };
   }
@@ -113,7 +112,7 @@ export class TagsService {
     const report = await this.prisma.tagReport.create({
       data: {
         tagId: tagId,
-        userId: currentUserId, // 🌟 LƯU ID CỦA NGƯỜI QUÉT VÀO ĐÂY
+        userId: currentUserId, // 🌟 SAVE SCANNER ID HERE
         latitude: lat,
         longitude: lng,
         radius: reportData.radius,
@@ -125,12 +124,12 @@ export class TagsService {
       include: { tag: { include: { pet: { include: { owner: true } } } } },
     });
 
-    // 2. TÍCH HỢP REDIS: Nếu thẻ đang ở trạng thái LOST và có tọa độ, lưu vào bản đồ Redis
+    // 2. REDIS INTEGRATION: If tag is LOST and has coordinates, save to Redis map
     if (report.tag.status === TagStatus.LOST && lat && lng) {
       await this.redisService.addLocation(this.LOST_TAGS_KEY, lng, lat, tagId);
     }
 
-    // 3. Sử dụng NotificationsService để thông báo cho chủ sở hữu
+    // 3. Use NotificationsService to notify the owner
     await this.notificationsService.notifyOwner(report);
 
     return report;
@@ -138,9 +137,9 @@ export class TagsService {
 
   async resolveTagReport(reportId: string) {
     const report = await this.prisma.tagReport.findUnique({ where: { id: reportId } });
-    if (!report) throw new NotFoundException('Không tìm thấy báo cáo quét thẻ này.');
+    if (!report) throw new NotFoundException('Tag scan report not found.');
 
-    // Xóa vị trí khỏi bản đồ Redis khi đã được resolve
+    // Remove location from Redis map once resolved
     await this.redisService.removeLocation(this.LOST_TAGS_KEY, report.tagId);
 
     return this.prisma.tagReport.update({
@@ -149,21 +148,22 @@ export class TagsService {
     });
   }
 
-  // ---- TÍNH NĂNG MỚI: TÌM THÚ CƯNG LẠC QUANH ĐÂY BẰNG REDIS ----
+  // ---- NEW FEATURE: FIND LOST PETS NEARBY USING REDIS ----
   async getNearbyLostPets(lat: number, lng: number, radiusKm: number = 5) {
     const roundedLat = lat.toFixed(2);
     const roundedLng = lng.toFixed(2);
     const cacheKey = `tags:nearby:lat_${roundedLat}:lng_${roundedLng}:radius_${radiusKm}`;
 
-    // 2. Kiểm tra Cache
+    // 2. Check Cache
     const cachedData = await this.redisService.get<any>(cacheKey);
     if (cachedData) return cachedData;
-    // 1. Lấy danh sách ID thẻ (tagId) nằm trong bán kính từ Redis cực nhanh
+    
+    // 1. Get list of tag IDs within radius from Redis super fast
     const nearbyTagIds = await this.redisService.getNearby(this.LOST_TAGS_KEY, Number(lng), Number(lat), Number(radiusKm));
 
     if (!nearbyTagIds || nearbyTagIds.length === 0) return [];
 
-    // 2. Query thông tin chi tiết từ Prisma bằng mảng ID vừa lấy được
+    // 2. Query detailed info from Prisma using the retrieved ID array
     const tags = await this.prisma.tag.findMany({
       where: {
         id: { in: nearbyTagIds },
@@ -178,10 +178,10 @@ export class TagsService {
     const result = tags.map(tag => ({
       tagId: tag.id,
       pet: tag.pet,
-      // Có thể kèm theo khoảng cách nếu cần tính toán thêm
+      // Can include distance if further calculation is needed
     }));
     await this.redisService.set(cacheKey, result, 600);
-    // Format data trả về cho app React Native
+    // Format return data for React Native app
     return result;
   }
 
@@ -191,7 +191,7 @@ export class TagsService {
       include: { pet: { include: { owner: true, images: true } } },
     });
 
-    if (!tag || !tag.pet) throw new NotFoundException('Không tìm thấy thông tin vòng cổ hoặc thú cưng.');
+    if (!tag || !tag.pet) throw new NotFoundException('Collar or pet information not found.');
 
     const pet = tag.pet;
     const isLost = tag.status === TagStatus.LOST;
@@ -199,22 +199,22 @@ export class TagsService {
     return {
       id: pet.id,
       name: pet.name,
-      breed: pet.breed || 'Chưa cập nhật',
+      breed: pet.breed || 'Not updated yet',
       gender: pet.gender || 'unknown',
-      color: pet.color || 'Chưa cập nhật',
+      color: pet.color || 'Not updated yet',
       dob: pet.dob,
       status: isLost ? 'lost' : 'safe',
       image: pet.images && pet.images.length > 0 ? pet.images[0].url : 'https://via.placeholder.com/600',
 
-      // SỬA Ở ĐÂY: Gọi đúng các trường lostContactName, lostContactPhone, lostContactAddress
+      // FIX HERE: Call the exact fields lostContactName, lostContactPhone, lostContactAddress
       owner: isLost ? {
-        name: pet.lostContactName || pet.owner?.name || 'Người dùng ẩn danh',
-        phone: pet.lostContactPhone || pet.owner?.phone || 'Chưa cung cấp số điện thoại',
-        address: pet.lostContactAddress || 'Chưa cập nhật địa chỉ',
+        name: pet.lostContactName || pet.owner?.name || 'Anonymous user',
+        phone: pet.lostContactPhone || pet.owner?.phone || 'Phone number not provided',
+        address: pet.lostContactAddress || 'Address not updated yet',
         avatarUrl: pet.owner?.avatarUrl || null,
       } : null,
 
-      // SỬA Ở ĐÂY: Trả về trường note từ lostDetails trong DB để Frontend hứng được
+      // FIX HERE: Return note field from lostDetails in DB so Frontend can catch it
       note: pet.lostDetails || "Please contact me ASAP",
     };
   }

@@ -4,7 +4,7 @@ import { Job } from 'bullmq';
 import { MailerService } from '@nestjs-modules/mailer';
 import { Logger } from '@nestjs/common';
 
-@Processor('mail') // Lắng nghe hàng đợi tên là 'mail'
+@Processor('mail') // Listen to the queue named 'mail'
 export class MailProcessor extends WorkerHost {
   private readonly logger = new Logger(MailProcessor.name);
 
@@ -12,33 +12,33 @@ export class MailProcessor extends WorkerHost {
     super();
   }
 
-  // Hàm này tự động kích hoạt khi AuthService ném Job vào hàng đợi
+  // This function is automatically triggered when AuthService pushes a Job to the queue
   async process(job: Job<any, any, string>): Promise<any> {
     if (job.name === 'send-otp') {
       const { email, subject, otp, isSignUp } = job.data;
-      this.logger.log(`Đang gửi email OTP tới: ${email}`);
+      this.logger.log(`Sending OTP email to: ${email}`);
 
       try {
         await this.mailerService.sendMail({
           to: email,
           subject: subject,
-          text: `Mã OTP của bạn là: ${otp}. Mã này sẽ hết hạn sau 5 phút.`,
+          text: `Your OTP code is: ${otp}. This code will expire in 5 minutes.`,
           html: `
             <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-              <h2 style="color: #f97316;">${isSignUp ? 'Chào mừng bạn!' : 'Yêu cầu đặt lại mật khẩu'}</h2>
-              <p>Bạn đã yêu cầu một mã OTP để ${isSignUp ? 'đăng ký tài khoản' : 'khôi phục mật khẩu'}.</p>
-              <p>Mã xác nhận của bạn là:</p>
+              <h2 style="color: #f97316;">${isSignUp ? 'Welcome!' : 'Password reset request'}</h2>
+              <p>You have requested an OTP code to ${isSignUp ? 'register an account' : 'recover your password'}.</p>
+              <p>Your verification code is:</p>
               <div style="font-size: 24px; font-weight: bold; background: #f3f4f6; padding: 10px 20px; display: inline-block; border-radius: 8px; letter-spacing: 2px;">
                 ${otp}
               </div>
-              <p style="color: #ef4444; font-size: 14px; margin-top: 20px;">* Lưu ý: Mã này sẽ hết hạn sau 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
+              <p style="color: #ef4444; font-size: 14px; margin-top: 20px;">* Note: This code will expire in 5 minutes. Please do not share this code with anyone.</p>
             </div>
           `,
         });
-        this.logger.log(`✅ Đã gửi email thành công tới: ${email}`);
+        this.logger.log(`✅ Successfully sent email to: ${email}`);
       } catch (error) {
-        this.logger.error(`❌ Lỗi gửi email tới ${email}:`, error);
-        throw error; // Ném lỗi để BullMQ tự động gửi lại (retry)
+        this.logger.error(`❌ Error sending email to ${email}:`, error);
+        throw error; // Throw error so BullMQ can automatically retry
       }
     }
   }

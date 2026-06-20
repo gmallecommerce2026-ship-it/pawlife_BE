@@ -42,10 +42,10 @@ export class ApplicationsController {
     @Body('photos') photos: string[], // Nhận mảng chuỗi URLs từ frontend
   ) {
     if (!photos || photos.length === 0) {
-      throw new BadRequestException('Vui lòng cung cấp ít nhất một ảnh xác minh.');
+      throw new BadRequestException('Please provide at least one verification photo.');
     }
     const data = await this.applicationsService.updateVerificationPhotos(userId, applicationId, photos);
-    return { success: true, message: 'Đã gửi ảnh xác minh thành công', data };
+    return { success: true, message: 'Verification photo submitted successfully', data };
   }
 
   @Patch(':id/withdraw')
@@ -54,6 +54,6 @@ export class ApplicationsController {
     @Param('id') applicationId: string,
   ) {
     const data = await this.applicationsService.withdrawApplication(userId, applicationId);
-    return { success: true, message: 'Đã thu hồi đơn đăng ký thành công', data };
+    return { success: true, message: 'Application withdrawn successfully', data };
   }
 }

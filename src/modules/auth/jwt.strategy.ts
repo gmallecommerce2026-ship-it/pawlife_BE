@@ -27,19 +27,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: any) {
     if (!payload.userId) {
         console.error('[JwtStrategy] Token invalid: missing userId');
-        throw new UnauthorizedException('Token không hợp lệ');
+        throw new UnauthorizedException('Invalid token');
     }
 
     const sessionStatus = await this.redisService.get(`auth:session:${payload.sessionId}`);
     if (!sessionStatus) {
-      throw new UnauthorizedException('Phiên đăng nhập đã hết hạn hoặc bị thiết bị khác đăng xuất.');
+      throw new UnauthorizedException('The login session has expired or has been logged out by another device.');
     }
 
-    // 1. TIN TƯỞNG HOÀN TOÀN VÀO PAYLOAD (KHÔNG GỌI REDIS/DB Ở ĐÂY)
-    // Cực kỳ nhẹ, tốc độ xử lý < 0.1ms cho mọi request
+    // 1. FULLY TRUST THE PAYLOAD (NO REDIS/DB CALLS HERE)
+    // Extremely lightweight, processing speed < 0.1ms for every request
     return {
         id: payload.userId,
-        email: payload.email, // Cần đảm bảo lúc sign token có truyền email vào payload
+        email: payload.email, // Make sure to pass the email into the payload when signing the token
         role: payload.role || 'USER', 
         sessionId: payload.sessionId,
     };

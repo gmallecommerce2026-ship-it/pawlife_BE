@@ -8,7 +8,7 @@ import { User } from '../../common/decorators/user.decorator';
 import { PetGender, PetSize } from '@prisma/client';
 import { CreatePetDto } from './dto/create-pet.dto';
 import { UpdatePetDto } from './dto/update-pet.dto';
-import { Throttle } from '@nestjs/throttler'; // BỔ SUNG IMPORT
+import { Throttle } from '@nestjs/throttler'; // ADDED IMPORT
 import { ToggleLostModeDto } from './dto/toggle-lost-mode.dto';
 import { ReplaceQrDto } from './dto/replace-qr.dto';
 
@@ -48,7 +48,7 @@ export class PetsController {
     return this.petsService.confirmTransfer(transferId, req.user.id);
   }
   
-  @Throttle({ default: { limit: 120, ttl: 60000 } }) // BỔ SUNG: Cho phép lướt feed 120 lần/phút (tránh ddos db)
+  @Throttle({ default: { limit: 120, ttl: 60000 } }) // ADDED: Allow feed scrolling 120 times/minute (prevent DB DDoS)
   @Get('feed')
   async getFeed(
     @User('id') userId: string,
@@ -81,7 +81,7 @@ export class PetsController {
     return this.petsService.getFavorites(userId, skip, take);
   }
 
-  @Throttle({ default: { limit: 150, ttl: 60000 } }) // BỔ SUNG: Cho phép quẹt tay tốc độ cao (150 lần/phút)
+  @Throttle({ default: { limit: 150, ttl: 60000 } }) // ADDED: Allow high-speed manual swiping (150 times/minute)
   @Post(':id/swipe')
   async swipePet(
     @User('id') userId: string,
@@ -127,7 +127,7 @@ export class PetsController {
     @Param('id') petId: string,
     @Body() replaceQrDto: ReplaceQrDto,
   ) {
-    const userId = req.user.id; // Lấy từ JWT payload
+    const userId = req.user.id; // Get from JWT payload
     return this.petsService.replaceQrCode(userId, petId, replaceQrDto);
   }
   
@@ -172,9 +172,9 @@ export class PetsController {
   async toggleLostMode(
     @Req() req: any, 
     @Param('id') id: string, 
-    @Body() dto: ToggleLostModeDto // Lấy toàn bộ payload frontend gửi lên
+    @Body() dto: ToggleLostModeDto // Get the entire payload sent by the frontend
   ) {
-    console.log("BACKEND NHẬN ĐƯỢC DTO:", dto);
+    console.log("BACKEND RECEIVED DTO:", dto);
     return this.petsService.toggleLostMode(req.user.id, id, dto);
   }
 }

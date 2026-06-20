@@ -48,10 +48,10 @@ export class NotificationsService {
         metadata: payload.data || {},
       } as unknown as CreateNotificationDto);
 
-      this.logger.log(`[Push Notification] Đã gửi thông báo tới user: ${userId}`);
+      this.logger.log(`[Push Notification] Sent notification to user: ${userId}`);
       return true;
     } catch (error) {
-      this.logger.error(`Lỗi gửi Push Notification:`, error);
+      this.logger.error(`Error sending Push Notification:`, error);
       return false;
     }
   }
@@ -82,21 +82,21 @@ export class NotificationsService {
   }
 
   async deleteNotification(userId: string, notificationId: string) {
-    // Tìm thông báo theo id và đảm bảo nó thuộc về user đang request
+    // Find the notification by id and ensure it belongs to the requesting user
     const notification = await this.prisma.notification.findUnique({
       where: { id: notificationId, userId },
     });
 
     if (!notification) {
-      throw new NotFoundException('Không tìm thấy thông báo hoặc bạn không có quyền xóa');
+      throw new NotFoundException('Notification not found or you do not have permission to delete it');
     }
 
-    // Thực hiện xóa
+    // Execute deletion
     await this.prisma.notification.delete({
       where: { id: notificationId },
     });
 
-    return { success: true, message: 'Đã xóa thông báo thành công' };
+    return { success: true, message: 'Notification deleted successfully' };
   }
 
   async getNotificationDetail(userId: string, notificationId: string) {
@@ -105,7 +105,7 @@ export class NotificationsService {
     });
 
     if (!notification) {
-      throw new NotFoundException('Không tìm thấy thông báo');
+      throw new NotFoundException('Notification not found');
     }
 
     let detailData: any = null;
@@ -126,7 +126,7 @@ export class NotificationsService {
         case 'EVENT':
           detailData = await this.prisma.event.findUnique({
             where: { id: notification.referenceId },
-            // SỬA LỖI Ở ĐÂY: Dùng organizer thay cho shelter
+            // BUG FIX HERE: Use organizer instead of shelter
             include: { organizer: true },
           });
           break;
@@ -134,7 +134,7 @@ export class NotificationsService {
         case 'SECURITY':
         case 'PASSWORD':
           detailData = notification.metadata || {
-            actionRequired: "Vui lòng kiểm tra lại lịch sử đăng nhập. Nếu có bất thường, hãy đổi mật khẩu ngay.",
+            actionRequired: "Please check your login history. If there is anything unusual, change your password immediately.",
             suggestedRoute: "/account-security"
           };
           break;
@@ -143,7 +143,7 @@ export class NotificationsService {
         case 'SYSTEM':
           detailData = notification.metadata || {
             version: "1.2.0",
-            releaseNotes: "Cập nhật hiệu năng và vá lỗi hệ thống."
+            releaseNotes: "Performance updates and system bug fixes."
           };
           break;
 
@@ -170,22 +170,22 @@ export class NotificationsService {
   async notifyOwner(report: any) {
     try {
       const ownerId = report.tag?.pet?.ownerId;
-      const petName = report.tag?.pet?.name || 'thú cưng';
+      const petName = report.tag?.pet?.name || 'pet';
 
       if (!ownerId) {
-        this.logger.warn(`[notifyOwner] Không tìm thấy ownerId cho report: ${report.id}`);
+        this.logger.warn(`[notifyOwner] ownerId not found for report: ${report.id}`);
         return;
       }
 
       const isPrecise = report.radius <= 5;
 
-      // Vẫn giữ text mặc định (fallback) cho DB/Push notification hệ thống cũ
-      const titleFallback = '📍 Vị trí mới của thú cưng!';
+      // Keep default text (fallback) for legacy DB/Push notification systems
+      const titleFallback = '📍 New location of the pet!';
       const bodyFallback = isPrecise
-        ? `Ai đó vừa tìm thấy ${petName} tại vị trí chính xác của họ.`
-        : `Ai đó vừa chia sẻ khu vực nghi vấn của ${petName} trong bán kính ${report.radius}m.`;
+        ? `Someone just found ${petName} at their exact location.`
+        : `Someone just shared a suspected area for ${petName} within a ${report.radius}m radius.`;
 
-      // Khai báo Key dịch thuật tương ứng
+      // Declare corresponding translation Key
       const titleKey = 'notification.tag_scanned_title';
       const bodyKey = isPrecise ? 'notification.tag_scanned_precise' : 'notification.tag_scanned_radius';
 
@@ -196,7 +196,7 @@ export class NotificationsService {
         data: {
           type: 'TAG_SCANNED',
           reportId: report.id,
-          // BỔ SUNG THÊM I18N DATA CHO FRONTEND
+          // APPEND ADDITIONAL I18N DATA FOR FRONTEND
           i18n: {
             titleKey: titleKey,
             bodyKey: bodyKey,
@@ -205,9 +205,9 @@ export class NotificationsService {
         }
       });
 
-      this.logger.log(`[notifyOwner] Đã gửi thông báo cho chủ sở hữu ${ownerId} về report ${report.id}`);
+      this.logger.log(`[notifyOwner] Sent notification to owner ${ownerId} about report ${report.id}`);
     } catch (error) {
-      this.logger.error(`[notifyOwner] Lỗi khi xử lý thông báo chủ sở hữu:`, error);
+      this.logger.error(`[notifyOwner] Error processing owner notification:`, error);
     }
   }
 
