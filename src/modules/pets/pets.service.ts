@@ -945,7 +945,7 @@ export class PetsService {
             id: `tag_${tag.id}`,
             type: 'QR_LINKED',
             title: isActiveTag ? 'QR Code Registered' : 'QR Code Replaced',
-            date: tag.linkedAt, // Dùng mốc thời gian cố định, không bao giờ bị nhảy
+            date: tag.linkedAt || tag.createdAt, // Dùng mốc thời gian cố định, không bao giờ bị nhảy
             description: isActiveTag
               ? `Vòng cổ thông minh được kích hoạt cho ${pet.name}.`
               : `Vòng cổ thông minh cũ đã được thay thế.`,
