@@ -753,7 +753,7 @@ export class PetsService {
 
       if (pet.medicalRecords && pet.medicalRecords.length > 0) {
         pet.medicalRecords.forEach(record => {
-          const recordNameBi = getBilingualText(record.recordName);
+          const recordNameBi = record.recordName;
           pawHistory.push({
             id: `med_${record.id}`, type: 'VACCINE', title: recordNameBi.en,
             date: record.recordDate, description: `Record ${record.type}: ${recordNameBi.en}`,
