@@ -755,15 +755,8 @@ export class PetsService {
         pet.medicalRecords.forEach(record => {
           const recordNameBi = record.recordName;
           pawHistory.push({
-            id: `med_${record.id}`, type: 'VACCINE', title: recordNameBi.en,
-            date: record.recordDate, description: `Record ${record.type}: ${recordNameBi.en}`,
-            i18n: {
-              titleKey: 'pawHistory.vaccine_title',
-              bodyKey: 'pawHistory.vaccine_body',
-              // Truyền cả vi/en của recordName để FE tự chọn theo ngôn ngữ hiện tại,
-              // thay vì BE quyết định trước — đúng tinh thần i18n giống notifyOwner.
-              params: { recordType: record.type, recordNameEn: recordNameBi.en, recordNameVi: recordNameBi.vi },
-            },
+            id: `med_${record.id}`, type: 'VACCINE', title: recordNameBi,
+            date: record.recordDate, description: `Record ${record.type}: ${recordNameBi}`,
           });
         });
       }
