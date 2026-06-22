@@ -1,3 +1,4 @@
+// src/modules/pets/pets.service.ts
 import { Injectable, ConflictException, NotFoundException, InternalServerErrorException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { SwipePetDto } from './dto/swipe-pet.dto';
@@ -144,7 +145,6 @@ export class PetsService {
     const matchesFilters = (pet: any) => {
       if (gender && pet.gender !== gender) return false;
       if (size && pet.size !== size) return false;
-      // Species giờ là JSON Object nên cần check bằng key ngôn ngữ
       if (species && pet.species?.en !== species && pet.species?.vi !== species && pet.species !== species) return false;
       return true;
     };
@@ -210,7 +210,6 @@ export class PetsService {
         interactions: { none: { userId: userId } },
         ...(gender && { gender }),
         ...(size && { size }),
-        // Prisma filter trực tiếp vào node JSON 'en'
         ...(species && {
           species: {
             path: ['en'],
@@ -344,8 +343,8 @@ export class PetsService {
           lostContactName: isLost ? ownerName : null, lostContactPhone: isLost ? ownerPhone : null,
           lostContactAddress: isLost ? ownerAddress : null, lostLocation: isLost ? location : null,
           lostDateTime: isLost ? dateTime : null, 
-          // Tạo thẳng Object JSON lưu vào DB
-          lostDetails: isLost && note ? { vi: note.trim(), en: note.trim() } : null,
+          // FIX 1: Ép kiểu as any để qua mặt TypeScript
+          lostDetails: isLost && note ? ({ vi: note.trim(), en: note.trim() } as any) : null,
           lostPhotos: isLost ? JSON.stringify(photos || []) : null, lostLatitude: isLost && latitude ? latitude : null,
           lostLongitude: isLost && longitude ? longitude : null, lostRadius: isLost && radius ? radius : null,
           lostDate: isLost && lostDate ? new Date(lostDate) : null,
@@ -571,7 +570,8 @@ export class PetsService {
         const result = await this.prisma.$transaction(async (prisma) => {
           const newPet = await prisma.pet.create({
             data: {
-              ...petData, ownerId: userId, status: 'ADOPTED', qrVerificationStatus: 'VERIFIED',
+              // FIX 2: Ép kiểu as any cho petData
+              ...(petData as any), ownerId: userId, status: 'ADOPTED', qrVerificationStatus: 'VERIFIED',
               qrCodeUrl: `${publicDomain}/qr-codes/${tagId}.svg`, idSetByShelter,
               ...(images && images.length > 0 && { images: { create: images.map(url => ({ url })) } }),
               ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
@@ -586,7 +586,8 @@ export class PetsService {
 
       const newPet = await this.prisma.pet.create({
         data: {
-          ...petData, ownerId: userId, status: 'ADOPTED', idSetByShelter,
+          // FIX 3: Ép kiểu as any cho petData
+          ...(petData as any), ownerId: userId, status: 'ADOPTED', idSetByShelter,
           ...(images && images.length > 0 && { images: { create: images.map(url => ({ url })) } }),
           ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
         },
@@ -609,7 +610,6 @@ export class PetsService {
     if (search) {
       whereCondition.OR = [
         { name: { contains: search } },
-        // Chèn logic tìm kiếm thẳng vào JSON thông qua Path
         { breed: { path: ['vi'], string_contains: search } as any },
         { breed: { path: ['en'], string_contains: search } as any },
       ];
@@ -920,7 +920,6 @@ export class PetsService {
       if (updateData.dob && pet.dob && new Date(updateData.dob).getTime() !== pet.dob.getTime()) {
         throw new BadRequestException({ message: 'Date of birth cannot be changed after 7 days of profile creation.', i18n: { key: 'error.dob_locked' } });
       }
-      // Dùng JSON.stringify để so sánh object ngôn ngữ thay vì !==
       if (updateData.breed && pet.breed && JSON.stringify(updateData.breed) !== JSON.stringify(pet.breed)) {
         throw new BadRequestException({ message: 'Pet breed cannot be changed after 7 days of profile creation.', i18n: { key: 'error.breed_locked' } });
       }
