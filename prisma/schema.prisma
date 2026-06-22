@@ -202,28 +202,28 @@ enum VerificationStatus {
 
 model PetTrait {
   id    String @id @default(uuid())
-  name  String // Ví dụ: "Playful", "Clingy", "Friendly"
+  name  Json   // Đổi từ String sang Json
   petId String
   pet   Pet    @relation(fields: [petId], references: [id], onDelete: Cascade)
 }
 model MedicalRecord {
-  id             String   @id @default(uuid())
-  type           String   // VD: "vaccination", "deworming", "flea_tick", "general"
-  recordName     String
-  recordDate     DateTime
-  images         Json?    // Lưu mảng URL ảnh [ "https://...", "https://..." ]
+  id               String   @id @default(uuid())
+  type             String   // VD: "vaccination", "deworming"...
+  recordName       Json     // Đổi từ String sang Json
+  recordDate       DateTime
+  images           Json?    
   
-  hasNextDueDate Boolean  @default(false)
-  nextDueDate    DateTime?
-  nextDueName    String?
+  hasNextDueDate   Boolean  @default(false)
+  nextDueDate      DateTime?
+  nextDueName      Json?    // Đổi từ String? sang Json?
 
   verificationStatus VerificationStatus @default(PENDING)
 
-  petId          String
-  pet            Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  petId            String
+  pet              Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 model Pet {
   id          String   @id @default(uuid())
