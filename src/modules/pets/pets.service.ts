@@ -139,13 +139,13 @@ export class PetsService {
   }
 
   async getFeed(userId: string, limit: number, filters?: FeedFilters, lat?: number, lng?: number) {
-    // Feed logic (Returns pure data, errors handled in Controller if any)
     const { gender, size, species } = filters || {};
 
     const matchesFilters = (pet: any) => {
       if (gender && pet.gender !== gender) return false;
       if (size && pet.size !== size) return false;
-      if (species && pet.species !== species) return false;
+      // Species giờ là JSON Object nên cần check bằng key ngôn ngữ
+      if (species && pet.species?.en !== species && pet.species?.vi !== species && pet.species !== species) return false;
       return true;
     };
 
@@ -210,7 +210,13 @@ export class PetsService {
         interactions: { none: { userId: userId } },
         ...(gender && { gender }),
         ...(size && { size }),
-        ...(species && { species }),
+        // Prisma filter trực tiếp vào node JSON 'en'
+        ...(species && {
+          species: {
+            path: ['en'],
+            equals: species
+          } as any
+        }),
       },
       take: limit,
       orderBy: { createdAt: 'desc' },
@@ -227,7 +233,12 @@ export class PetsService {
           interactions: { some: { userId: userId, action: 'PASS' } },
           ...(gender && { gender }),
           ...(size && { size }),
-          ...(species && { species }),
+          ...(species && {
+            species: {
+              path: ['en'],
+              equals: species
+            } as any
+          }),
         },
         take: limit,
         include: {
@@ -332,7 +343,9 @@ export class PetsService {
         data: {
           lostContactName: isLost ? ownerName : null, lostContactPhone: isLost ? ownerPhone : null,
           lostContactAddress: isLost ? ownerAddress : null, lostLocation: isLost ? location : null,
-          lostDateTime: isLost ? dateTime : null, lostDetails: isLost ? `${note || ''}`.trim() : null,
+          lostDateTime: isLost ? dateTime : null, 
+          // Tạo thẳng Object JSON lưu vào DB
+          lostDetails: isLost && note ? { vi: note.trim(), en: note.trim() } : null,
           lostPhotos: isLost ? JSON.stringify(photos || []) : null, lostLatitude: isLost && latitude ? latitude : null,
           lostLongitude: isLost && longitude ? longitude : null, lostRadius: isLost && radius ? radius : null,
           lostDate: isLost && lostDate ? new Date(lostDate) : null,
@@ -362,16 +375,6 @@ export class PetsService {
     } else if (latitude && longitude) {
       for (const tag of tags) await this.redisService.addLocation(LOST_TAGS_KEY, longitude, latitude, tag.id);
     }
-
-    // The Notifications Service part below already applies i18n well
-    // await this.notificationsService.createAndSendNotification({
-    //   userId: userId,
-    //   title: isLost ? '🚨 Lost alarm!' : '✅ Pet is safe',
-    //   body: isLost ? `You have TURNED ON lost mode for ${pet.name}.` : `You have TURNED OFF lost mode for ${pet.name}.`,
-    //   type: NotificationType.TAG,
-    //   referenceId: petId,
-    //   metadata: { i18n: { titleKey: isLost ? 'notification.lost_mode_on_title' : 'notification.lost_mode_off_title', bodyKey: isLost ? 'notification.lost_mode_on_body' : 'notification.lost_mode_off_body', params: { petName: pet.name } } }
-    // });
 
     if (!isLost) {
       try {
@@ -490,9 +493,8 @@ export class PetsService {
     };
   }
 
-  // Pure Get/Search functions returning Models don't need translation except for Internal errors
-  async getFavorites(userId: string, skip: number, take: number) { /* ... Logic unchanged ... */ 
-      const favorites = await this.prisma.favoritePet.findMany({
+  async getFavorites(userId: string, skip: number, take: number) {
+    const favorites = await this.prisma.favoritePet.findMany({
       where: { userId: userId },
       skip: skip,
       take: take,
@@ -549,7 +551,6 @@ export class PetsService {
   }
 
   async createPet(userId: string, createPetDto: CreatePetDto) {
-    // ... Initialize variables as before
     const { images, tagId, medicalRecords, ...petData } = createPetDto;
     const publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN');
     const idSetByShelter = await this.generateUniqueShelterCode();
@@ -599,7 +600,7 @@ export class PetsService {
     }
   }
 
-  async searchPets(params: { search?: string; type?: string; limit?: number }) { /* Query logic unchanged */ 
+  async searchPets(params: { search?: string; type?: string; limit?: number }) {
     const { search, type, limit = 20 } = params;
     const whereCondition: Prisma.PetWhereInput = {
       status: 'AVAILABLE',
@@ -608,12 +609,17 @@ export class PetsService {
     if (search) {
       whereCondition.OR = [
         { name: { contains: search } },
-        { breed: { contains: search } },
+        // Chèn logic tìm kiếm thẳng vào JSON thông qua Path
+        { breed: { path: ['vi'], string_contains: search } as any },
+        { breed: { path: ['en'], string_contains: search } as any },
       ];
     }
 
     if (type) {
-      whereCondition.species = type.toUpperCase() as any;
+      whereCondition.species = {
+        path: ['en'],
+        equals: type.toUpperCase()
+      } as any;
     }
 
     const pets = await this.prisma.pet.findMany({
@@ -658,7 +664,6 @@ export class PetsService {
 
       if (!pet) throw new NotFoundException({ message: 'Pet information not found!', i18n: { key: 'error.pet_not_found' } });
 
-      // ... Your History formatting logic remains unchanged, does not affect Error
       if (!pet.idSetByShelter) {
         const newCode = await this.generateUniqueShelterCode();
         await this.prisma.pet.update({
@@ -915,7 +920,8 @@ export class PetsService {
       if (updateData.dob && pet.dob && new Date(updateData.dob).getTime() !== pet.dob.getTime()) {
         throw new BadRequestException({ message: 'Date of birth cannot be changed after 7 days of profile creation.', i18n: { key: 'error.dob_locked' } });
       }
-      if (updateData.breed && pet.breed && updateData.breed !== pet.breed) {
+      // Dùng JSON.stringify để so sánh object ngôn ngữ thay vì !==
+      if (updateData.breed && pet.breed && JSON.stringify(updateData.breed) !== JSON.stringify(pet.breed)) {
         throw new BadRequestException({ message: 'Pet breed cannot be changed after 7 days of profile creation.', i18n: { key: 'error.breed_locked' } });
       }
       if (updateData.gender && pet.gender && updateData.gender !== pet.gender) {

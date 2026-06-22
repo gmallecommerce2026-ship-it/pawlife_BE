@@ -1,6 +1,18 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, IsArray, IsEnum, IsBoolean, IsDateString, ArrayMaxSize, ValidateNested } from 'class-validator';
-import { PetGender, PetSize, VerificationStatus } from '@prisma/client'; // Import Enum từ Prisma
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsArray, IsEnum, IsBoolean, IsDateString, ValidateNested, IsNotEmptyObject } from 'class-validator';
+import { PetGender, PetSize, VerificationStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
+
+// 1. Tạo Class DTO chuẩn cho dữ liệu Song Ngữ
+export class LocalizedStringDto {
+  @IsString()
+  @IsOptional()
+  vi?: string;
+
+  @IsString()
+  @IsOptional()
+  en?: string;
+}
+
 export class MedicalRecordDto {
   @IsString()
   @IsNotEmpty()
@@ -34,18 +46,22 @@ export class MedicalRecordDto {
   @IsOptional()
   verificationStatus?: VerificationStatus;
 }
+
 export class CreatePetDto {
   @IsString()
   @IsNotEmpty()
   name!: string;
 
-  @IsString()
-  @IsNotEmpty()
-  species!: string; // Dog, Cat...
+  // 2. Thay đổi các trường Song ngữ sang ValidateNested và type LocalizedStringDto
+  @ValidateNested()
+  @Type(() => LocalizedStringDto)
+  @IsNotEmptyObject()
+  species!: LocalizedStringDto; // Bắt buộc phải có Object ngôn ngữ
 
-  @IsString()
+  @ValidateNested()
+  @Type(() => LocalizedStringDto)
   @IsOptional()
-  breed?: string;
+  breed?: LocalizedStringDto;
 
   @IsDateString()
   @IsOptional()
@@ -67,32 +83,32 @@ export class CreatePetDto {
   @IsOptional()
   contactAddress?: string;
 
-  @IsString()
+  @ValidateNested()
+  @Type(() => LocalizedStringDto)
   @IsOptional()
-  description?: string; // Tương đương "Notes"
+  description?: LocalizedStringDto; 
 
   @IsArray()
   @IsString({ each: true })
   @IsOptional()
   images?: string[];
 
-  // --- CÁC TRƯỜNG MỚI THÊM ---
-
   @IsEnum(PetGender)
   @IsOptional()
-  gender?: PetGender; // MALE, FEMALE, UNKNOWN
+  gender?: PetGender; 
 
   @IsEnum(PetSize)
   @IsOptional()
-  size?: PetSize; // SMALL, MEDIUM, LARGE
+  size?: PetSize; 
 
   @IsNumber()
   @IsOptional()
-  weight?: number; // Cân nặng (kg)
+  weight?: number; 
 
-  @IsString()
+  @ValidateNested()
+  @Type(() => LocalizedStringDto)
   @IsOptional()
-  color?: string; // Màu sắc (VD: Gray & White)
+  color?: LocalizedStringDto; 
 
   @IsBoolean()
   @IsOptional()
@@ -112,13 +128,15 @@ export class CreatePetDto {
   @IsOptional()
   qrCodeUrl?: string;
 
+  @ValidateNested()
+  @Type(() => LocalizedStringDto)
   @IsOptional()
-  @IsString()
-  traits?: string;
+  traits?: LocalizedStringDto;
 
+  @ValidateNested()
+  @Type(() => LocalizedStringDto)
   @IsOptional()
-  @IsString()
-  idealHome?: string;
+  idealHome?: LocalizedStringDto;
 
   @IsOptional()
   @IsArray()
