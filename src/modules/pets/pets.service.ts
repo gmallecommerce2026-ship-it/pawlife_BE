@@ -753,7 +753,7 @@ export class PetsService {
 
       if (pet.medicalRecords && pet.medicalRecords.length > 0) {
         pet.medicalRecords.forEach(record => {
-          const recordNameBi = record.recordName;
+          const recordNameBi = JSON.parse(record.recordName);
           pawHistory.push({
             id: `med_${record.id}`, type: 'VACCINE', title: recordNameBi,
             date: record.recordDate, description: `Record ${record.type}: ${recordNameBi}`,
