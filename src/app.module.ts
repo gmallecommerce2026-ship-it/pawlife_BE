@@ -23,6 +23,7 @@ import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis'
 import { Redis } from 'ioredis';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
+import { TranslateModule } from './translate/translate.module';
 
 @Module({
   imports: [
@@ -108,6 +109,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     NotificationsModule,
     ApplicationsModule,
     WalletModule,
+    TranslateModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
