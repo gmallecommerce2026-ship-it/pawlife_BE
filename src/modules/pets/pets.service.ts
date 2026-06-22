@@ -2,9 +2,10 @@
 import { Injectable, ConflictException, NotFoundException, InternalServerErrorException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { SwipePetDto } from './dto/swipe-pet.dto';
-import { PetGender, PetSize, Prisma, NotificationType, TagStatus } from '@prisma/client';
+import { PetGender, PetSize, Prisma, NotificationType } from '@prisma/client';
 import { CreatePetDto } from './dto/create-pet.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { TagStatus } from '@prisma/client';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { RedisService } from 'src/database/redis/redis.service';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -32,50 +33,20 @@ export interface PawHistoryItem {
     bodyKey: string;
     params?: Record<string, any>;
   };
-}
 
-// ----------------------------------------------------------------------
-// HÀM ĐÃ ĐƯỢC SỬA: Xử lý triệt để Object, JSON String và FormData lỗi
-// ----------------------------------------------------------------------
+}
 function getBilingualText(field: unknown): { vi: string; en: string } {
   if (!field) return { vi: '', en: '' };
-  
-  // Chặn đứng trường hợp Frontend dùng FormData gửi nhầm Object thành "[object Object]"
-  if (field === '[object Object]') return { vi: 'Unknown/Chưa cập nhật', en: 'Unknown/Not updated' };
-
-  // Trường hợp Frontend đã cẩn thận JSON.stringify() trước khi nhét vào FormData
-  if (typeof field === 'string') {
-    const trimmed = field.trim();
-    if (trimmed.startsWith('{')) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        return {
-          vi: String(parsed.vi ?? parsed.en ?? trimmed),
-          en: String(parsed.en ?? parsed.vi ?? trimmed)
-        };
-      } catch (e) {
-        return { vi: field, en: field };
-      }
-    }
-    return { vi: field, en: field };
-  }
-  
-  // Trường hợp truyền thẳng Object chuẩn
+  if (typeof field === 'string') return { vi: field, en: field };
   if (typeof field === 'object' && field !== null) {
     const obj = field as Record<string, unknown>;
-    const viVal = obj.vi ?? obj.en ?? '';
-    const enVal = obj.en ?? obj.vi ?? '';
-    
-    return { 
-      // Ép kiểu an toàn, không dùng String() lên Object để tránh văng [object Object]
-      vi: typeof viVal === 'object' ? JSON.stringify(viVal) : String(viVal), 
-      en: typeof enVal === 'object' ? JSON.stringify(enVal) : String(enVal) 
-    };
+    const en = String(obj.en ?? obj.vi ?? '');
+    const vi = String(obj.vi ?? obj.en ?? '');
+    return { vi, en };
   }
-  
   return { vi: String(field), en: String(field) };
 }
-// ----------------------------------------------------------------------
+
 
 const ownerSelectQuery = {
   select: {
@@ -390,6 +361,7 @@ export class PetsService {
           lostContactName: isLost ? ownerName : null, lostContactPhone: isLost ? ownerPhone : null,
           lostContactAddress: isLost ? ownerAddress : null, lostLocation: isLost ? location : null,
           lostDateTime: isLost ? dateTime : null,
+          // FIX 1: Ép kiểu as any để qua mặt TypeScript
           lostDetails: isLost && note ? ({ vi: note.trim(), en: note.trim() } as any) : null,
           lostPhotos: isLost ? JSON.stringify(photos || []) : null, lostLatitude: isLost && latitude ? latitude : null,
           lostLongitude: isLost && longitude ? longitude : null, lostRadius: isLost && radius ? radius : null,
@@ -617,6 +589,7 @@ export class PetsService {
         const result = await this.prisma.$transaction(async (prisma) => {
           const newPet = await prisma.pet.create({
             data: {
+              // FIX 2: Ép kiểu as any cho petData
               ...(petData as any), ownerId: userId, status: 'ADOPTED', qrVerificationStatus: 'VERIFIED',
               qrCodeUrl: `${publicDomain}/qr-codes/${tagId}.svg`, idSetByShelter,
               ...(images && images.length > 0 && { images: { create: images.map(url => ({ url })) } }),
@@ -632,6 +605,7 @@ export class PetsService {
 
       const newPet = await this.prisma.pet.create({
         data: {
+          // FIX 3: Ép kiểu as any cho petData
           ...(petData as any), ownerId: userId, status: 'ADOPTED', idSetByShelter,
           ...(images && images.length > 0 && { images: { create: images.map(url => ({ url })) } }),
           ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
@@ -750,6 +724,7 @@ export class PetsService {
         },
       });
 
+
       if (pet.dob) {
         pawHistory.push({
           id: `dob_${pet.id}`, type: 'BIRTH', title: 'Date of Birth',
@@ -761,6 +736,7 @@ export class PetsService {
           },
         });
       }
+
 
       if (pet.tags && pet.tags.length > 0) {
         const linkedTags = pet.tags.filter(t => t.linkedAt !== null);
@@ -775,6 +751,7 @@ export class PetsService {
               bodyKey: isActiveTag ? 'pawHistory.qr_registered_body' : 'pawHistory.qr_replaced_body',
               params: { petName: pet.name },
             },
+
           });
         });
       }
@@ -788,6 +765,8 @@ export class PetsService {
             i18n: {
               titleKey: 'pawHistory.vaccine_title',
               bodyKey: 'pawHistory.vaccine_body',
+              // Truyền cả vi/en của recordName để FE tự chọn theo ngôn ngữ hiện tại,
+              // thay vì BE quyết định trước — đúng tinh thần i18n giống notifyOwner.
               params: { recordType: record.type, recordNameEn: recordNameBi.en, recordNameVi: recordNameBi.vi },
             },
           });
@@ -804,6 +783,7 @@ export class PetsService {
               bodyKey: 'pawHistory.transfer_body',
               params: { receiverName: tr.receiver?.name || 'Anonymous' },
             },
+
           });
         });
       }
@@ -991,15 +971,9 @@ export class PetsService {
       if (updateData.dob && pet.dob && new Date(updateData.dob).getTime() !== pet.dob.getTime()) {
         throw new BadRequestException({ message: 'Date of birth cannot be changed after 7 days of profile creation.', i18n: { key: 'error.dob_locked' } });
       }
-      if (updateData.breed && pet.breed) {
-        const newBreed = getBilingualText(updateData.breed);
-        const oldBreed = getBilingualText(pet.breed);
-        const breedChanged = newBreed.vi.trim() !== oldBreed.vi.trim() || newBreed.en.trim() !== oldBreed.en.trim();
-        if (breedChanged) {
-          throw new BadRequestException({ message: 'Pet breed cannot be changed after 7 days of profile creation.', i18n: { key: 'error.breed_locked' } });
-        }
+      if (updateData.breed && pet.breed && JSON.stringify(updateData.breed) !== JSON.stringify(pet.breed)) {
+        throw new BadRequestException({ message: 'Pet breed cannot be changed after 7 days of profile creation.', i18n: { key: 'error.breed_locked' } });
       }
-
       if (updateData.gender && pet.gender && updateData.gender !== pet.gender) {
         throw new BadRequestException({ message: 'Gender cannot be changed after 7 days of profile creation.', i18n: { key: 'error.gender_locked' } });
       }
