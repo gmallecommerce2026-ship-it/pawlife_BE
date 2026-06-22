@@ -226,68 +226,73 @@ model MedicalRecord {
   updatedAt        DateTime @updatedAt
 }
 model Pet {
-  id          String   @id @default(uuid())
-  name        String
-  species     String // Dog, Cat...
-  breed       String?
-  dob         DateTime?
-  microchipNumber  String?
-  description String?    @db.Text
-  images      PetImage[] // Lưu URL từ Cloudflare R2
-  status      PetStatus @default(AVAILABLE)
-  gender      PetGender?
-  size        PetSize?
-  weight      Float?    // Cân nặng (kg)
-  color       String?
-  lostPhotos String? @db.Text
-  isVaccinated    Boolean @default(false)
-  isSpayedNeutered Boolean @default(false)
+  id                    String   @id @default(uuid())
+  name                  String
+  
+  // --- Các trường đã được nâng cấp lên chuẩn Song ngữ (JSON) ---
+  species               Json     // Thay vì String
+  breed                 Json?    // Thay vì String?
+  description           Json?    // Đã xoá @db.Text
+  color                 Json?    // Thay vì String?
+  traits                Json?    // Đã xoá @db.Text
+  idealHome             Json?    // Đã xoá @db.Text
+  lostDetails           Json?    // Thay vì String?
+  
+  // -------------------------------------------------------------
+  
+  dob                   DateTime?
+  microchipNumber       String?
+  images                PetImage[] 
+  status                PetStatus @default(AVAILABLE)
+  gender                PetGender?
+  size                  PetSize?
+  weight                Float?    
+  lostPhotos            String?  @db.Text
+  isVaccinated          Boolean  @default(false)
+  isSpayedNeutered      Boolean  @default(false)
 
-  contactName      String?
-  contactPhone     String?
-  contactAddress   String?
-  traitsList       PetTrait[]
-  traits           String?  @db.Text // Đặc điểm tính cách chi tiết
-  idealHome        String?  @db.Text // Ngôi nhà lý tưởng
-  personalityTags  Json?
-  goodWith         Json?    // Lưu mảng string, vd: ["Dogs", "Kids"]
-  badWith          Json?    // Lưu mảng string, vd: ["Cats"]
-  medicalRecords MedicalRecord[]
+  contactName           String?
+  contactPhone          String?
+  contactAddress        String?
+  traitsList            PetTrait[]
+  personalityTags       Json?
+  goodWith              Json?    
+  badWith               Json?    
+  medicalRecords        MedicalRecord[]
   vetVerificationStatus VerificationStatus @default(PENDING)
   qrCodeUrl             String?
   qrVerificationStatus  VerificationStatus @default(PENDING)
   
-  idSetByShelter String? @unique
+  idSetByShelter        String? @unique
   
-  interactions PetInteraction[]
-  favoritedBy  FavoritePet[]    @relation("PetFavoritedBy")
-  transferRequests  TransferRequest[]
+  interactions          PetInteraction[]
+  favoritedBy           FavoritePet[]    @relation("PetFavoritedBy")
+  transferRequests      TransferRequest[]
 
-  ownerId String?
-  owner   User?   @relation("UserPets", fields: [ownerId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
-  shelterId String?
-  shelter   Shelter? @relation(fields: [shelterId], references: [id])
+  ownerId               String?
+  owner                 User?   @relation("UserPets", fields: [ownerId], references: [id])
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @default(now()) @updatedAt
+  shelterId             String?
+  shelter               Shelter? @relation(fields: [shelterId], references: [id])
 
-  tags             Tag[]
-  adoptionRequests AdoptionRequest[]
-  adoptionApplications AdoptionApplication[]
+  tags                  Tag[]
+  adoptionRequests      AdoptionRequest[]
+  adoptionApplications  AdoptionApplication[]
 
-  lostLatitude       Float?    // Lưu vĩ độ báo lạc
-  lostLongitude      Float?    // Lưu kinh độ báo lạc
-  lostRadius     Float?
-  lostDate           DateTime? // Lưu thời gian chuẩn để tính "Time Ago"
+  lostLatitude          Float?    
+  lostLongitude         Float?    
+  lostRadius            Float?
+  lostDate              DateTime? 
   
-  lostContactName    String?  // Tên người liên hệ khẩn cấp khi thất lạc
-  lostContactPhone   String?  // SĐT khẩn cấp khi thất lạc
-  lostContactAddress String?  // Địa chỉ khẩn cấp khi thất lạc
-  lostLocation       String?  // Địa điểm thất lạc
-  lostDateTime       String?  // Thời gian thất lạc
-  lostDetails        String?  // Đặc điểm nhận dạng / Lời nhắn
-  needsQrReplacement Boolean @default(false)
-  nameLastUpdatedAt DateTime? 
-  adoptedAt         DateTime?
+  lostContactName       String?  
+  lostContactPhone      String?  
+  lostContactAddress    String?  
+  lostLocation          String?  
+  lostDateTime          String?  
+  needsQrReplacement    Boolean @default(false)
+  nameLastUpdatedAt     DateTime? 
+  adoptedAt             DateTime?
 }
 
 model AdoptionApplication {
