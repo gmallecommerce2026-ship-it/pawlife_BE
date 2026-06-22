@@ -5,7 +5,7 @@ import { CreateApplicationDto } from './dto/create-application.dto';
 
 @Injectable()
 export class ApplicationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async createApplication(userId: string, data: CreateApplicationDto) {
     const activeApplicationsCount = await this.prisma.adoptionApplication.count({
@@ -19,14 +19,17 @@ export class ApplicationsService {
 
     if (activeApplicationsCount >= 5) {
       throw new BadRequestException(
-        'You have 5 pending applications. Please wait for the results or close your old applications before submitting a new one.'
+        {
+          message: 'You have 5 pending applications. Please wait for the results or close your old applications before submitting a new one.',
+          i18n: { key: 'error.application_limit_reached', params: { limit: 5 } },
+        }
       );
     }
 
     // TÌM TẤT CẢ CÁC ĐƠN BẤT KỂ TRẠNG THÁI
     const existingApp = await this.prisma.adoptionApplication.findFirst({
-      where: { 
-        userId, 
+      where: {
+        userId,
         petId: data.petId,
       },
     });
@@ -34,9 +37,13 @@ export class ApplicationsService {
     if (existingApp) {
       // Nếu có đơn đang mở -> Chặn lại
       if (existingApp.status !== 'CLOSED' && existingApp.status !== 'ADOPTION_COMPLETED') {
-        throw new BadRequestException('You have already submitted an application for this pet.');
+        throw new BadRequestException({
+          message: 'You have already submitted an application for this pet.',
+          i18n: { key: 'error.application_already_submitted' },
+        });
+
       }
-      
+
       // Nếu có đơn nhưng đã bị CLOSED -> Tái sử dụng (Update) bản ghi cũ để không vi phạm luật Unique P2002
       return await this.prisma.adoptionApplication.update({
         where: { id: existingApp.id },
@@ -52,7 +59,7 @@ export class ApplicationsService {
       data: {
         userId,
         ...data,
-        status: 'SUBMITTED', 
+        status: 'SUBMITTED',
       },
     });
   }
@@ -63,14 +70,14 @@ export class ApplicationsService {
       include: {
         pet: {
           select: {
-            id: true,         
+            id: true,
             name: true,
             breed: true,
             dob: true,        // <--- BỔ SUNG TRƯỜNG NÀY
-            images: true, 
-            shelter: {        
+            images: true,
+            shelter: {
               select: {
-                id: true,     
+                id: true,
                 name: true,
               }
             }
@@ -86,9 +93,9 @@ export class ApplicationsService {
   // BỔ SUNG HÀM NÀY ĐỂ LẤY CHI TIẾT ĐƠN ỨNG TUYỂN
   async getApplicationById(userId: string, applicationId: string) {
     const application = await this.prisma.adoptionApplication.findFirst({
-      where: { 
+      where: {
         id: applicationId,
-        userId: userId 
+        userId: userId
       },
       include: {
         pet: {
@@ -103,7 +110,11 @@ export class ApplicationsService {
     });
 
     if (!application) {
-      throw new NotFoundException('This adoption application was not found!');
+      throw new NotFoundException({
+        message: 'This adoption application was not found!',
+        i18n: { key: 'error.application_not_found' },
+      });
+
     }
 
     return application;
@@ -112,25 +123,33 @@ export class ApplicationsService {
   async updateVerificationPhotos(userId: string, applicationId: string, photos: string[]) {
     // 1. Kiểm tra đơn có tồn tại và thuộc về user không
     const application = await this.prisma.adoptionApplication.findFirst({
-      where: { 
+      where: {
         id: applicationId,
-        userId: userId 
+        userId: userId
       },
     });
 
     if (!application) {
-      throw new NotFoundException('This adoption application was not found!');
+      throw new NotFoundException({
+        message: 'This adoption application was not found!',
+        i18n: { key: 'error.application_not_found' },
+      });
+
     }
 
     // 2. Tùy chọn: Validate trạng thái (chỉ cho phép upload khi đang cần thêm thông tin)
     if (application.status !== 'NEED_MORE_INFO') {
-      throw new BadRequestException('The application currently requires no additional information.');
+      throw new BadRequestException({
+        message: 'The application currently requires no additional information.',
+        i18n: { key: 'error.application_no_info_needed' },
+      });
+
     }
 
     // 3. Cập nhật ảnh và chuyển trạng thái về PENDING
     return await this.prisma.adoptionApplication.update({
       where: { id: applicationId },
-      data: { 
+      data: {
         verificationPhotos: photos,
         status: 'PENDING', // Đổi trạng thái để Shelter duyệt tiếp
       },
@@ -140,19 +159,27 @@ export class ApplicationsService {
   async withdrawApplication(userId: string, applicationId: string) {
     // Kiểm tra xem đơn có tồn tại và thuộc về user đang đăng nhập không
     const application = await this.prisma.adoptionApplication.findFirst({
-      where: { 
+      where: {
         id: applicationId,
-        userId: userId 
+        userId: userId
       },
     });
 
     if (!application) {
-      throw new NotFoundException('This adoption application was not found!');
+      throw new NotFoundException({
+        message: 'This adoption application was not found!',
+        i18n: { key: 'error.application_not_found' },
+      });
+
     }
 
     // Không cho phép rút đơn nếu đã đóng hoặc đã hoàn thành
     if (application.status === 'CLOSED' || application.status === 'ADOPTION_COMPLETED') {
-      throw new BadRequestException('The application cannot be withdrawn in this status!');
+      throw new BadRequestException({
+        message: 'The application cannot be withdrawn in this status!',
+        i18n: { key: 'error.application_cannot_withdraw' },
+      });
+
     }
 
     // Cập nhật trạng thái thành CLOSED
