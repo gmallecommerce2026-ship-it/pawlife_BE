@@ -28,15 +28,25 @@ export interface PawHistoryItem {
   title: string;
   date: Date | string;
   description: string;
+  i18n?: {
+    titleKey: string;
+    bodyKey: string;
+    params?: Record<string, any>;
+  };
+
 }
-function getEnglishText(field: unknown): string {
-  if (!field) return '';
-  if (typeof field === 'string') return field;
-  if (typeof field === 'object' && field !== null && 'en' in field) {
-    return String((field as any).en ?? '');
+function getBilingualText(field: unknown): { vi: string; en: string } {
+  if (!field) return { vi: '', en: '' };
+  if (typeof field === 'string') return { vi: field, en: field };
+  if (typeof field === 'object' && field !== null) {
+    const obj = field as Record<string, unknown>;
+    const en = String(obj.en ?? obj.vi ?? '');
+    const vi = String(obj.vi ?? obj.en ?? '');
+    return { vi, en };
   }
-  return String(field);
+  return { vi: String(field), en: String(field) };
 }
+
 
 const ownerSelectQuery = {
   select: {
@@ -705,15 +715,27 @@ export class PetsService {
 
       pawHistory.push({
         id: `join_${pet.id}`, type: 'CREATED', title: 'Joined PawLife',
-        date: pet.createdAt, description: `The profile for ${pet.name} was created on the system.`
+        date: pet.createdAt, description: `The profile for ${pet.name} was created on the system.`,
+        i18n: {
+          titleKey: 'pawHistory.joined_title',
+          bodyKey: 'pawHistory.joined_body',
+          params: { petName: pet.name },
+        },
       });
+
 
       if (pet.dob) {
         pawHistory.push({
           id: `dob_${pet.id}`, type: 'BIRTH', title: 'Date of Birth',
-          date: pet.dob, description: `${pet.name} barked/meowed into the world.`
+          date: pet.dob, description: `${pet.name} barked/meowed into the world.`,
+          i18n: {
+            titleKey: 'pawHistory.birth_title',
+            bodyKey: 'pawHistory.birth_body',
+            params: { petName: pet.name },
+          },
         });
       }
+
 
       if (pet.tags && pet.tags.length > 0) {
         const linkedTags = pet.tags.filter(t => t.linkedAt !== null);
@@ -723,16 +745,29 @@ export class PetsService {
             id: `tag_${tag.id}`, type: 'QR_LINKED', title: isActiveTag ? 'QR Code Registered' : 'QR Code Replaced',
             date: tag.linkedAt || tag.createdAt,
             description: isActiveTag ? `Smart collar activated for ${pet.name}.` : `Old smart collar replaced.`,
+            i18n: {
+              titleKey: isActiveTag ? 'pawHistory.qr_registered_title' : 'pawHistory.qr_replaced_title',
+              bodyKey: isActiveTag ? 'pawHistory.qr_registered_body' : 'pawHistory.qr_replaced_body',
+              params: { petName: pet.name },
+            },
+
           });
         });
       }
 
       if (pet.medicalRecords && pet.medicalRecords.length > 0) {
         pet.medicalRecords.forEach(record => {
-          const recordNameText = getEnglishText(record.recordName);
+          const recordNameBi = getBilingualText(record.recordName);
           pawHistory.push({
-            id: `med_${record.id}`, type: 'VACCINE', title: recordNameText,
-            date: record.recordDate, description: `Record ${record.type}: ${recordNameText}`
+            id: `med_${record.id}`, type: 'VACCINE', title: recordNameBi.en,
+            date: record.recordDate, description: `Record ${record.type}: ${recordNameBi.en}`,
+            i18n: {
+              titleKey: 'pawHistory.vaccine_title',
+              bodyKey: 'pawHistory.vaccine_body',
+              // Truyền cả vi/en của recordName để FE tự chọn theo ngôn ngữ hiện tại,
+              // thay vì BE quyết định trước — đúng tinh thần i18n giống notifyOwner.
+              params: { recordType: record.type, recordNameEn: recordNameBi.en, recordNameVi: recordNameBi.vi },
+            },
           });
         });
       }
@@ -741,7 +776,13 @@ export class PetsService {
         pet.transferRequests.filter(tr => tr.status === 'COMPLETED').forEach(tr => {
           pawHistory.push({
             id: `transfer_${tr.id}`, type: 'TRANSFER', title: 'Ownership Transferred',
-            date: tr.updatedAt, description: `Successfully transferred to the new owner (${tr.receiver?.name || 'Anonymous'}).`
+            date: tr.updatedAt, description: `Successfully transferred to the new owner (${tr.receiver?.name || 'Anonymous'}).`,
+            i18n: {
+              titleKey: 'pawHistory.transfer_title',
+              bodyKey: 'pawHistory.transfer_body',
+              params: { receiverName: tr.receiver?.name || 'Anonymous' },
+            },
+
           });
         });
       }
