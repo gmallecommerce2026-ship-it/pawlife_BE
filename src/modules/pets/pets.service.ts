@@ -971,9 +971,15 @@ export class PetsService {
       if (updateData.dob && pet.dob && new Date(updateData.dob).getTime() !== pet.dob.getTime()) {
         throw new BadRequestException({ message: 'Date of birth cannot be changed after 7 days of profile creation.', i18n: { key: 'error.dob_locked' } });
       }
-      if (updateData.breed && pet.breed && JSON.stringify(updateData.breed) !== JSON.stringify(pet.breed)) {
-        throw new BadRequestException({ message: 'Pet breed cannot be changed after 7 days of profile creation.', i18n: { key: 'error.breed_locked' } });
+      if (updateData.breed && pet.breed) {
+        const newBreed = getBilingualText(updateData.breed);
+        const oldBreed = getBilingualText(pet.breed);
+        const breedChanged = newBreed.vi.trim() !== oldBreed.vi.trim() || newBreed.en.trim() !== oldBreed.en.trim();
+        if (breedChanged) {
+          throw new BadRequestException({ message: 'Pet breed cannot be changed after 7 days of profile creation.', i18n: { key: 'error.breed_locked' } });
+        }
       }
+
       if (updateData.gender && pet.gender && updateData.gender !== pet.gender) {
         throw new BadRequestException({ message: 'Gender cannot be changed after 7 days of profile creation.', i18n: { key: 'error.gender_locked' } });
       }
