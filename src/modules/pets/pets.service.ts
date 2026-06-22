@@ -35,18 +35,14 @@ export interface PawHistoryItem {
   };
 
 }
-function getBilingualText(field: unknown): { vi: string; en: string } {
-  if (!field) return { vi: '', en: '' };
-  if (typeof field === 'string') return { vi: field, en: field };
-  if (typeof field === 'object' && field !== null) {
-    const obj = field as Record<string, unknown>;
-    const en = String(obj.en ?? obj.vi ?? '');
-    const vi = String(obj.vi ?? obj.en ?? '');
-    return { vi, en };
+function getEnglishText(field: unknown): string {
+  if (!field) return '';
+  if (typeof field === 'string') return field;
+  if (typeof field === 'object' && field !== null && 'en' in field) {
+    return String((field as any).en ?? '');
   }
-  return { vi: String(field), en: String(field) };
+  return String(field);
 }
-
 
 const ownerSelectQuery = {
   select: {
@@ -573,10 +569,9 @@ export class PetsService {
     const idSetByShelter = await this.generateUniqueShelterCode();
     const medicalRecordsData = medicalRecords && medicalRecords.length > 0 ? {
       create: medicalRecords.map(record => ({
-        type: record.type, recordName: getBilingualText(record.recordName) as any, recordDate: new Date(record.recordDate),
+        type: record.type, recordName: record.recordName, recordDate: new Date(record.recordDate),
         images: record.images || [], hasNextDueDate: record.hasNextDueDate || false,
-        nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null,
-        nextDueName: record.nextDueName ? (getBilingualText(record.nextDueName) as any) : null,
+        nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null, nextDueName: record.nextDueName,
       }))
     } : undefined;
 
@@ -991,10 +986,9 @@ export class PetsService {
             medicalRecords: {
               deleteMany: {},
               create: medicalRecords.map((record: any) => ({
-                type: record.type, recordName: getBilingualText(record.recordName) as any, recordDate: new Date(record.recordDate),
+                type: record.type, recordName: record.recordName, recordDate: new Date(record.recordDate),
                 images: record.images || [], hasNextDueDate: record.hasNextDueDate || false,
-                nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null,
-                nextDueName: record.nextDueName ? (getBilingualText(record.nextDueName) as any) : null,
+                nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null, nextDueName: record.nextDueName,
               }))
             }
           })
