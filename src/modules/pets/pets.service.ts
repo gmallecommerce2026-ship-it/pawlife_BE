@@ -573,9 +573,10 @@ export class PetsService {
     const idSetByShelter = await this.generateUniqueShelterCode();
     const medicalRecordsData = medicalRecords && medicalRecords.length > 0 ? {
       create: medicalRecords.map(record => ({
-        type: record.type, recordName: record.recordName, recordDate: new Date(record.recordDate),
+        type: record.type, recordName: getBilingualText(record.recordName) as any, recordDate: new Date(record.recordDate),
         images: record.images || [], hasNextDueDate: record.hasNextDueDate || false,
-        nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null, nextDueName: record.nextDueName,
+        nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null,
+        nextDueName: record.nextDueName ? (getBilingualText(record.nextDueName) as any) : null,
       }))
     } : undefined;
 
@@ -990,9 +991,10 @@ export class PetsService {
             medicalRecords: {
               deleteMany: {},
               create: medicalRecords.map((record: any) => ({
-                type: record.type, recordName: record.recordName, recordDate: new Date(record.recordDate),
+                type: record.type, recordName: getBilingualText(record.recordName) as any, recordDate: new Date(record.recordDate),
                 images: record.images || [], hasNextDueDate: record.hasNextDueDate || false,
-                nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null, nextDueName: record.nextDueName,
+                nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null,
+                nextDueName: record.nextDueName ? (getBilingualText(record.nextDueName) as any) : null,
               }))
             }
           })
