@@ -29,6 +29,14 @@ export interface PawHistoryItem {
   date: Date | string;
   description: string;
 }
+function getEnglishText(field: unknown): string {
+  if (!field) return '';
+  if (typeof field === 'string') return field;
+  if (typeof field === 'object' && field !== null && 'en' in field) {
+    return String((field as any).en ?? '');
+  }
+  return String(field);
+}
 
 const ownerSelectQuery = {
   select: {
@@ -104,7 +112,7 @@ export class PetsService {
   async linkQrCode(userId: string, petId: string, tagId: string) {
     const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
     if (!pet) throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
-    
+
     if (pet.ownerId !== userId && pet.shelterId !== userId) {
       throw new ConflictException({ message: 'You do not have permission to perform actions on this pet!', i18n: { key: 'error.pet_unauthorized' } });
     }
@@ -132,10 +140,10 @@ export class PetsService {
 
     await this.redisService.del(`pet:detail:${petId}`);
 
-    return { 
-      success: true, 
-      message: 'Smart collar linked successfully!', 
-      i18n: { key: 'success.qr_linked' } 
+    return {
+      success: true,
+      message: 'Smart collar linked successfully!',
+      i18n: { key: 'success.qr_linked' }
     };
   }
 
@@ -309,7 +317,7 @@ export class PetsService {
     const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
 
     if (!pet) throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
-    
+
     if (pet.ownerId !== userId && pet.shelterId !== userId) {
       throw new ConflictException({ message: 'You do not have permission to delete this pet!', i18n: { key: 'error.pet_unauthorized' } });
     }
@@ -317,9 +325,9 @@ export class PetsService {
     await this.prisma.pet.delete({ where: { id: petId } });
     await this.redisService.del(`pet:detail:${petId}`);
 
-    return { 
-      message: 'Pet deleted successfully!', 
-      i18n: { key: 'success.pet_deleted' } 
+    return {
+      message: 'Pet deleted successfully!',
+      i18n: { key: 'success.pet_deleted' }
     };
   }
 
@@ -342,7 +350,7 @@ export class PetsService {
         data: {
           lostContactName: isLost ? ownerName : null, lostContactPhone: isLost ? ownerPhone : null,
           lostContactAddress: isLost ? ownerAddress : null, lostLocation: isLost ? location : null,
-          lostDateTime: isLost ? dateTime : null, 
+          lostDateTime: isLost ? dateTime : null,
           // FIX 1: Ép kiểu as any để qua mặt TypeScript
           lostDetails: isLost && note ? ({ vi: note.trim(), en: note.trim() } as any) : null,
           lostPhotos: isLost ? JSON.stringify(photos || []) : null, lostLatitude: isLost && latitude ? latitude : null,
@@ -442,10 +450,10 @@ export class PetsService {
     this.notificationsGateway.server.to(`user_${receiver.id}`).emit('transfer_requested', { transferId: transferRequest.id, petId });
     await this.redisService.del(`pet:detail:${petId}`);
 
-    return { 
-      success: true, 
-      message: 'Request sent', 
-      i18n: { key: 'success.transfer_requested' } 
+    return {
+      success: true,
+      message: 'Request sent',
+      i18n: { key: 'success.transfer_requested' }
     };
   }
 
@@ -470,10 +478,10 @@ export class PetsService {
     this.notificationsGateway.server.to(`user_${transferReq.senderId}`).emit('transfer_completed', payload);
     this.notificationsGateway.server.to(`user_${receiverId}`).emit('transfer_completed', payload);
 
-    return { 
-      success: true, 
-      message: 'Transfer successful', 
-      i18n: { key: 'success.transfer_completed' } 
+    return {
+      success: true,
+      message: 'Transfer successful',
+      i18n: { key: 'success.transfer_completed' }
     };
   }
 
@@ -486,9 +494,9 @@ export class PetsService {
 
     await this.prisma.favoritePet.delete({ where: { userId_petId: { userId, petId } } });
 
-    return { 
-      message: 'Removed from favorites!', 
-      i18n: { key: 'success.removed_from_favorites' } 
+    return {
+      message: 'Removed from favorites!',
+      i18n: { key: 'success.removed_from_favorites' }
     };
   }
 
@@ -721,9 +729,10 @@ export class PetsService {
 
       if (pet.medicalRecords && pet.medicalRecords.length > 0) {
         pet.medicalRecords.forEach(record => {
+          const recordNameText = getEnglishText(record.recordName);
           pawHistory.push({
-            id: `med_${record.id}`, type: 'VACCINE', title: record.recordName,
-            date: record.recordDate, description: `Record ${record.type}: ${record.recordName}`
+            id: `med_${record.id}`, type: 'VACCINE', title: recordNameText,
+            date: record.recordDate, description: `Record ${record.type}: ${recordNameText}`
           });
         });
       }
@@ -877,10 +886,10 @@ export class PetsService {
 
     await this.redisService.del(`pet:detail:${petId}`);
 
-    return { 
-      success: true, 
-      message: 'Transfer request cancelled.', 
-      i18n: { key: 'success.transfer_cancelled' } 
+    return {
+      success: true,
+      message: 'Transfer request cancelled.',
+      i18n: { key: 'success.transfer_cancelled' }
     };
   }
 

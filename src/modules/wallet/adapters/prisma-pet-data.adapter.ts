@@ -17,9 +17,9 @@ import {
 
 @Injectable()
 export class PrismaPetDataAdapter implements PetDataProvider {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
-  async getPetForWallet(petId: string): Promise<PetWalletData | null> {
+  async getPetForWallet(petId: string, lang: 'vi' | 'en'): Promise<PetWalletData | null> {
     const pet = await this.prisma.pet.findUnique({
       where: { id: petId },
       select: {
@@ -47,8 +47,8 @@ export class PrismaPetDataAdapter implements PetDataProvider {
     return {
       id: pet.id,
       name: pet.name,
-      species: pet.species,
-      breed: pet.breed,
+      species: this.resolveBilingualText(pet.species, lang),
+      breed: this.resolveBilingualText(pet.breed, lang),
       dob: pet.dob,
       gender: this.mapGender(pet.gender),
       microchipNumber: pet.microchipNumber,
@@ -56,6 +56,15 @@ export class PrismaPetDataAdapter implements PetDataProvider {
       shelterId: pet.shelterId,
       photoUrl: pet.images[0]?.url ?? null,
     };
+  }
+  private resolveBilingualText(field: unknown, lang: 'vi' | 'en'): string {
+    if (!field) return '';
+    if (typeof field === 'string') return field;
+    if (typeof field === 'object' && field !== null) {
+      const obj = field as Record<string, unknown>;
+      return String(obj[lang] ?? obj.en ?? obj.vi ?? '');
+    }
+    return String(field);
   }
 
   // Map tường minh từng giá trị: nếu BE đổi/ thêm enum PetGender thì TypeScript

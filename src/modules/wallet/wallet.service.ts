@@ -136,11 +136,12 @@ export class WalletService {
   async generatePetPass(
     userId: string,
     petId: string,
+    lang: 'vi' | 'en' = 'en',
   ): Promise<{ buffer: Buffer; fileName: string }> {
     // 1. Get pet info via port + check ownership.
     // Ownership is checked HERE (service layer), not in the adapter:
     // adapter only returns data, service decides who can download the card.
-    const pet = await this.petData.getPetForWallet(petId);
+    const pet = await this.petData.getPetForWallet(petId, lang);
     if (!pet) throw new NotFoundException('Pet not found!');
     if (pet.ownerId !== userId && pet.shelterId !== userId) {
       throw new ConflictException(

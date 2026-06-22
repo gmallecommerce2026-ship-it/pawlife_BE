@@ -27,7 +27,7 @@ export interface PetWalletData {
 export interface PetDataProvider {
   // Trả về dữ liệu pet để dựng thẻ, hoặc null nếu không tồn tại.
   // KHÔNG kiểm tra quyền sở hữu ở đây — đó là việc của tầng service.
-  getPetForWallet(petId: string): Promise<PetWalletData | null>;
+  getPetForWallet(petId: string, lang: 'vi' | 'en'): Promise<PetWalletData | null>;
 }
 
 // Token DI cho NestJS: interface biến mất sau khi compile nên cần một token
