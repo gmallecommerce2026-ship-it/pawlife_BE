@@ -150,18 +150,31 @@ export class EventsService {
     const whereCondition: Prisma.EventWhereInput = {};
 
     if (search) {
-      whereCondition.OR = [
-        { title: { contains: search } },
-        { locationName: { contains: search } },
-        { address: { contains: search } },
-      ];
+      // 1. Dùng Raw SQL để qua mặt giới hạn của Prisma trên MySQL. 
+      // Lệnh LIKE trong MySQL tự động ép kiểu JSON thành String để tìm kiếm rất mượt.
+      const matchedEvents = await this.prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM Event
+        WHERE LOWER(title) LIKE LOWER(${'%' + search + '%'})
+           OR LOWER(locationName) LIKE LOWER(${'%' + search + '%'})
+           OR LOWER(address) LIKE LOWER(${'%' + search + '%'})
+      `;
+
+      const eventIds = matchedEvents.map((e) => e.id);
+
+      // Nếu có search mà không tìm ra ID nào -> Trả về mảng rỗng luôn cho tối ưu
+      if (eventIds.length === 0) {
+        return { success: true, data: [] };
+      }
+
+      // 2. Gán mảng id tìm được vào điều kiện where
+      whereCondition.id = { in: eventIds };
     }
 
+    // 3. Chạy findMany bình thường để giữ nguyên được các include (relations)
     const events = await this.prisma.event.findMany({
       where: whereCondition,
       take: limit,
       include: {
-        // FIX: Changed from shelter to organizer
         organizer: {
           select: { id: true, name: true, avatarUrl: true },
         },

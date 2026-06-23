@@ -68,7 +68,7 @@ const MASTER_DICT: Record<string, string> = {
   "Chưa rõ": "Unknown", "Đang cập nhật": "Updating",
 
   // Tính cách & Hành vi (Good with / Bad with)
-  "Trẻ em": "Children", "Chó khác": "Other dogs", "Mèo": "Cats", "Người cao tuổi": "Seniors",
+  "Trẻ em": "Children", "Chó khác": "Other dogs", "Người cao tuổi": "Seniors",
   "Người lạ": "Strangers", "Gia đình đông người": "Large families",
   "Trẻ em ồn ào": "Noisy children", "Không gian hẹp": "Confined spaces",
   "Chó lớn": "Large dogs", "Động vật nhỏ": "Small animals", "Ở một mình quá lâu": "Being left alone",

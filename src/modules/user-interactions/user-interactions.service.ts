@@ -154,7 +154,7 @@ export class UserInteractionsService {
         }
       });
 
-      let blockRecord = null;
+      let blockRecord: any = null;
 
       // 2. Xử lý Block nếu user yêu cầu (hoặc bạn có thể force block luôn khi report)
       if (isBlockRequested && ownerId) {
