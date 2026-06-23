@@ -43,7 +43,8 @@ async function main() {
     const shelterNameLower = shelter.name.toLowerCase();
     const shelterAddressLower = shelter.address.toLowerCase();
     
-    let selectedLoc = null;
+    // Đã fix lỗi Type ở đây: Khai báo explicitly là `any`
+    let selectedLoc: any = null;
 
     // Tìm profile địa điểm phù hợp dựa trên tên hoặc địa chỉ cũ của trạm
     for (const pool of REAL_LOCATION_POOLS) {
@@ -107,7 +108,7 @@ async function main() {
 main()
   .then(async () => {
     await prisma.$disconnect();
-    process.exit(0); // Đảm bảo đóng tiến trình, chống deadlock ngầm
+    process.exit(0); 
   })
   .catch(async (e) => {
     console.error('❌ Lỗi trong quá trình cập nhật vị trí:', e);
