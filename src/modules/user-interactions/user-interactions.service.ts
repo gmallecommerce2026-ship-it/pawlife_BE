@@ -182,39 +182,52 @@ export class UserInteractionsService {
     reason: string,
     details?: string,
     isHideRequested?: boolean,
+    isBlockRequested?: boolean,
   ) {
     const tagReport = await this.prisma.tagReport.findUnique({
       where: { id: tagReportId },
-      include: { tag: { select: { petId: true, pet: { select: { ownerId: true } } } } },
+      include: { tag: { select: { pet: { select: { ownerId: true } } } } },
     });
     if (!tagReport) throw new NotFoundException('Scan report not found');
 
     const ownerId = tagReport.tag?.pet?.ownerId;
-    // chỉ chủ pet (owner) mới có quyền report/hide nội dung do người khác gửi
     if (ownerId && reporterId !== ownerId) {
       throw new BadRequestException('Only the pet owner can moderate this content');
     }
 
     return this.prisma.$transaction(async (tx) => {
       const report = await tx.contentReport.create({
-        data: {
-          reporterId,
-          targetTagReportId: tagReportId,
-          reason,
-          details,
-        },
+        data: { reporterId, targetTagReportId: tagReportId, reason, details },
       });
 
-      let updated = tagReport;
+      let updatedTagReport = tagReport;
       if (isHideRequested) {
-        updated = await tx.tagReport.update({
+        updatedTagReport = await tx.tagReport.update({
           where: { id: tagReportId },
           data: { isHidden: true, hiddenAt: new Date() },
         });
       }
 
-      return { report, tagReport: updated };
+      let blockRecord: any = null;
+      if (isBlockRequested && tagReport.phoneNumber) {
+        // Tìm user theo số điện thoại đã từng scan/share (nếu họ có account)
+        const blockedUser = await tx.user.findFirst({
+          where: { phone: tagReport.phoneNumber },
+          select: { id: true },
+        });
+        if (blockedUser) {
+          blockRecord = await tx.userBlock.upsert({
+            where: { blockerId_blockedId: { blockerId: reporterId, blockedId: blockedUser.id } },
+            update: {},
+            create: { blockerId: reporterId, blockedId: blockedUser.id },
+          });
+        }
+        // Nếu scanner là anonymous/không có account -> không block được, chỉ hide là đủ
+      }
+
+      return { report, tagReport: updatedTagReport, blockRecord };
     });
   }
+
 
 }
