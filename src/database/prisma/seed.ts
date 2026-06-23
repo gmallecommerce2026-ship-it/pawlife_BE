@@ -11,19 +11,21 @@ async function buildBilingualField(
   text: string,
   translateService: TranslateService,
   sourceLang: 'vi' | 'en' = 'vi'
-): Promise<any> {
-  if (!text) return { vi: '', en: '' };
+): Promise<string> { // <--- Trả về string thay vì any
+  if (!text) return JSON.stringify({ vi: '', en: '' });
 
   const targetLang = sourceLang === 'vi' ? 'en' : 'vi';
 
   try {
     const translatedText = await translateService.translate(text, targetLang);
-    return {
+    // Dùng JSON.stringify để biến Object thành chuỗi String lưu vào DB
+    return JSON.stringify({
       vi: sourceLang === 'vi' ? text : translatedText,
       en: sourceLang === 'en' ? text : translatedText,
-    };
+    });
   } catch (error) {
-    return { vi: text, en: text };
+    // Nếu API lỗi (thiếu Key), dùng luôn bản gốc cho cả 2 ngôn ngữ và ép thành chuỗi
+    return JSON.stringify({ vi: text, en: text });
   }
 }
 
