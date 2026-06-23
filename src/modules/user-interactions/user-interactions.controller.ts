@@ -45,22 +45,20 @@ export class UserInteractionsController {
   async reportAndBlock(
     @Request() req,
     @Body('petId') petId: string,
-    @Body('ownerId') ownerId: string,
+    // @Body('ownerId') ownerId: string,
     @Body('reason') reason: string,
     @Body('details') details?: string,
     @Body('isBlockRequested') isBlockRequested?: boolean
   ) {
-    const userId = req.user?.id || 'TEST_USER_ID';
 
     const data = await this.interactionsService.handleReportAndBlock(
-      userId,
+      req.user.id,
       petId,
-      ownerId,
       reason,
       details,
       isBlockRequested
     );
-
     return { success: true, data };
+
   }
 }

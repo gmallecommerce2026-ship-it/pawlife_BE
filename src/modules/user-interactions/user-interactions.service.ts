@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { SwipeAction } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -138,43 +138,43 @@ export class UserInteractionsService {
   async handleReportAndBlock(
     reporterId: string,
     petId: string,
-    ownerId: string,
     reason: string,
     details?: string,
     isBlockRequested?: boolean
   ) {
+    const pet = await this.prisma.pet.findUnique({
+      where: { id: petId },
+      select: { ownerId: true, shelterId: true },
+    });
+    if (!pet) throw new NotFoundException('Pet not found');
+
+    // Đối tượng sẽ bị block là chủ cá nhân (ownerId), nếu pet thuộc shelter thì có thể không áp dụng block cá nhân
+    const targetOwnerId = pet.ownerId ?? null;
+
+    // 🌟 Chặn tự report / tự block chính mình
+    if (targetOwnerId && reporterId === targetOwnerId) {
+      throw new BadRequestException('Bạn không thể tự báo cáo hoặc chặn nội dung của chính mình.');
+    }
+
     return this.prisma.$transaction(async (tx) => {
-      // 1. Lưu Report
       const report = await tx.contentReport.create({
-        data: {
-          reporterId,
-          targetPetId: petId,
-          reason,
-          details,
-        }
+        data: { reporterId, targetPetId: petId, reason, details }
       });
 
       let blockRecord: any = null;
 
-      // 2. Xử lý Block nếu user yêu cầu (hoặc bạn có thể force block luôn khi report)
-      if (isBlockRequested && ownerId) {
-        // Upsert để tránh lỗi Duplicate Key nếu đã block trước đó
+      if (isBlockRequested && targetOwnerId) {
         blockRecord = await tx.userBlock.upsert({
           where: {
-            blockerId_blockedId: {
-              blockerId: reporterId,
-              blockedId: ownerId,
-            }
+            blockerId_blockedId: { blockerId: reporterId, blockedId: targetOwnerId }
           },
           update: {},
-          create: {
-            blockerId: reporterId,
-            blockedId: ownerId,
-          }
+          create: { blockerId: reporterId, blockedId: targetOwnerId }
         });
       }
 
       return { report, blockRecord };
     });
   }
+
 }
