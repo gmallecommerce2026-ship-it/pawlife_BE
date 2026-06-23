@@ -1,4 +1,4 @@
-import { PrismaClient, PetGender, PetSize, PetStatus } from '@prisma/client';
+import { PrismaClient, PetGender, PetSize, PetStatus, Role } from '@prisma/client';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../../app.module'; // Đường dẫn đến AppModule chính của bạn
@@ -7,7 +7,7 @@ import * as xlsx from 'xlsx';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as dotenv from 'dotenv';
-
+import * as bcrypt from 'bcrypt'; // Hoặc 'bcryptjs' tùy dự án của bạn đang dùng
 // 1. Nạp biến môi trường từ file .env
 dotenv.config();
 
