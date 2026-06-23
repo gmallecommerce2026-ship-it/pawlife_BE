@@ -176,5 +176,45 @@ export class UserInteractionsService {
       return { report, blockRecord };
     });
   }
+  async reportAndHideTagReport(
+    reporterId: string,
+    tagReportId: string,
+    reason: string,
+    details?: string,
+    isHideRequested?: boolean,
+  ) {
+    const tagReport = await this.prisma.tagReport.findUnique({
+      where: { id: tagReportId },
+      include: { tag: { select: { petId: true, pet: { select: { ownerId: true } } } } },
+    });
+    if (!tagReport) throw new NotFoundException('Scan report not found');
+
+    const ownerId = tagReport.tag?.pet?.ownerId;
+    // chỉ chủ pet (owner) mới có quyền report/hide nội dung do người khác gửi
+    if (ownerId && reporterId !== ownerId) {
+      throw new BadRequestException('Only the pet owner can moderate this content');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const report = await tx.contentReport.create({
+        data: {
+          reporterId,
+          targetTagReportId: tagReportId,
+          reason,
+          details,
+        },
+      });
+
+      let updated = tagReport;
+      if (isHideRequested) {
+        updated = await tx.tagReport.update({
+          where: { id: tagReportId },
+          data: { isHidden: true, hiddenAt: new Date() },
+        });
+      }
+
+      return { report, tagReport: updated };
+    });
+  }
 
 }

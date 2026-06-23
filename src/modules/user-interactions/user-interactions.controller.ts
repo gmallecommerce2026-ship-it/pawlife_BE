@@ -61,4 +61,12 @@ export class UserInteractionsController {
     return { success: true, data };
 
   }
+
+  @Post('report-tag-report')
+  reportTagReport(@CurrentUser() user, @Body() dto: { tagReportId: string; reason: string; details?: string; isHideRequested?: boolean }) {
+    return this.userInteractionsService.reportAndHideTagReport(
+      user.id, dto.tagReportId, dto.reason, dto.details, dto.isHideRequested,
+    );
+  }
+
 }

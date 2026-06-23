@@ -175,7 +175,9 @@ model ContentReport {
   details     String?  // Ghi chú thêm
   status      String   @default("PENDING") // PENDING, REVIEWED, RESOLVED
   createdAt   DateTime @default(now())
-  
+  targetTagReportId String?
+  targetTagReport    TagReport? @relation(fields: [targetTagReportId], references: [id])
+
   @@index([reporterId])
   @@index([targetPetId])
 }
@@ -423,6 +425,8 @@ model TagReport {
   images      Json?
   status      TagReportStatus @default(PENDING)
   scannedAt   DateTime @default(now())
+  isHidden   Boolean  @default(false)
+  hiddenAt   DateTime?
 }
 
 // 2. Hệ thống Nhắn tin (Chat Gateway)
