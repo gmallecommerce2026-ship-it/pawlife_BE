@@ -170,11 +170,12 @@ model UserBlock {
 model ContentReport {
   id          String   @id @default(uuid())
   reporterId  String   
-  targetPetId String   // Pet bị report
+  targetPetId String?   // Pet bị report
   reason      String   // Lý do (Spam, Inappropriate, etc.)
   details     String?  // Ghi chú thêm
   status      String   @default("PENDING") // PENDING, REVIEWED, RESOLVED
   createdAt   DateTime @default(now())
+  targetPet         Pet?      @relation(fields: [targetPetId], references: [id])
   targetTagReportId String?
   targetTagReport    TagReport? @relation(fields: [targetTagReportId], references: [id])
 

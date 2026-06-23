@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Req } from '@nestjs/common';
 import { UserInteractionsService } from './user-interactions.service';
 import { SwipeAction } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
@@ -64,11 +64,11 @@ export class UserInteractionsController {
 
   @Post('report-tag-report')
   reportTagReport(
-    @CurrentUser() user,
+    @Req() req,
     @Body() dto: { tagReportId: string; reason: string; details?: string; isHideRequested?: boolean; isBlockRequested?: boolean },
   ) {
-    return this.userInteractionsService.reportAndHideTagReport(
-      user.id, dto.tagReportId, dto.reason, dto.details, dto.isHideRequested, dto.isBlockRequested,
+    return this.interactionsService.reportAndHideTagReport(
+      req.user.id, dto.tagReportId, dto.reason, dto.details, dto.isHideRequested, dto.isBlockRequested,
     );
   }
 }
