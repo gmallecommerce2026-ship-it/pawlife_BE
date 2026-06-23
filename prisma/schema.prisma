@@ -155,7 +155,30 @@ model User {
   interestedEvents EventInterest[]
   tagReports  TagReport[]
 }
+// Bảng lưu trữ việc chặn người dùng (Apple bắt buộc phải có)
+model UserBlock {
+  id          String   @id @default(uuid())
+  blockerId   String   // ID người chặn
+  blockedId   String   // ID chủ nhân của pet bị chặn
+  createdAt   DateTime @default(now())
 
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+}
+
+// Bảng lưu trữ lý do report
+model ContentReport {
+  id          String   @id @default(uuid())
+  reporterId  String   
+  targetPetId String   // Pet bị report
+  reason      String   // Lý do (Spam, Inappropriate, etc.)
+  details     String?  // Ghi chú thêm
+  status      String   @default("PENDING") // PENDING, REVIEWED, RESOLVED
+  createdAt   DateTime @default(now())
+  
+  @@index([reporterId])
+  @@index([targetPetId])
+}
 model Shelter {
   id          String @id @default(uuid())
   name        String

@@ -17,9 +17,9 @@ export class ShareLocationDto {
 @Injectable()
 export class UserInteractionsService {
   constructor(
-    private readonly prisma: PrismaService, 
+    private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService
-  ) {}
+  ) { }
 
   async shareLocation(dto: ShareLocationDto) {
     // A. Get corresponding tagId for petId because TagReport requires tagId
@@ -53,18 +53,18 @@ export class UserInteractionsService {
     const notificationPayload = {
       title: 'Your pet\'s location has been shared!',
       body: dto.message ? `Message: ${dto.message}` : 'Someone just updated the pet\'s location.',
-      referenceId: savedReport.id, 
+      referenceId: savedReport.id,
       data: {
         type: 'SHARED_LOCATION',
         // Even though saved to DB, still pass params to url in case frontend reads from params for speed
-        url: `/tag-report-detail?reportId=${savedReport.id}&lat=${dto.lat}&lng=${dto.lng}&radius=${dto.radius}`, 
+        url: `/tag-report-detail?reportId=${savedReport.id}&lat=${dto.lat}&lng=${dto.lng}&radius=${dto.radius}`,
       },
     };
 
     if (petOwnerId) {
       await this.notificationsService.sendPushNotification(petOwnerId, notificationPayload);
     }
-    
+
     return savedReport;
   }
 
@@ -132,5 +132,49 @@ export class UserInteractionsService {
       });
       return { followed: true };
     }
+  }
+
+  // Thêm vào user-interactions.service.ts
+  async handleReportAndBlock(
+    reporterId: string,
+    petId: string,
+    ownerId: string,
+    reason: string,
+    details?: string,
+    isBlockRequested?: boolean
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Lưu Report
+      const report = await tx.contentReport.create({
+        data: {
+          reporterId,
+          targetPetId: petId,
+          reason,
+          details,
+        }
+      });
+
+      let blockRecord = null;
+
+      // 2. Xử lý Block nếu user yêu cầu (hoặc bạn có thể force block luôn khi report)
+      if (isBlockRequested && ownerId) {
+        // Upsert để tránh lỗi Duplicate Key nếu đã block trước đó
+        blockRecord = await tx.userBlock.upsert({
+          where: {
+            blockerId_blockedId: {
+              blockerId: reporterId,
+              blockedId: ownerId,
+            }
+          },
+          update: {},
+          create: {
+            blockerId: reporterId,
+            blockedId: ownerId,
+          }
+        });
+      }
+
+      return { report, blockRecord };
+    });
   }
 }
