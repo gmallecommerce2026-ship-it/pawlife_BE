@@ -319,6 +319,7 @@ model Pet {
   needsQrReplacement    Boolean @default(false)
   nameLastUpdatedAt     DateTime? 
   adoptedAt             DateTime?
+  contentReports ContentReport[]
 }
 
 model AdoptionApplication {
