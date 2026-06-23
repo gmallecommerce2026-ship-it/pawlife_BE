@@ -200,17 +200,18 @@ export class UserInteractionsService {
         data: { reporterId, targetTagReportId: tagReportId, reason, details },
       });
 
-      let updatedTagReport = tagReport;
+      // Dùng biến riêng, không gán đè lên `tagReport` (vốn có shape khác do `include`)
+      let hiddenResult: { id: string; isHidden: boolean; hiddenAt: Date | null } | null = null;
       if (isHideRequested) {
-        updatedTagReport = await tx.tagReport.update({
+        hiddenResult = await tx.tagReport.update({
           where: { id: tagReportId },
           data: { isHidden: true, hiddenAt: new Date() },
+          select: { id: true, isHidden: true, hiddenAt: true },
         });
       }
 
       let blockRecord: any = null;
       if (isBlockRequested && tagReport.phoneNumber) {
-        // Tìm user theo số điện thoại đã từng scan/share (nếu họ có account)
         const blockedUser = await tx.user.findFirst({
           where: { phone: tagReport.phoneNumber },
           select: { id: true },
@@ -222,12 +223,9 @@ export class UserInteractionsService {
             create: { blockerId: reporterId, blockedId: blockedUser.id },
           });
         }
-        // Nếu scanner là anonymous/không có account -> không block được, chỉ hide là đủ
       }
 
-      return { report, tagReport: updatedTagReport, blockRecord };
+      return { report, tagReport: hiddenResult ?? tagReport, blockRecord };
     });
   }
-
-
 }
