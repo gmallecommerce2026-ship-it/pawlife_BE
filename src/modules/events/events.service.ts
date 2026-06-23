@@ -101,18 +101,6 @@ export class EventsService {
         }),
       ]);
 
-      const event = await this.prisma.event.findUnique({ where: { id: eventId } });
-
-      if (event) {
-        await this.notificationsService.createAndSendNotification({
-          userId: userId,
-          title: '📅 Interested in event',
-          body: `You have registered your interest in the event "${event.title}". We will remind you when the event is about to start!`,
-          type: NotificationType.EVENT,
-          referenceId: eventId,
-        });
-      }
-
       return { success: true, message: 'Interested', isInterested: true };
     }
   }

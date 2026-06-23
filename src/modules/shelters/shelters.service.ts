@@ -237,14 +237,6 @@ export class SheltersService {
         },
       });
       isFollowed = true;
-
-      await this.notificationsService.createAndSendNotification({
-        userId: userId,
-        title: '🏠 Followed shelter',
-        body: `You have started following ${shelter.name}. You will receive the latest updates from them.`,
-        type: NotificationType.SYSTEM,
-        referenceId: shelterId,
-      });
     }
 
     const followersCount = await this.prisma.followedShelter.count({
