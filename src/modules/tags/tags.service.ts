@@ -199,6 +199,7 @@ export class TagsService {
     return {
       id: pet.id,
       name: pet.name,
+      ownerId: pet.ownerId,
       breed: pet.breed || 'Not updated yet',
       gender: pet.gender || 'unknown',
       color: pet.color || 'Not updated yet',
