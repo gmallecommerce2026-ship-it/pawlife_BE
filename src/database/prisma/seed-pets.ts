@@ -94,7 +94,7 @@ async function getLocalImagesAndUpload(petId: any): Promise<{ url: string }[]> {
           const filePath = path.join(folderPath, file);
           const fileBuffer = fs.readFileSync(filePath);
           const r2Key = `pet-images/${safeId}/${file}`;
-          
+
           let contentType = 'image/jpeg';
           if (file.toLowerCase().endsWith('.png')) contentType = 'image/png';
           else if (file.toLowerCase().endsWith('.webp')) contentType = 'image/webp';
@@ -141,7 +141,7 @@ async function getOrCreateShelter(khuName: any): Promise<string | null> {
         description: 'Trạm cứu hộ tự động',
         policy: 'Liên hệ trực tiếp để nhận nuôi.',
         avatarUrl: 'https://loremflickr.com/200/200/house',
-        latitude: 21.028511, 
+        latitude: 21.028511,
         longitude: 105.804817,
       }
     });
@@ -156,18 +156,18 @@ async function processBatch(batch: any[], translateService: TranslateService) {
     const rawId = row['ID'] || row['ID '] || row[' ID'];
     const fallbackId = String(row['Ảnh'] || '').split('.')[0].trim();
     const petId = rawId ? String(rawId).trim() : fallbackId;
-    
+
     const name = row['Tên thú cưng'] || row['Tên'] || row['Name'] || petId || 'Bé Không Tên';
-    
+
     const loaiStr = String(row['Loài'] || row['Giống'] || '').toLowerCase();
     // Thay vì gửi 'CAT' hoặc 'DOG', ta gửi chữ tiếng Việt để AI dịch
-    const rawSpecies = loaiStr.includes('mèo') ? 'Mèo' : 'Chó'; 
+    const rawSpecies = loaiStr.includes('mèo') ? 'Mèo' : 'Chó';
 
     try {
       const status = parseStatus(row['Tình trạng']);
       const rawDescription = [row['Lưu ý'], row['Ghi chú'], row['Cột 1']].filter(Boolean).join('. ');
       const shelterId = await getOrCreateShelter(row['Khu']);
-      
+
       // 4. Dịch các trường sang Song Ngữ JSON
       console.log(`\n⏳ Đang dịch thông tin cho bé: ${name}...`);
       const speciesBilingual = await buildBilingualField(rawSpecies, translateService, 'vi');
@@ -186,18 +186,18 @@ async function processBatch(batch: any[], translateService: TranslateService) {
           dob: parseAgeToDob(row['Độ tuổi']),
           color: colorBilingual,         // Đã chuyển thành chuẩn JSON
           gender: parseGender(row['Giới tính']),
-          size: PetSize.MEDIUM, 
+          size: PetSize.MEDIUM,
           isSpayedNeutered: String(row['Triệt sản'] || '').toLowerCase().includes('đã triệt sản'),
           isVaccinated: String(row['Tiêm phòng'] || '').toLowerCase().includes('đã tiêm đủ'),
           status,
-          vetVerificationStatus: 'VERIFIED', 
+          vetVerificationStatus: 'VERIFIED',
           description: descriptionBilingual, // Đã chuyển thành chuẩn JSON
           shelterId,
           images: { create: imagesData }
         }
       });
       process.stdout.write(`\n✅ Thành công: ${name}`);
-      
+
     } catch (error: any) {
       console.log(`\n❌ [LỖI DB - Tên: ${name}]: ${error.message}`);
     }
@@ -213,7 +213,7 @@ export async function seedPets() {
   await prisma.eventImage.deleteMany();
   await prisma.eventInterest.deleteMany();
   await prisma.event.deleteMany();
-  await prisma.tagReport.deleteMany(); 
+  await prisma.tagReport.deleteMany();
   await prisma.tag.updateMany({ where: { petId: { not: null } }, data: { petId: null } });
   await prisma.tag.deleteMany();
   await prisma.transferRequest.deleteMany();
@@ -222,7 +222,7 @@ export async function seedPets() {
   await prisma.petInteraction.deleteMany();
   await prisma.favoritePet.deleteMany();
   await prisma.petImage.deleteMany();
-  await prisma.pet.deleteMany(); 
+  await prisma.pet.deleteMany();
   await prisma.followedShelter.deleteMany();
   await prisma.shelter.deleteMany();
   console.log('Đã xóa xong dữ liệu cũ!');
@@ -238,12 +238,12 @@ export async function seedPets() {
   console.log(`\n⏳ Đang nạp file Excel...`);
   let workbook: any = xlsx.readFile(excelPath);
   const sheetName = workbook.SheetNames[0];
-  const allRecords = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { 
-    raw: false, 
-    defval: '' 
+  const allRecords = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], {
+    raw: false,
+    defval: ''
   });
-  
-  workbook = null; 
+
+  workbook = null;
   if (global.gc) {
     global.gc();
   }
@@ -254,19 +254,30 @@ export async function seedPets() {
 
   // Truyền translateService vào processBatch
   await processBatch(limitRecords, translateService);
-  
+
   console.log(`\n🎉 HOÀN TẤT! Đã upload ảnh lên R2, dịch dữ liệu và seed thành công.`);
-  
+
   // Đóng app context giải phóng RAM VPS
   await appContext.close();
 }
 
 seedPets()
   .then(async () => {
+    // 1. Đóng kết nối Prisma
     await prisma.$disconnect();
+
+    // 2. Đóng kết nối AWS S3 (Giải phóng socket mạng)
+    if (s3Client) {
+      s3Client.destroy();
+    }
+
+    console.log('🛑 Đã ngắt toàn bộ kết nối rác. Đóng tiến trình thành công!');
+
+    // 3. Ép Node.js thoát tiến trình ngay lập tức (Status 0 = Thành công)
+    process.exit(0);
   })
   .catch(async (e) => {
     console.error('\n❌ Tiến trình seed thất bại:', e);
     await prisma.$disconnect();
-    process.exit(1);
+    process.exit(1); // Status 1 = Có lỗi
   });
