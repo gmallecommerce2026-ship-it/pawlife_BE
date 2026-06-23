@@ -1,5 +1,8 @@
 import { PrismaClient, PetGender, PetSize, PetStatus } from '@prisma/client';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from '../../app.module'; // Đường dẫn đến AppModule chính của bạn
+import { TranslateService } from '../../translate/translate.service'; // Dịch vụ gọi API dịch thuật
 import * as xlsx from 'xlsx';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -24,8 +27,29 @@ const s3Client = new S3Client({
 });
 
 const bucketName = process.env.R2_BUCKET_NAME || '';
-// Lấy domain từ env, nếu không có thì lấy domain cũ của bạn làm fallback
 const publicDomain = process.env.R2_PUBLIC_DOMAIN || 'https://pub-35c6d59c9e96467b9783df2a4e890a09.r2.dev';
+
+// ==========================================
+// HELPER: Hàm Dịch Thuật Thành JSON Song Ngữ
+// ==========================================
+async function buildBilingualField(
+  text: string,
+  translateService: TranslateService,
+  sourceLang: 'vi' | 'en' = 'vi'
+): Promise<string> {
+  if (!text) return JSON.stringify({ vi: '', en: '' });
+  const targetLang = sourceLang === 'vi' ? 'en' : 'vi';
+  try {
+    const translatedText = await translateService.translate(text, targetLang);
+    return JSON.stringify({
+      vi: sourceLang === 'vi' ? text : translatedText,
+      en: sourceLang === 'en' ? text : translatedText,
+    });
+  } catch (error) {
+    console.error(`[Lỗi Dịch Thuật] Không thể dịch: "${text}". Đang dùng fallback bản gốc.`);
+    return JSON.stringify({ vi: text, en: text });
+  }
+}
 
 function parseAgeToDob(ageStr: any): Date | null {
   if (!ageStr) return null;
@@ -52,7 +76,7 @@ function parseStatus(statusStr: any): PetStatus {
   return PetStatus.AVAILABLE;
 }
 
-// 3. ĐỔI HÀM NÀY THÀNH ASYNC ĐỂ THỰC SỰ UPLOAD ẢNH LÊN R2
+// 3. Hàm xử lý và UPLOAD ảnh lên R2
 async function getLocalImagesAndUpload(petId: any): Promise<{ url: string }[]> {
   const safeId = String(petId || '').trim();
   if (!safeId) return [{ url: 'https://loremflickr.com/400/400/dog' }];
@@ -68,8 +92,6 @@ async function getLocalImagesAndUpload(petId: any): Promise<{ url: string }[]> {
       for (const file of files) {
         if (file.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
           const filePath = path.join(folderPath, file);
-          
-          // Đọc file thật từ ổ cứng
           const fileBuffer = fs.readFileSync(filePath);
           const r2Key = `pet-images/${safeId}/${file}`;
           
@@ -78,7 +100,6 @@ async function getLocalImagesAndUpload(petId: any): Promise<{ url: string }[]> {
           else if (file.toLowerCase().endsWith('.webp')) contentType = 'image/webp';
           else if (file.toLowerCase().endsWith('.gif')) contentType = 'image/gif';
 
-          // Bắn lệnh Upload lên R2
           await s3Client.send(new PutObjectCommand({
             Bucket: bucketName,
             Key: r2Key,
@@ -86,7 +107,6 @@ async function getLocalImagesAndUpload(petId: any): Promise<{ url: string }[]> {
             ContentType: contentType
           }));
 
-          // Ghi nhận URL thành công
           const imageUrl = `${publicDomain}/${r2Key}`;
           results.push({ url: imageUrl });
           process.stdout.write(' ⬆️(Đã up) ');
@@ -130,7 +150,8 @@ async function getOrCreateShelter(khuName: any): Promise<string | null> {
   return shelter.id;
 }
 
-async function processBatch(batch: any[]) {
+// Nhận thêm translateService vào để dịch tự động
+async function processBatch(batch: any[], translateService: TranslateService) {
   for (const row of batch) {
     const rawId = row['ID'] || row['ID '] || row[' ID'];
     const fallbackId = String(row['Ảnh'] || '').split('.')[0].trim();
@@ -139,35 +160,43 @@ async function processBatch(batch: any[]) {
     const name = row['Tên thú cưng'] || row['Tên'] || row['Name'] || petId || 'Bé Không Tên';
     
     const loaiStr = String(row['Loài'] || row['Giống'] || '').toLowerCase();
-    const speciesType = loaiStr.includes('mèo') ? 'CAT' : 'DOG';
+    // Thay vì gửi 'CAT' hoặc 'DOG', ta gửi chữ tiếng Việt để AI dịch
+    const rawSpecies = loaiStr.includes('mèo') ? 'Mèo' : 'Chó'; 
 
     try {
       const status = parseStatus(row['Tình trạng']);
-      const description = [row['Lưu ý'], row['Ghi chú'], row['Cột 1']].filter(Boolean).join('. ');
+      const rawDescription = [row['Lưu ý'], row['Ghi chú'], row['Cột 1']].filter(Boolean).join('. ');
       const shelterId = await getOrCreateShelter(row['Khu']);
       
-      // 4. GỌI HÀM ASYNC MỚI ĐỂ ĐỢI UPLOAD XONG MỚI GHI DATABASE
+      // 4. Dịch các trường sang Song Ngữ JSON
+      console.log(`\n⏳ Đang dịch thông tin cho bé: ${name}...`);
+      const speciesBilingual = await buildBilingualField(rawSpecies, translateService, 'vi');
+      const breedBilingual = await buildBilingualField(String(row['Giống'] || 'Chưa rõ'), translateService, 'vi');
+      const colorBilingual = await buildBilingualField(String(row['Màu lông'] || 'Đang cập nhật'), translateService, 'vi');
+      const descriptionBilingual = await buildBilingualField(rawDescription, translateService, 'vi');
+
+      // 5. Upload ảnh lên R2
       const imagesData = await getLocalImagesAndUpload(petId);
 
       await prisma.pet.create({
         data: {
           name: String(name),
-          species: speciesType,
-          breed: String(row['Giống'] || 'Chưa rõ'),
+          species: speciesBilingual,     // Đã chuyển thành chuẩn JSON
+          breed: breedBilingual,         // Đã chuyển thành chuẩn JSON
           dob: parseAgeToDob(row['Độ tuổi']),
-          color: String(row['Màu lông'] || 'Đang cập nhật'),
+          color: colorBilingual,         // Đã chuyển thành chuẩn JSON
           gender: parseGender(row['Giới tính']),
           size: PetSize.MEDIUM, 
           isSpayedNeutered: String(row['Triệt sản'] || '').toLowerCase().includes('đã triệt sản'),
           isVaccinated: String(row['Tiêm phòng'] || '').toLowerCase().includes('đã tiêm đủ'),
           status,
           vetVerificationStatus: 'VERIFIED', 
-          description,
+          description: descriptionBilingual, // Đã chuyển thành chuẩn JSON
           shelterId,
           images: { create: imagesData }
         }
       });
-      process.stdout.write(`✅ ${name} | `);
+      process.stdout.write(`\n✅ Thành công: ${name}`);
       
     } catch (error: any) {
       console.log(`\n❌ [LỖI DB - Tên: ${name}]: ${error.message}`);
@@ -176,8 +205,11 @@ async function processBatch(batch: any[]) {
 }
 
 export async function seedPets() {
+  console.log('🌱 Đang khởi tạo ứng dụng NestJS để lấy dịch vụ TranslateService...');
+  const appContext = await NestFactory.createApplicationContext(AppModule);
+  const translateService = appContext.get(TranslateService);
+
   console.log('Bắt đầu dọn dẹp dữ liệu cũ (Xóa Database)...');
-  
   await prisma.eventImage.deleteMany();
   await prisma.eventInterest.deleteMany();
   await prisma.event.deleteMany();
@@ -193,13 +225,13 @@ export async function seedPets() {
   await prisma.pet.deleteMany(); 
   await prisma.followedShelter.deleteMany();
   await prisma.shelter.deleteMany();
-  
   console.log('Đã xóa xong dữ liệu cũ!');
 
   const excelPath = path.join(process.cwd(), 'prisma/data/cho_meo.xlsx');
 
   if (!fs.existsSync(excelPath)) {
     console.error(`❌ Không tìm thấy file Excel tại: ${excelPath}`);
+    await appContext.close();
     return;
   }
 
@@ -216,12 +248,17 @@ export async function seedPets() {
     global.gc();
   }
 
+  // Giới hạn 15 bé đầu tiên như code gốc của bạn
   const limitRecords = allRecords.slice(0, 15);
-  console.log(`✅ Sẽ tiến hành seed đúng ${limitRecords.length} bé đầu tiên!`);
+  console.log(`✅ Sẽ tiến hành dịch song ngữ, upload ảnh và seed đúng ${limitRecords.length} bé đầu tiên!`);
 
-  await processBatch(limitRecords);
+  // Truyền translateService vào processBatch
+  await processBatch(limitRecords, translateService);
   
-  console.log(`\n🎉 HOÀN TẤT! Đã upload ảnh lên R2 và seed thành công.`);
+  console.log(`\n🎉 HOÀN TẤT! Đã upload ảnh lên R2, dịch dữ liệu và seed thành công.`);
+  
+  // Đóng app context giải phóng RAM VPS
+  await appContext.close();
 }
 
 seedPets()
