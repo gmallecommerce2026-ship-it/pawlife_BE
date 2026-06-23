@@ -488,7 +488,7 @@ model Organizer {
   id          String   @id @default(uuid())
   name        String
   handle      String?  @unique // VD: @pawlife_org
-  about       String?  @db.Text
+  about       Json?  @db.Text
   avatarUrl   String?
   coverUrl    String?
   followers   Int      @default(0) 
@@ -500,9 +500,9 @@ model Organizer {
 
 model Event {
   id              String   @id @default(uuid())
-  title           String   // VD: "Dog art therapy & painting class"
-  category        String?  // VD: "Art", "Music", "Adoption" (Tag nhỏ dưới title)
-  description     String?  @db.Text // Nội dung cho phần "About Event"
+  title           Json   // VD: "Dog art therapy & painting class"
+  category        Json?  // VD: "Art", "Music", "Adoption" (Tag nhỏ dưới title)
+  description     Json?  @db.Text // Nội dung cho phần "About Event"
   bannerUrl       String?  // Ảnh nền Header (Hero Image)
   
   // Thời gian
@@ -510,7 +510,7 @@ model Event {
   endDate         DateTime? // Giờ kết thúc (VD: 2026-03-21 23:00)
   
   // Địa điểm
-  locationName    String   // Tên địa điểm (VD: "Paw & Canvas Studio")
+  locationName    Json   // Tên địa điểm (VD: "Paw & Canvas Studio")
   address         String?  // Địa chỉ chi tiết (VD: "Brooklyn, NY, United States")
   latitude        Float?   // Dành cho Map Location Marker
   longitude       Float?
