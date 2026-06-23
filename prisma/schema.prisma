@@ -427,6 +427,7 @@ model TagReport {
   scannedAt   DateTime @default(now())
   isHidden   Boolean  @default(false)
   hiddenAt   DateTime?
+  contentReports ContentReport[] 
 }
 
 // 2. Hệ thống Nhắn tin (Chat Gateway)
