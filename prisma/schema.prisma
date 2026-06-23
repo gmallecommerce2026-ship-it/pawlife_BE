@@ -488,7 +488,7 @@ model Organizer {
   id          String   @id @default(uuid())
   name        String
   handle      String?  @unique // VD: @pawlife_org
-  about       Json?  @db.Text
+  about       Json? 
   avatarUrl   String?
   coverUrl    String?
   followers   Int      @default(0) 
@@ -502,7 +502,7 @@ model Event {
   id              String   @id @default(uuid())
   title           Json   // VD: "Dog art therapy & painting class"
   category        Json?  // VD: "Art", "Music", "Adoption" (Tag nhỏ dưới title)
-  description     Json?  @db.Text // Nội dung cho phần "About Event"
+  description     Json?  // Nội dung cho phần "About Event"
   bannerUrl       String?  // Ảnh nền Header (Hero Image)
   
   // Thời gian
