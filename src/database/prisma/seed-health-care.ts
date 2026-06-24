@@ -34,7 +34,7 @@ async function main() {
     const rabiesCount = isFullyVaccinated ? 1 : Math.floor(Math.random() * 2); // 0 hoặc 1
     const coreCount = isFullyVaccinated ? 3 : Math.floor(Math.random() * 4); // 0, 1, 2, hoặc 3
 
-    const vaccinesToCreate = [];
+    const vaccinesToCreate: any[] = [];
 
     // Tạo record mũi Dại
     if (rabiesCount > 0) {
