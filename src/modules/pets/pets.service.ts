@@ -19,15 +19,27 @@ export interface FeedFilters {
   species?: string;
 }
 
-export type PawHistoryType = 'CREATED' | 'BIRTH' | 'QR_LINKED' | 'TRANSFER' | 'VACCINE';
+export type PawHistoryType =
+  | 'CREATED'
+  | 'BIRTH'
+  | 'QR_LINKED'
+  | 'TRANSFER'
+  | 'VACCINE'
+  | 'DENTAL_CARE'
+  | 'ANNUAL_CHECKUP'
+  | 'UNDER_SHELTER_CARE'
+  | 'WAS_UNDER_SHELTER_CARE'
+  | 'CURRENT_OWNER'
+  | 'PREVIOUS_OWNER';
+
 
 export interface PawHistoryItem {
   id: string;
   type: PawHistoryType;
-  title: string;
+  title: string;       // fallback en text
   date: Date | string;
-  description: string;
-  i18n?: {
+  description: string; // fallback en text
+  i18n: {
     titleKey: string;
     bodyKey: string;
     params?: Record<string, any>;
@@ -687,6 +699,7 @@ export class PetsService {
     };
   }
 
+  // ── HÀM (trong class PetsService) ──────────────────────────────────────────
   async getPetById(id: string, userId?: string) {
     const cacheKey = `pet:detail:${id}`;
     let petData = await this.redisService.get<any>(cacheKey);
@@ -697,13 +710,34 @@ export class PetsService {
         include: {
           owner: ownerSelectQuery,
           images: { orderBy: { createdAt: 'asc' } },
-          medicalRecords: true, traitsList: true,
-          shelter: { select: { id: true, name: true, contactInfo: true, address: true, avatarUrl: true } },
+          medicalRecords: true,
+          traitsList: true,
+          shelter: {
+            select: {
+              id: true,
+              name: true,
+              contactInfo: true,
+              address: true,
+              avatarUrl: true,
+              shelterType: true,
+            },
+          },
           transferRequests: {
             orderBy: { updatedAt: 'desc' },
-            include: { receiver: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } }, sender: { select: { id: true, name: true } } }
+            include: {
+              receiver: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } },
+              sender: { select: { id: true, name: true } },
+            },
           },
-          tags: { include: { reports: { orderBy: { scannedAt: 'desc' }, take: 1, select: { id: true } } } },
+          tags: {
+            include: {
+              reports: {
+                orderBy: { scannedAt: 'desc' },
+                take: 1,
+                select: { id: true },
+              },
+            },
+          },
           adoptionRequirements: {
             where: { requirement: { isActive: true } },
             include: { requirement: true },
@@ -712,8 +746,14 @@ export class PetsService {
         },
       });
 
-      if (!pet) throw new NotFoundException({ message: 'Pet information not found!', i18n: { key: 'error.pet_not_found' } });
+      if (!pet) {
+        throw new NotFoundException({
+          message: 'Pet information not found!',
+          i18n: { key: 'error.pet_not_found' },
+        });
+      }
 
+      // ── Auto-generate shelter code nếu chưa có ─────────────────────────────
       if (!pet.idSetByShelter) {
         const newCode = await this.generateUniqueShelterCode();
         await this.prisma.pet.update({
@@ -723,42 +763,208 @@ export class PetsService {
         pet.idSetByShelter = newCode;
       }
 
-      let formattedShelter: any = null;
-      if (pet.shelter) {
-        formattedShelter = {
-          ...pet.shelter,
-          phone: pet.shelter.contactInfo,
-        };
-      }
-
-      let formattedOwner: any = null;
-      if (pet.owner) {
-        formattedOwner = {
-          ...pet.owner,
-          address: 'Not updated yet',
-        };
-      }
-
-      const pendingTransfer = pet.transferRequests && pet.transferRequests.length > 0
-        ? pet.transferRequests.find(tr => tr.status === 'PENDING')
+      // ── Format shelter & owner ──────────────────────────────────────────────
+      const formattedShelter = pet.shelter
+        ? { ...pet.shelter, phone: pet.shelter.contactInfo }
         : null;
 
+      const formattedOwner = pet.owner
+        ? { ...pet.owner, address: 'Not updated yet' }
+        : null;
+
+      // ── Pending transfer ────────────────────────────────────────────────────
+      const pendingTransfer =
+        pet.transferRequests?.find((tr) => tr.status === 'PENDING') ?? null;
+
+      const completedTransfers =
+        pet.transferRequests?.filter((tr) => tr.status === 'COMPLETED') ?? [];
+
+      // ── Helper: phân loại medical record ───────────────────────────────────
+      const classifyMedicalRecord = (
+        record: (typeof pet.medicalRecords)[number],
+      ): {
+        type: PawHistoryType;
+        titleKey: string;
+        bodyKey: string;
+      } => {
+        const nameBi = getBilingualText(record.recordName);
+        const nameRaw = `${nameBi.en} ${nameBi.vi}`.toLowerCase();
+
+        if (
+          nameRaw.includes('dental') ||
+          nameRaw.includes('răng') ||
+          nameRaw.includes('teeth')
+        ) {
+          return {
+            type: 'DENTAL_CARE',
+            titleKey: 'pawHistory.dental_title',
+            bodyKey: 'pawHistory.dental_body',
+          };
+        }
+
+        if (
+          nameRaw.includes('checkup') ||
+          nameRaw.includes('annual') ||
+          nameRaw.includes('tổng quát') ||
+          nameRaw.includes('định kỳ')
+        ) {
+          return {
+            type: 'ANNUAL_CHECKUP',
+            titleKey: 'pawHistory.checkup_title',
+            bodyKey: 'pawHistory.checkup_body',
+          };
+        }
+
+        return {
+          type: 'VACCINE',
+          titleKey: 'pawHistory.vaccine_title',
+          bodyKey: 'pawHistory.vaccine_body',
+        };
+      };
+
+      // ── Build pawHistory ────────────────────────────────────────────────────
       const pawHistory: PawHistoryItem[] = [];
 
-      pawHistory.push({
-        id: `join_${pet.id}`, type: 'CREATED', title: 'Joined PawLife',
-        date: pet.createdAt, description: `The profile for ${pet.name} was created on the system.`,
-        i18n: {
-          titleKey: 'pawHistory.joined_title',
-          bodyKey: 'pawHistory.joined_body',
-          params: { petName: pet.name },
-        },
+      // 1. CURRENT_OWNER — chỉ push khi pet có owner
+      if (pet.owner) {
+        pawHistory.push({
+          id: `owner_current_${pet.id}`,
+          type: 'CURRENT_OWNER',
+          title: 'Current Owner',
+          date: pet.adoptedAt ?? pet.updatedAt,
+          description: `Ownership transferred to ${pet.owner.name ?? 'Anonymous'}`,
+          i18n: {
+            titleKey: 'pawHistory.current_owner_title',
+            bodyKey: 'pawHistory.current_owner_body',
+            params: { name: pet.owner.name ?? 'Anonymous' },
+          },
+        });
+      }
+
+      // 2. PREVIOUS_OWNER — mỗi completed transfer → 1 previous owner entry
+      completedTransfers.forEach((tr) => {
+        pawHistory.push({
+          id: `owner_prev_${tr.id}`,
+          type: 'PREVIOUS_OWNER',
+          title: 'Previous Owner',
+          date: tr.updatedAt,
+          description: `Previously cared for by ${tr.sender?.name ?? 'Anonymous'}`,
+          i18n: {
+            titleKey: 'pawHistory.previous_owner_title',
+            bodyKey: 'pawHistory.previous_owner_body',
+            params: { name: tr.sender?.name ?? 'Anonymous' },
+          },
+        });
       });
 
+      // 3. TRANSFER milestone — 1 entry per completed transfer
+      completedTransfers.forEach((tr) => {
+        pawHistory.push({
+          id: `transfer_${tr.id}`,
+          type: 'TRANSFER',
+          title: 'Ownership Transferred',
+          date: tr.updatedAt,
+          description: `Successfully transferred to ${tr.receiver?.name ?? 'Anonymous'}`,
+          i18n: {
+            titleKey: 'pawHistory.transfer_title',
+            bodyKey: 'pawHistory.transfer_body',
+            params: { receiverName: tr.receiver?.name ?? 'Anonymous' },
+          },
+        });
+      });
+
+      // 4. UNDER_SHELTER_CARE / WAS_UNDER_SHELTER_CARE
+      if (pet.shelter) {
+        const isCurrentlyInShelter =
+          pet.status === 'AVAILABLE' || pet.status === 'PENDING';
+
+        if (isCurrentlyInShelter) {
+          pawHistory.push({
+            id: `shelter_current_${pet.id}`,
+            type: 'UNDER_SHELTER_CARE',
+            title: "Under Shelter's Care",
+            date: pet.createdAt,
+            description: `Currently under the care of ${pet.shelter.name}`,
+            i18n: {
+              titleKey: 'pawHistory.under_shelter_title',
+              bodyKey: 'pawHistory.under_shelter_body',
+              params: { shelterName: pet.shelter.name },
+            },
+          });
+        } else {
+          // status === ADOPTED → shelter entry jadi "was under care"
+          pawHistory.push({
+            id: `shelter_past_${pet.id}`,
+            type: 'WAS_UNDER_SHELTER_CARE',
+            title: "Was Under Shelter's Care",
+            date: pet.createdAt,
+            description: `Previously cared by ${pet.shelter.name}`,
+            i18n: {
+              titleKey: 'pawHistory.was_under_shelter_title',
+              bodyKey: 'pawHistory.was_under_shelter_body',
+              params: { shelterName: pet.shelter.name },
+            },
+          });
+        }
+      }
+
+      // 5. VACCINE / DENTAL_CARE / ANNUAL_CHECKUP (từ medicalRecords)
+      (pet.medicalRecords ?? []).forEach((record) => {
+        const nameBi = getBilingualText(record.recordName);
+        const classified = classifyMedicalRecord(record);
+
+        pawHistory.push({
+          id: `med_${record.id}`,
+          type: classified.type,
+          title: nameBi.en,
+          date: record.recordDate,
+          description: `${record.type}: ${nameBi.en}`,
+          i18n: {
+            titleKey: classified.titleKey,
+            bodyKey: classified.bodyKey,
+            params: {
+              recordType: record.type,
+              recordNameEn: nameBi.en,
+              recordNameVi: nameBi.vi,
+              clinicName: 'PawLife Clinic', // thay bằng field thật khi có
+            },
+          },
+        });
+      });
+
+      // 6. QR_LINKED / QR_REPLACED
+      (pet.tags ?? [])
+        .filter((t) => t.linkedAt !== null)
+        .forEach((tag) => {
+          const isActive = tag.status !== 'INACTIVE';
+          pawHistory.push({
+            id: `tag_${tag.id}`,
+            type: 'QR_LINKED',
+            title: isActive ? 'QR Tag Registered' : 'QR Tag Replaced',
+            date: tag.linkedAt ?? tag.createdAt,
+            description: isActive
+              ? `PawLife QR tag is now active for ${pet.name}.`
+              : `Old QR tag replaced with a new one.`,
+            i18n: {
+              titleKey: isActive
+                ? 'pawHistory.qr_registered_title'
+                : 'pawHistory.qr_replaced_title',
+              bodyKey: isActive
+                ? 'pawHistory.qr_registered_body'
+                : 'pawHistory.qr_replaced_body',
+              params: { petName: pet.name },
+            },
+          });
+        });
+
+      // 7. BIRTH
       if (pet.dob) {
         pawHistory.push({
-          id: `dob_${pet.id}`, type: 'BIRTH', title: 'Date of Birth',
-          date: pet.dob, description: `${pet.name} barked/meowed into the world.`,
+          id: `dob_${pet.id}`,
+          type: 'BIRTH',
+          title: 'Date of Birth',
+          date: pet.dob,
+          description: `${pet.name} was born.`,
           i18n: {
             titleKey: 'pawHistory.birth_title',
             bodyKey: 'pawHistory.birth_body',
@@ -767,84 +973,71 @@ export class PetsService {
         });
       }
 
+      // 8. CREATED — luôn có, neo ở cuối timeline
+      pawHistory.push({
+        id: `join_${pet.id}`,
+        type: 'CREATED',
+        title: 'Joined PawLife',
+        date: pet.createdAt,
+        description: `The profile for ${pet.name} was created.`,
+        i18n: {
+          titleKey: 'pawHistory.joined_title',
+          bodyKey: 'pawHistory.joined_body',
+          params: { petName: pet.name },
+        },
+      });
+
+      // ── Sort: mới nhất lên đầu ─────────────────────────────────────────────
+      pawHistory.sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+      );
+
+      // ── Latest report id (dùng cho lost mode) ──────────────────────────────
+      let latestReportId: string | null = null;
       if (pet.tags && pet.tags.length > 0) {
-        const linkedTags = pet.tags.filter(t => t.linkedAt !== null);
-        linkedTags.forEach(tag => {
-          const isActiveTag = tag.status !== 'INACTIVE';
-          pawHistory.push({
-            id: `tag_${tag.id}`, type: 'QR_LINKED', title: isActiveTag ? 'QR Code Registered' : 'QR Code Replaced',
-            date: tag.linkedAt || tag.createdAt,
-            description: isActiveTag ? `Smart collar activated for ${pet.name}.` : `Old smart collar replaced.`,
-            i18n: {
-              titleKey: isActiveTag ? 'pawHistory.qr_registered_title' : 'pawHistory.qr_replaced_title',
-              bodyKey: isActiveTag ? 'pawHistory.qr_registered_body' : 'pawHistory.qr_replaced_body',
-              params: { petName: pet.name },
-            },
-          });
-        });
-      }
-
-      if (pet.medicalRecords && pet.medicalRecords.length > 0) {
-        pet.medicalRecords.forEach(record => {
-          const recordNameBi = getBilingualText(record.recordName);
-          pawHistory.push({
-            id: `med_${record.id}`, type: 'VACCINE', title: recordNameBi.en,
-            date: record.recordDate, description: `Record ${record.type}: ${recordNameBi.en}`,
-            i18n: {
-              titleKey: 'pawHistory.vaccine_title',
-              bodyKey: 'pawHistory.vaccine_body',
-              params: { recordType: record.type, recordNameEn: recordNameBi.en, recordNameVi: recordNameBi.vi },
-            },
-          });
-        });
-      }
-
-      if (pet.transferRequests) {
-        pet.transferRequests.filter(tr => tr.status === 'COMPLETED').forEach(tr => {
-          pawHistory.push({
-            id: `transfer_${tr.id}`, type: 'TRANSFER', title: 'Ownership Transferred',
-            date: tr.updatedAt, description: `Successfully transferred to the new owner (${tr.receiver?.name || 'Anonymous'}).`,
-            i18n: {
-              titleKey: 'pawHistory.transfer_title',
-              bodyKey: 'pawHistory.transfer_body',
-              params: { receiverName: tr.receiver?.name || 'Anonymous' },
-            },
-          });
-        });
-      }
-
-      pawHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-      let latestReportId: any = null;
-      if (pet.tags && pet.tags.length > 0) {
-        const activeTag = pet.tags.find(t => t.status !== 'INACTIVE') || pet.tags[0];
-        if (activeTag && activeTag.reports && activeTag.reports.length > 0) {
+        const activeTag =
+          pet.tags.find((t) => t.status !== 'INACTIVE') ?? pet.tags[0];
+        if (activeTag?.reports?.length > 0) {
           latestReportId = activeTag.reports[0].id;
         }
       }
-      const formattedAdoptionRequirements = (pet.adoptionRequirements || []).map((par) => ({
-        id: par.requirement.key,
-        label: par.requirement.label, // { vi, en }
-        iconKey: par.requirement.iconKey,
-      }));
 
+      // ── Adoption requirements ──────────────────────────────────────────────
+      const formattedAdoptionRequirements = (pet.adoptionRequirements ?? []).map(
+        (par) => ({
+          id: par.requirement.key,
+          label: par.requirement.label, // { vi, en }
+          iconKey: par.requirement.iconKey,
+        }),
+      );
+
+      // ── Assemble final petData ─────────────────────────────────────────────
       petData = {
-        ...pet, shelter: formattedShelter, owner: formattedOwner, pawHistory,
-        avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null, latestReportId,
-        transferStatus: pendingTransfer ? pendingTransfer.status : null,
-        pendingContact: pendingTransfer ? (pendingTransfer.receiver.email || pendingTransfer.receiver.phone) : null,
-        transferRequestId: pendingTransfer ? pendingTransfer.id : null, receiverId: pendingTransfer ? pendingTransfer.receiverId : null,
-        senderId: pendingTransfer ? pendingTransfer.senderId : null, receiver: pendingTransfer ? pendingTransfer.receiver : null,
+        ...pet,
+        shelter: formattedShelter,
+        owner: formattedOwner,
+        pawHistory,
+        avatarUrl: pet.images?.[0]?.url ?? null,
+        latestReportId,
+        transferStatus: pendingTransfer?.status ?? null,
+        pendingContact: pendingTransfer
+          ? (pendingTransfer.receiver.email || pendingTransfer.receiver.phone)
+          : null,
+        transferRequestId: pendingTransfer?.id ?? null,
+        receiverId: pendingTransfer?.receiverId ?? null,
+        senderId: pendingTransfer?.senderId ?? null,
+        receiver: pendingTransfer?.receiver ?? null,
         adoptionRequirements: formattedAdoptionRequirements,
       };
 
       await this.redisService.set(cacheKey, petData, 600);
     }
 
+    // ── isFavorited — không cache theo user ───────────────────────────────────
     let isFavorited = false;
     if (userId) {
       const favoriteRecord = await this.prisma.favoritePet.findUnique({
-        where: { userId_petId: { userId: userId, petId: id } }
+        where: { userId_petId: { userId, petId: id } },
       });
       isFavorited = !!favoriteRecord;
     }
