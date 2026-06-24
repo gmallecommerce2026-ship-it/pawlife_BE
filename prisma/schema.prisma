@@ -251,6 +251,32 @@ model MedicalRecord {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }
+
+model AdoptionRequirement {
+  id        String   @id @default(uuid())
+  key       String   @unique // 'house_with_yard', 'no_cat'... dùng để lookup icon ở FE
+  label     Json     // { "vi": "Có sân vườn", "en": "House with yard" }
+  iconKey   String   // map sang asset local ở FE, KHÔNG lưu icon path
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  pets      PetAdoptionRequirement[]
+}
+
+// Bảng nối N-N giữa Pet và AdoptionRequirement
+model PetAdoptionRequirement {
+  id            String   @id @default(uuid())
+  petId         String
+  pet           Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  requirementId String
+  requirement   AdoptionRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+
+  @@unique([petId, requirementId])
+  @@index([petId])
+}
+
 model Pet {
   id                    String   @id @default(uuid())
   name                  String
@@ -320,6 +346,7 @@ model Pet {
   nameLastUpdatedAt     DateTime? 
   adoptedAt             DateTime?
   contentReports ContentReport[]
+  adoptionRequirements PetAdoptionRequirement[]
 }
 
 model AdoptionApplication {
