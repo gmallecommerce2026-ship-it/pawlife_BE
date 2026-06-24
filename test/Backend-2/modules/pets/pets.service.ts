@@ -12,7 +12,7 @@ export interface FeedFilters {
 
 @Injectable()
 export class PetsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   // API 1: Lấy danh sách thú cưng chưa được quẹt
   async getFeed(userId: string, limit: number, filters?: FeedFilters, lat?: number, lng?: number) {
@@ -50,7 +50,7 @@ export class PetsService {
 
       // Lấy thêm hình ảnh cho các pets đã tìm được (để tránh lỗi JSON Array Aggregate trên MySQL)
       const petIds = pets.map(p => p.id);
-      const images = petIds.length > 0 
+      const images = petIds.length > 0
         ? await this.prisma.petImage.findMany({ where: { petId: { in: petIds } } })
         : [];
 
@@ -211,31 +211,116 @@ export class PetsService {
     return { message: 'Đã xóa thú cưng thành công!' };
   }
 
-  async toggleLostMode(userId: string, petId: string, isLost: boolean) {
-    // 1. Kiểm tra thú cưng và quyền sở hữu
+  async toggleLostMode(
+    userId: string,
+    petId: string,
+    data: {
+      isLost: boolean;
+      location?: string;
+      dateTime?: string;
+      details?: string;
+      ownerName?: string;
+      ownerPhone?: string;
+      ownerAddress?: string;
+      note?: string;
+      photos?: string[];
+      latitude?: number | null;
+      longitude?: number | null;
+      radius?: number;
+      lostDate?: string;
+    },
+  ) {
+    const { isLost } = data;
+
+    // 1. Kiểm tra thú cưng
     const pet = await this.prisma.pet.findUnique({
       where: { id: petId },
+      include: { tags: true },
     });
 
     if (!pet) {
       throw new NotFoundException('Không tìm thấy thú cưng này!');
     }
 
-    if (pet.ownerId !== userId && pet.shelterId !== userId) {
+    // 2. Kiểm tra quyền sở hữu — FIX: so sánh đúng thực thể
+    // Lấy thông tin user hiện tại để biết họ có quản lý Shelter nào không
+    const currentUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { shelterId: true },
+    });
+
+    const isOwner = pet.ownerId === userId;
+    const isShelterManager =
+      pet.shelterId && currentUser?.shelterId && pet.shelterId === currentUser.shelterId;
+
+    if (!isOwner && !isShelterManager) {
       throw new ConflictException('Bạn không có quyền thay đổi trạng thái thú cưng này!');
     }
 
-    // 2. Cập nhật trạng thái cho TẤT CẢ các Tag (vòng cổ) của thú cưng này
-    const newStatus = isLost ? 'LOST' : 'ACTIVE';
-    
+    // 3. Cập nhật trạng thái Tag (vòng cổ)
+    const newTagStatus = isLost ? 'LOST' : 'ACTIVE';
     await this.prisma.tag.updateMany({
-      where: { petId: petId },
-      data: { status: newStatus },
+      where: { petId },
+      data: { status: newTagStatus },
     });
+
+    // 4. Cập nhật thông tin "lost" vào Pet
+    const updatedPet = await this.prisma.pet.update({
+      where: { id: petId },
+      data: isLost
+        ? {
+          lostLatitude: data.latitude ?? null,
+          lostLongitude: data.longitude ?? null,
+          lostRadius: data.radius ?? 500,
+          lostDate: data.lostDate ? new Date(data.lostDate) : new Date(),
+          lostContactName: data.ownerName ?? null,
+          lostContactPhone: data.ownerPhone ?? null,
+          lostContactAddress: data.ownerAddress ?? null,
+          lostLocation: data.location ?? null,
+          lostDateTime: data.dateTime ?? null,
+          lostDetails: data.details ? { vi: data.details, en: data.details } : undefined,
+          lostPhotos: data.photos ? JSON.stringify(data.photos) : null,
+        }
+        : {
+          // Khi tắt lost mode, có thể giữ lại lịch sử hoặc clear — tuỳ bạn quyết định
+          lostLatitude: null,
+          lostLongitude: null,
+          lostRadius: null,
+        },
+    });
+
+    let reportId: string | null = null;
+
+    // 5. Khi BẬT lost mode: tạo 1 TagReport "point-zero" để FE có reportId redirect tới
+    if (isLost) {
+      // Lấy tag đầu tiên của pet (nếu có)
+      const tag = pet.tags?.[0];
+
+      if (tag) {
+        const newReport = await this.prisma.tagReport.create({
+          data: {
+            tagId: tag.id,
+            userId: userId,
+            scannedBy: data.ownerName || 'Owner',
+            phoneNumber: data.ownerPhone || null,
+            latitude: data.latitude ?? null,
+            longitude: data.longitude ?? null,
+            radius: data.radius ?? 500,
+            message: data.details || 'Chủ nhân đã báo mất thú cưng',
+            images: data.photos ?? [],
+            status: 'PENDING',
+            scannedAt: data.lostDate ? new Date(data.lostDate) : new Date(),
+          },
+        });
+        reportId = newReport.id;
+      }
+    }
 
     return {
       message: isLost ? 'Đã bật chế độ báo lạc!' : 'Đã tắt chế độ báo lạc, thú cưng an toàn.',
-      isLost: isLost,
+      isLost,
+      reportId, // FE sẽ dùng field này để redirect sang tag-report-detail
+      pet: updatedPet,
     };
   }
 
@@ -296,7 +381,7 @@ export class PetsService {
 
     return {
       // Map qua mảng để lấy thông tin của pet thay vì cấu trúc lồng { pet: {...} }
-      data: favorites.map((fav) => fav.pet), 
+      data: favorites.map((fav) => fav.pet),
       meta: {
         skip,
         take,
@@ -308,9 +393,9 @@ export class PetsService {
   async getMyPets(userId: string) {
     try {
       const pets = await this.prisma.pet.findMany({
-        where: { 
+        where: {
           ownerId: userId,
-          status: 'ADOPTED', 
+          status: 'ADOPTED',
         },
         include: {
           images: true, // Lấy dữ liệu từ bảng PetImage
@@ -337,7 +422,7 @@ export class PetsService {
           ...petData,
           ownerId: userId, // Gán chủ sở hữu là user đang đăng nhập
           status: 'ADOPTED', // Pet tự thêm thì trạng thái mặc định xem như đã sở hữu
-          
+
           // Xử lý lưu mảng URL ảnh vào bảng PetImage (nếu có ảnh)
           ...(images && images.length > 0 && {
             images: {
@@ -374,7 +459,7 @@ export class PetsService {
     // Lọc theo chó hoặc mèo
     if (type) {
       // Giả sử type trên DB lưu là 'DOG' hoặc 'CAT'
-      whereCondition.species = type.toUpperCase() as any; 
+      whereCondition.species = type.toUpperCase() as any;
     }
 
     const pets = await this.prisma.pet.findMany({
@@ -386,7 +471,7 @@ export class PetsService {
           select: { id: true, name: true, avatarUrl: true }
         }
       },
-      orderBy: {  }
+      orderBy: {}
     });
 
     return {

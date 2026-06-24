@@ -1,19 +1,20 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, ParseIntPipe, DefaultValuePipe, Patch } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, ParseIntPipe, DefaultValuePipe, Patch, Req } from '@nestjs/common';
 import { PetsService } from './pets.service';
 import { SwipePetDto } from './dto/swipe-pet.dto';
 import { GetFavoritesDto } from './dto/get-favorites.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
-import { User } from '../../common/decorators/user.decorator'; 
+import { User } from '../../common/decorators/user.decorator';
 import { PetGender, PetSize } from '@prisma/client';
 import { CreatePetDto } from './dto/create-pet.dto';
 import { UpdatePetDto } from './dto/update-pet.dto';
+import { ToggleLostModeDto } from 'src/modules/pets/dto/toggle-lost-mode.dto';
 
 @Controller('pets')
-@UseGuards(JwtAuthGuard) 
+@UseGuards(JwtAuthGuard)
 export class PetsController {
-  constructor(private readonly petsService: PetsService) {}
+  constructor(private readonly petsService: PetsService) { }
 
-  
+
 
   @Get('feed')
   async getFeed(
@@ -74,13 +75,13 @@ export class PetsController {
   @Post() // Định tuyến POST /pets
   @UseGuards(JwtAuthGuard)
   async createPet(
-    @User('id') userId: string, 
+    @User('id') userId: string,
     @Body() createPetDto: CreatePetDto
   ) {
     return this.petsService.createPet(userId, createPetDto);
   }
 
-  
+
   @Get(':id')
   async getPetById(@Param('id') id: string) {
     return this.petsService.getPetById(id);
@@ -115,12 +116,12 @@ export class PetsController {
   }
 
   @Patch(':id/lost-mode')
-  @UseGuards(JwtAuthGuard)
   async toggleLostMode(
-    @User('id') userId: string,
     @Param('id') petId: string,
-    @Body('isLost') isLost: boolean,
+    @Body() body: ToggleLostModeDto, // cần định nghĩa DTO đủ field
+    @Req() req: any,
   ) {
-    return this.petsService.toggleLostMode(userId, petId, isLost);
+    return this.petsService.toggleLostMode(req.user.id, petId, body);
   }
+
 }
