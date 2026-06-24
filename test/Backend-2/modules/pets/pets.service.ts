@@ -501,7 +501,6 @@ export class PetsService {
         },
       },
     });
-    console.log('[DEBUG] Calling endpoint:', `/pets/${id}`);
     if (!pet) {
       throw new NotFoundException('Không tìm thấy thông tin thú cưng này!');
     }

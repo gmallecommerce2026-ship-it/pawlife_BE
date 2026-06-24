@@ -39,7 +39,7 @@ export interface PawHistoryItem {
 // ----------------------------------------------------------------------
 function getBilingualText(field: unknown): { vi: string; en: string } {
   if (!field) return { vi: '', en: '' };
-  
+
   // Chặn đứng trường hợp Frontend dùng FormData gửi nhầm Object thành "[object Object]"
   if (field === '[object Object]') return { vi: 'Unknown/Chưa cập nhật', en: 'Unknown/Not updated' };
 
@@ -59,20 +59,20 @@ function getBilingualText(field: unknown): { vi: string; en: string } {
     }
     return { vi: field, en: field };
   }
-  
+
   // Trường hợp truyền thẳng Object chuẩn
   if (typeof field === 'object' && field !== null) {
     const obj = field as Record<string, unknown>;
     const viVal = obj.vi ?? obj.en ?? '';
     const enVal = obj.en ?? obj.vi ?? '';
-    
-    return { 
+
+    return {
       // Ép kiểu an toàn, không dùng String() lên Object để tránh văng [object Object]
-      vi: typeof viVal === 'object' ? JSON.stringify(viVal) : String(viVal), 
-      en: typeof enVal === 'object' ? JSON.stringify(enVal) : String(enVal) 
+      vi: typeof viVal === 'object' ? JSON.stringify(viVal) : String(viVal),
+      en: typeof enVal === 'object' ? JSON.stringify(enVal) : String(enVal)
     };
   }
-  
+
   return { vi: String(field), en: String(field) };
 }
 // ----------------------------------------------------------------------
@@ -704,6 +704,11 @@ export class PetsService {
             include: { receiver: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } }, sender: { select: { id: true, name: true } } }
           },
           tags: { include: { reports: { orderBy: { scannedAt: 'desc' }, take: 1, select: { id: true } } } },
+          adoptionRequirements: {
+            where: { requirement: { isActive: true } },
+            include: { requirement: true },
+            orderBy: { requirement: { sortOrder: 'asc' } },
+          },
         },
       });
 
@@ -817,6 +822,11 @@ export class PetsService {
           latestReportId = activeTag.reports[0].id;
         }
       }
+      const formattedAdoptionRequirements = (pet.adoptionRequirements || []).map((par) => ({
+        id: par.requirement.key,
+        label: par.requirement.label, // { vi, en }
+        iconKey: par.requirement.iconKey,
+      }));
 
       petData = {
         ...pet, shelter: formattedShelter, owner: formattedOwner, pawHistory,
@@ -825,6 +835,7 @@ export class PetsService {
         pendingContact: pendingTransfer ? (pendingTransfer.receiver.email || pendingTransfer.receiver.phone) : null,
         transferRequestId: pendingTransfer ? pendingTransfer.id : null, receiverId: pendingTransfer ? pendingTransfer.receiverId : null,
         senderId: pendingTransfer ? pendingTransfer.senderId : null, receiver: pendingTransfer ? pendingTransfer.receiver : null,
+        adoptionRequirements: formattedAdoptionRequirements,
       };
 
       await this.redisService.set(cacheKey, petData, 600);
