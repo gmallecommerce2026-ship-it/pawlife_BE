@@ -481,63 +481,63 @@ export class PetsService {
   }
 
   async getPetById(id: string) {
-  const pet = await this.prisma.pet.findUnique({
-    where: { id },
-    include: {
-      images: true, // Lấy danh sách ảnh
-      tags: true,
-      shelter: {
-        // Shelter dùng 'contactInfo' thay vì 'phone', và có 'address'
-        select: { id: true, name: true, contactInfo: true, address: true, avatarUrl: true }
+    const pet = await this.prisma.pet.findUnique({
+      where: { id },
+      include: {
+        images: true, // Lấy danh sách ảnh
+        tags: true,
+        shelter: {
+          // Shelter dùng 'contactInfo' thay vì 'phone', và có 'address'
+          select: { id: true, name: true, contactInfo: true, address: true, avatarUrl: true }
+        },
+        owner: {
+          // User có 'phone' nhưng KHÔNG CÓ 'address'
+          select: { id: true, name: true, phone: true, avatarUrl: true }
+        },
+        adoptionRequirements: {
+          where: { requirement: { isActive: true } },
+          include: { requirement: true },
+          orderBy: { requirement: { sortOrder: 'asc' } },
+        },
       },
-      owner: {
-        // User có 'phone' nhưng KHÔNG CÓ 'address'
-        select: { id: true, name: true, phone: true, avatarUrl: true }
-      },
-      adoptionRequirements: {
-        where: { requirement: { isActive: true } },
-        include: { requirement: true },
-        orderBy: { requirement: { sortOrder: 'asc' } },
-      },
-    },
-  });
+    });
+    console.log('[DEBUG] Calling endpoint:', `/pets/${id}`);
+    if (!pet) {
+      throw new NotFoundException('Không tìm thấy thông tin thú cưng này!');
+    }
 
-  if (!pet) {
-    throw new NotFoundException('Không tìm thấy thông tin thú cưng này!');
-  }
+    // Format lại dữ liệu shelter và owner để frontend dễ hiển thị
+    let formattedShelter: any = null;
+    if (pet.shelter) {
+      formattedShelter = {
+        ...pet.shelter,
+        phone: pet.shelter.contactInfo, // Đổi tên biến contactInfo thành phone cho khớp với code frontend
+      };
+    }
 
-  // Format lại dữ liệu shelter và owner để frontend dễ hiển thị
-  let formattedShelter: any = null;
-  if (pet.shelter) {
-    formattedShelter = {
-      ...pet.shelter,
-      phone: pet.shelter.contactInfo, // Đổi tên biến contactInfo thành phone cho khớp với code frontend
+    let formattedOwner: any = null;
+    if (pet.owner) {
+      formattedOwner = {
+        ...pet.owner,
+        address: 'Chưa cập nhật', // Bảng User không có address nên ta gán chuỗi mặc định
+      };
+    }
+
+    // Format lại adoptionRequirements: bỏ lớp bảng nối, chỉ trả key/label/icon cho FE
+    const formattedRequirements = pet.adoptionRequirements.map((par) => ({
+      id: par.requirement.key,
+      label: par.requirement.label, // { vi, en } -> FE dùng l() để đọc
+      iconKey: par.requirement.iconKey,
+    }));
+
+    return {
+      ...pet,
+      shelter: formattedShelter,
+      owner: formattedOwner,
+      avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null,
+      adoptionRequirements: formattedRequirements, // override field raw từ Prisma bằng bản đã format
     };
   }
-
-  let formattedOwner: any = null;
-  if (pet.owner) {
-    formattedOwner = {
-      ...pet.owner,
-      address: 'Chưa cập nhật', // Bảng User không có address nên ta gán chuỗi mặc định
-    };
-  }
-
-  // Format lại adoptionRequirements: bỏ lớp bảng nối, chỉ trả key/label/icon cho FE
-  const formattedRequirements = pet.adoptionRequirements.map((par) => ({
-    id: par.requirement.key,
-    label: par.requirement.label, // { vi, en } -> FE dùng l() để đọc
-    iconKey: par.requirement.iconKey,
-  }));
-
-  return {
-    ...pet,
-    shelter: formattedShelter,
-    owner: formattedOwner,
-    avatarUrl: pet.images && pet.images.length > 0 ? pet.images[0].url : null,
-    adoptionRequirements: formattedRequirements, // override field raw từ Prisma bằng bản đã format
-  };
-}
 
 
   async updatePet(userId: string, petId: string, updateData: any) { // Dùng UpdatePetDto thay cho any nếu bạn đã import
