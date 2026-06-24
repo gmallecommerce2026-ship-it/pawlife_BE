@@ -493,7 +493,7 @@ export class PetsService {
         owner: {
           // User có 'phone' nhưng KHÔNG CÓ 'address'
           select: { id: true, name: true, phone: true, avatarUrl: true }
-        }
+        },
       },
     });
 
