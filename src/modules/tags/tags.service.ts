@@ -50,22 +50,33 @@ export class TagsService {
 
     if (!report) throw new NotFoundException('Tag scan report not found.');
 
+    const isOwner = currentUserId && currentUserId === report.tag?.pet?.ownerId;
+    const isMainScanner = currentUserId && currentUserId === report.userId;
+
+    // 🌟 FIX 1: Nếu report chính đã bị ẩn và người xem không phải owner/chính người quét
+    // → coi như không tồn tại (chặn xem qua link cũ / deep link)
+    if (report.isHidden && !isOwner && !isMainScanner) {
+      throw new NotFoundException('Tag scan report not found.');
+    }
+
     const scanHistory = await this.prisma.tagReport.findMany({
-      where: { tagId: report.tagId, id: { not: report.id } },
+      where: {
+        tagId: report.tagId,
+        id: { not: report.id },
+        // 🌟 FIX 2: chỉ owner mới được thấy cả report đã ẩn (để biết mình đã ẩn gì)
+        // user thường (kể cả chính người quét cũ) không thấy report bị ẩn trong list
+        ...(isOwner ? {} : { isHidden: false }),
+      },
       orderBy: { scannedAt: 'desc' }
     });
 
     const radius = report.radius || 0;
 
-    const isOwner = currentUserId && currentUserId === report.tag?.pet?.ownerId;
-    const isMainScanner = currentUserId && currentUserId === report.userId;
-
     // --- 1. PROCESS MAIN REPORT COORDINATES (Of the scanner) ---
     let finalLat = report.latitude;
     let finalLng = report.longitude;
-    
-    // 🌟 FIX: ONLY THE SCANNER CAN VIEW EXACT COORDINATES. Pet owner also sees FAKE.
-    let isExactLocation = !!isMainScanner; 
+
+    let isExactLocation = !!isMainScanner;
 
     if (!isExactLocation && radius > 0 && report.latitude && report.longitude) {
       const fakePoint = generateFakePointInRadius(report.latitude, report.longitude, radius, `scan_${report.id}`);
@@ -76,9 +87,7 @@ export class TagsService {
     // --- 2. PROCESS SCAN HISTORY (Orange points on map) ---
     const processedScanHistory = scanHistory.map(hist => {
       const isHistScanner = currentUserId && currentUserId === hist.userId;
-      
-      // 🌟 FIX: Similarly, scan history can only be viewed exactly by that specific scanner
-      const canViewHistExact = isHistScanner; 
+      const canViewHistExact = isHistScanner;
 
       if (canViewHistExact || !hist.radius || !hist.latitude || !hist.longitude) {
         return { ...hist, isEstimated: false };
@@ -89,17 +98,17 @@ export class TagsService {
         ...hist,
         latitude: fakeHistPoint.lat,
         longitude: fakeHistPoint.lng,
-        isEstimated: true 
+        isEstimated: true
       };
     });
 
     return {
       ...report,
-      latitude: finalLat,    
+      latitude: finalLat,
       longitude: finalLng,
       radius: radius,
-      isExactLocation,        
-      isOwner, // 🌟 Pass this flag down to Frontend
+      isExactLocation,
+      isOwner,
       scanHistory: processedScanHistory
     };
   }
@@ -157,7 +166,7 @@ export class TagsService {
     // 2. Check Cache
     const cachedData = await this.redisService.get<any>(cacheKey);
     if (cachedData) return cachedData;
-    
+
     // 1. Get list of tag IDs within radius from Redis super fast
     const nearbyTagIds = await this.redisService.getNearby(this.LOST_TAGS_KEY, Number(lng), Number(lat), Number(radiusKm));
 

@@ -795,6 +795,7 @@ export class PetsService {
           tags: {
             include: {
               reports: {
+                where: { isHidden: false },
                 orderBy: { scannedAt: 'desc' },
                 take: 1,
                 select: { id: true },

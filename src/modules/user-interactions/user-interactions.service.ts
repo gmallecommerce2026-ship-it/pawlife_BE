@@ -2,6 +2,7 @@ import { Injectable, ConflictException, NotFoundException, BadRequestException }
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { SwipeAction } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
+import { RedisService } from 'src/database/redis/redis.service';
 
 // Added `!` to fix TS2564 error
 export class ShareLocationDto {
@@ -18,7 +19,8 @@ export class ShareLocationDto {
 export class UserInteractionsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationsService: NotificationsService
+    private readonly notificationsService: NotificationsService,
+    private readonly redisService: RedisService,
   ) { }
 
   async shareLocation(dto: ShareLocationDto) {
@@ -177,7 +179,7 @@ export class UserInteractionsService {
       return { report, blockRecord };
     });
   }
-  
+
   async reportAndHideTagReport(
     reporterId: string,
     tagReportId: string,
@@ -188,21 +190,21 @@ export class UserInteractionsService {
   ) {
     const tagReport = await this.prisma.tagReport.findUnique({
       where: { id: tagReportId },
-      include: { tag: { select: { pet: { select: { ownerId: true } } } } },
+      include: { tag: { select: { pet: { select: { id: true, ownerId: true } } } } }, // 👈 thêm id
     });
     if (!tagReport) throw new NotFoundException('Scan report not found');
 
     const ownerId = tagReport.tag?.pet?.ownerId;
+    const petId = tagReport.tag?.pet?.id; // 👈 cần để invalidate cache
     if (ownerId && reporterId !== ownerId) {
       throw new BadRequestException('Only the pet owner can moderate this content');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const report = await tx.contentReport.create({
         data: { reporterId, targetTagReportId: tagReportId, reason, details },
       });
 
-      // Dùng biến riêng, không gán đè lên `tagReport` (vốn có shape khác do `include`)
       let hiddenResult: { id: string; isHidden: boolean; hiddenAt: Date | null } | null = null;
       if (isHideRequested) {
         hiddenResult = await tx.tagReport.update({
@@ -229,5 +231,12 @@ export class UserInteractionsService {
 
       return { report, tagReport: hiddenResult ?? tagReport, blockRecord };
     });
+
+    // 🔑 Phần đang thiếu — invalidate cache pet detail sau khi hide
+    if (petId && isHideRequested) {
+      await this.redisService.del(`pet:detail:${petId}`);
+    }
+
+    return result;
   }
 }
