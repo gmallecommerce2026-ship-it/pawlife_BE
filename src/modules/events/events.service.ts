@@ -12,8 +12,10 @@ export class EventsService {
     private readonly redisService: RedisService
   ) { }
 
-  async getUpcomingEvents(limit: number) {
-    const cacheKey = `events:upcoming:limit_${limit}`;
+  async getUpcomingEvents(limit: number, userId?: string) {
+    // 1. Nếu có userId, ta tạo cacheKey riêng cho từng user để tránh việc 
+    // user A thấy sự kiện đã ẩn của user B (nếu dùng chung cacheKey)
+    const cacheKey = `events:upcoming:limit_${limit}:user_${userId || 'guest'}`;
 
     const cachedData = await this.redisService.get<any>(cacheKey);
     if (cachedData) {
@@ -23,11 +25,18 @@ export class EventsService {
     const events = await this.prisma.event.findMany({
       where: {
         startDate: { gte: new Date() },
+        // 2. Logic loại trừ: Chỉ lấy những event mà user chưa ẩn
+        ...(userId && {
+          hiddenByUsers: {
+            none: {
+              userId: userId
+            }
+          }
+        })
       },
       orderBy: { startDate: 'asc' },
       take: limit,
       include: {
-        // FIX: Changed from shelter to organizer
         organizer: {
           select: { id: true, name: true, avatarUrl: true },
         },
@@ -36,6 +45,7 @@ export class EventsService {
 
     const result = { success: true, data: events };
 
+    // 3. Lưu cache với TTL 1 giờ (như cũ)
     await this.redisService.set(cacheKey, result, 3600);
 
     return result;
