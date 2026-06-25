@@ -199,6 +199,19 @@ export class PetsService {
   }
 
   async getFeed(userId: string, limit: number, filters?: FeedFilters, lat?: number, lng?: number) {
+    // 1. Lấy danh sách các ID mà user hiện tại đã block
+    const blockedRecords = await this.prisma.userBlock.findMany({
+      where: { blockerId: userId },
+      select: { blockedId: true }
+    });
+    const blockedUserIds = blockedRecords.map(b => b.blockedId);
+
+    // 2. Tạo điều kiện filter (loại bỏ những pet thuộc owner/shelter đã bị block)
+    const blockFilterCondition = blockedUserIds.length > 0 ? {
+      ownerId: { notIn: blockedUserIds },
+      shelterId: { notIn: blockedUserIds }
+    } : {};
+
     const { gender, size, species } = filters || {};
 
     const matchesFilters = (pet: any) => {
@@ -231,7 +244,12 @@ export class PetsService {
 
       if (targetShelterIds.length > 0) {
         const allPetsInShelters = await this.getAvailablePetsByShelterIds(targetShelterIds);
-        let validPets = allPetsInShelters.filter(pet => !allSwipedIds.has(pet.id) && matchesFilters(pet));
+        let validPets = allPetsInShelters.filter(pet =>
+          !allSwipedIds.has(pet.id) &&
+          matchesFilters(pet) &&
+          (!pet.ownerId || !blockedUserIds.includes(pet.ownerId)) &&
+          (!pet.shelterId || !blockedUserIds.includes(pet.shelterId))
+        );
 
         if (validPets.length === 0) {
           validPets = allPetsInShelters.filter(pet => passActionIds.has(pet.id) && matchesFilters(pet));
@@ -267,6 +285,7 @@ export class PetsService {
       where: {
         status: 'AVAILABLE',
         interactions: { none: { userId: userId } },
+        ...blockFilterCondition,
         ...(gender && { gender }),
         ...(size && { size }),
         ...(species && {
@@ -289,6 +308,7 @@ export class PetsService {
         where: {
           status: 'AVAILABLE',
           interactions: { some: { userId: userId, action: 'PASS' } },
+          ...blockFilterCondition,
           ...(gender && { gender }),
           ...(size && { size }),
           ...(species && {
