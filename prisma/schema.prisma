@@ -209,6 +209,17 @@ model Shelter {
   pets  Pet[]
   blockedBy       BlockedShelter[]
 }
+model UserBlockedShelter {
+  userId    String
+  shelterId String
+  createdAt DateTime @default(now())
+
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shelter   Shelter @relation(fields: [shelterId], references: [id], onDelete: Cascade)
+
+  @@id([userId, shelterId]) // Tránh duplicate
+  @@index([userId]) // Index để query danh sách block cực nhanh
+}
 model Report {
   id        String   @id @default(uuid())
   userId    String

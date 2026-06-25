@@ -199,18 +199,28 @@ export class PetsService {
   }
 
   async getFeed(userId: string, limit: number, filters?: FeedFilters, lat?: number, lng?: number) {
-    // 1. Lấy danh sách các ID mà user hiện tại đã block
-    const blockedRecords = await this.prisma.userBlock.findMany({
+    // 1. Lấy danh sách USER đã block
+    const blockedUserRecords = await this.prisma.userBlock.findMany({
       where: { blockerId: userId },
       select: { blockedId: true }
     });
-    const blockedUserIds = blockedRecords.map(b => b.blockedId);
+    const blockedUserIds = blockedUserRecords.map(b => b.blockedId);
 
-    // 2. Tạo điều kiện filter (loại bỏ những pet thuộc owner/shelter đã bị block)
-    const blockFilterCondition = blockedUserIds.length > 0 ? {
-      ownerId: { notIn: blockedUserIds },
-      shelterId: { notIn: blockedUserIds }
-    } : {};
+    // 1.5 Lấy danh sách SHELTER đã block (THÊM MỚI Ở ĐÂY)
+    const blockedShelterRecords = await this.prisma.blockedShelter.findMany({
+      where: { userId: userId },
+      select: { shelterId: true }
+    });
+    const blockedShelterIds = blockedShelterRecords.map(b => b.shelterId);
+
+    // 2. Tạo điều kiện filter linh hoạt cho Prisma
+    const blockFilterCondition: Prisma.PetWhereInput = {};
+    if (blockedUserIds.length > 0) {
+      blockFilterCondition.ownerId = { notIn: blockedUserIds };
+    }
+    if (blockedShelterIds.length > 0) {
+      blockFilterCondition.shelterId = { notIn: blockedShelterIds };
+    }
 
     const { gender, size, species } = filters || {};
 
@@ -231,6 +241,7 @@ export class PetsService {
       let nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, 50);
 
       if (!nearbyShelterIds || nearbyShelterIds.length === 0) {
+        // ... (Giữ nguyên logic của bạn) ...
         const allShelters = await this.prisma.shelter.findMany({
           where: { latitude: { not: null }, longitude: { not: null } }
         });
@@ -244,15 +255,17 @@ export class PetsService {
 
       if (targetShelterIds.length > 0) {
         const allPetsInShelters = await this.getAvailablePetsByShelterIds(targetShelterIds);
+
+        // SỬA FILTER TRÊN MEMORY Ở ĐÂY: Sử dụng đúng blockedShelterIds cho shelterId
         let validPets = allPetsInShelters.filter(pet =>
           !allSwipedIds.has(pet.id) &&
           matchesFilters(pet) &&
           (!pet.ownerId || !blockedUserIds.includes(pet.ownerId)) &&
-          (!pet.shelterId || !blockedUserIds.includes(pet.shelterId))
+          (!pet.shelterId || !blockedShelterIds.includes(pet.shelterId)) // <-- Đã sửa
         );
 
         if (validPets.length === 0) {
-          validPets = allPetsInShelters.filter(pet => passActionIds.has(pet.id) && matchesFilters(pet));
+          validPets = allPetsInShelters.filter(pet => passActionIds.has(pet.id) && matchesFilters(pet) && (!pet.shelterId || !blockedShelterIds.includes(pet.shelterId)));
         }
 
         const formattedData = validPets.map(pet => {
