@@ -13,9 +13,11 @@ export class EventsService {
   ) { }
 
   async getUpcomingEvents(limit: number, userId?: string) {
-    // 1. Nếu có userId, ta tạo cacheKey riêng cho từng user để tránh việc 
-    // user A thấy sự kiện đã ẩn của user B (nếu dùng chung cacheKey)
-    const cacheKey = `events:upcoming:limit_${limit}:user_${userId || 'guest'}`;
+    // Thêm logic lấy version
+    const version = await this.getCacheVersion(userId);
+
+    // Nối v_${version} vào cuối cacheKey
+    const cacheKey = `events:upcoming:limit_${limit}:user_${userId || 'guest'}:v_${version}`;
 
     const cachedData = await this.redisService.get<any>(cacheKey);
     if (cachedData) {
@@ -25,7 +27,6 @@ export class EventsService {
     const events = await this.prisma.event.findMany({
       where: {
         startDate: { gte: new Date() },
-        // 2. Logic loại trừ: Chỉ lấy những event mà user chưa ẩn
         ...(userId && {
           hiddenByUsers: {
             none: {
@@ -45,7 +46,7 @@ export class EventsService {
 
     const result = { success: true, data: events };
 
-    // 3. Lưu cache với TTL 1 giờ (như cũ)
+    // Lưu cache với key mới (chứa version)
     await this.redisService.set(cacheKey, result, 3600);
 
     return result;
@@ -79,6 +80,17 @@ export class EventsService {
 
     return { success: true, data: { ...event, isInterested } };
   }
+  private async getCacheVersion(userId?: string): Promise<number> {
+    const versionKey = `events:cache_version:u_${userId || 'guest'}`;
+    const version = await this.redisService.get<number>(versionKey);
+    return version || 0;
+  }
+
+  private async bumpCacheVersion(userId: string) {
+    const versionKey = `events:cache_version:u_${userId}`;
+    const current = await this.getCacheVersion(userId);
+    await this.redisService.set(versionKey, current + 1, 0); // 0 = không hết hạn
+  }
   async reportEvent(eventId: string, userId: string, data: any) {
     // Lưu report vào DB
     await this.prisma.eventReport.create({
@@ -106,7 +118,7 @@ export class EventsService {
         create: { userId, eventId }
       });
 
-      // 2. Nếu user đã "Interested" event này, xóa bỏ nó (vì đã ẩn thì ko quan tâm nữa)
+      // 2. Nếu user đã "Interested" event này, xóa bỏ nó
       const existingInterest = await prisma.eventInterest.findUnique({
         where: { userId_eventId: { userId, eventId } }
       });
@@ -119,6 +131,9 @@ export class EventsService {
         });
       }
     });
+
+    // CHIÊU QUYẾT ĐỊNH: BUMP CACHE VERSION SAU KHI TRANSACTION THÀNH CÔNG
+    await this.bumpCacheVersion(userId);
 
     return { success: true, message: 'Event hidden successfully' };
   }
