@@ -156,6 +156,9 @@ model User {
   tagReports  TagReport[]
   blockedShelters BlockedShelter[]
   reports         Report[]
+  eventReports    EventReport[]
+  hiddenEvents    UserHiddenEvent[]
+  blockedShelters UserBlockedShelter[]
 }
 // Bảng lưu trữ việc chặn người dùng (Apple bắt buộc phải có)
 model UserBlock {
@@ -208,6 +211,7 @@ model Shelter {
   users User[] // Danh sách tài khoản quản lý Shelter này
   pets  Pet[]
   blockedBy       BlockedShelter[]
+  blockedByUsers  UserBlockedShelter[]
 }
 model EventReport {
   id        String   @id @default(cuid())
@@ -642,7 +646,8 @@ model Event {
   // Quan hệ
   images          EventImage[]     // Danh sách ảnh cho "Gallery (Pre-Event)"
   interestedUsers EventInterest[]  // Lưu danh sách người dùng đã bấm nút "Interesting"
-
+  reports       EventReport[]
+  hiddenByUsers UserHiddenEvent[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
