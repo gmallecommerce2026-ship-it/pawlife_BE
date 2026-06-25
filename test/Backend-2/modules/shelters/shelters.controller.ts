@@ -22,9 +22,8 @@ export class SheltersController {
     @Query('lat', ParseFloatPipe) lat: number,
     @Query('lng', ParseFloatPipe) lng: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
-    @User('id') userId?: string,
   ) {
-    return this.sheltersService.getSheltersNearBy(lat, lng, limit, userId);
+    return this.sheltersService.getSheltersNearBy(lat, lng, limit); // 👈 thiếu userId
   }
 
   @UseGuards(OptionalJwtAuthGuard)

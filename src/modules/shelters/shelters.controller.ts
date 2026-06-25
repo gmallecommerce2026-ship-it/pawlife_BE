@@ -18,7 +18,7 @@ export class SheltersController {
   ) {
     return this.sheltersService.getOrganizerProfile(id, userId);
   }
-  
+
   @Public()
   @Get()
   findAll(@Query() query: GetSheltersDto, @User('id') userId?: string) {
@@ -32,9 +32,9 @@ export class SheltersController {
     @Query('lat', ParseFloatPipe) lat: number,
     @Query('lng', ParseFloatPipe) lng: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @User('id') userId?: string,
   ) {
-    // Đảm bảo trong sheltersService đã có hàm getSheltersNearBy tương ứng
-    return this.sheltersService.getSheltersNearBy(lat, lng, limit);
+    return this.sheltersService.getSheltersNearBy(lat, lng, limit, userId); // 👈 thêm userId
   }
 
   @UseGuards(JwtAuthGuard)
