@@ -154,6 +154,7 @@ model User {
   adoptionApplications AdoptionApplication[]
   interestedEvents EventInterest[]
   tagReports  TagReport[]
+  blockedShelters BlockedShelter[]
 }
 // Bảng lưu trữ việc chặn người dùng (Apple bắt buộc phải có)
 model UserBlock {
@@ -205,6 +206,7 @@ model Shelter {
   followers   FollowedShelter[]
   users User[] // Danh sách tài khoản quản lý Shelter này
   pets  Pet[]
+  blockedBy       BlockedShelter[]
 }
 model BlockedShelter {
   id        String   @id @default(uuid())
