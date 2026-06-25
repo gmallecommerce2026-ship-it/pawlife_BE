@@ -10,8 +10,10 @@ export class EventsController {
   @Get('upcoming')
   async getUpcomingEvents(
     @Query('limit', new DefaultValuePipe(5), ParseIntPipe) limit: number,
+    @Query('userId') userId?: string, // BỔ SUNG DÒNG NÀY
   ) {
-    return this.eventsService.getUpcomingEvents(limit);
+    // TRUYỀN USERID XUỐNG SERVICE
+    return this.eventsService.getUpcomingEvents(limit, userId); 
   }
 
   @Get(':id')
