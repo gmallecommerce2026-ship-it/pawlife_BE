@@ -291,12 +291,17 @@ export class SheltersService {
         where: { userId, shelterId }
       });
 
-      // 2. Tạo record block
-      return await tx.blockedShelter.create({
-        data: { userId, shelterId }
+      // 2. Tạo record block — dùng upsert để tránh lỗi nếu đã từng block trước đó
+      return await tx.blockedShelter.upsert({
+        where: {
+          userId_shelterId: { userId, shelterId }
+        },
+        create: { userId, shelterId },
+        update: {} // đã tồn tại thì không cần làm gì thêm, coi như thành công
       });
     });
   }
+
   async reportShelter(
     shelterId: string,
     userId: string,
