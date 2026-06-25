@@ -89,7 +89,9 @@ export class EventsService {
   private async bumpCacheVersion(userId: string) {
     const versionKey = `events:cache_version:u_${userId}`;
     const current = await this.getCacheVersion(userId);
-    await this.redisService.set(versionKey, current + 1, 0); // 0 = không hết hạn
+
+    // FIX: Set TTL lớn (ví dụ 30 ngày = 2592000 giây) thay vì 0 để tránh lỗi Expire Immediately
+    await this.redisService.set(versionKey, current + 1, 2592000);
   }
   async reportEvent(eventId: string, userId: string, data: any) {
     // Lưu report vào DB

@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Param, Query, ParseIntPipe, DefaultValuePipe, Body, Res, Req } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, ParseIntPipe, DefaultValuePipe, Body, Res, Req, UseGuards } from '@nestjs/common';
 import { EventsService } from './events.service';
 import type { Request, Response } from 'express';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt.guard';
 
 @Controller('events')
 export class EventsController {
@@ -8,12 +9,14 @@ export class EventsController {
 
   // 1. Lấy danh sách sự kiện sắp tới (dùng cho Home Screen)
   @Get('upcoming')
+  @UseGuards(OptionalJwtAuthGuard) // THÊM GUARD NÀY
   async getUpcomingEvents(
     @Query('limit', new DefaultValuePipe(5), ParseIntPipe) limit: number,
-    @Query('userId') userId?: string, // BỔ SUNG DÒNG NÀY
+    @Req() req: any, // Lấy request thay vì query
   ) {
-    // TRUYỀN USERID XUỐNG SERVICE
-    return this.eventsService.getUpcomingEvents(limit, userId); 
+    // Tự động lấy userId từ Token (nếu có user đăng nhập), an toàn 100%
+    const userId = req.user?.id;
+    return this.eventsService.getUpcomingEvents(limit, userId);
   }
 
   @Get(':id')
