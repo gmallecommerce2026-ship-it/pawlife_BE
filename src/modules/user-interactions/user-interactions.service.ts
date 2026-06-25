@@ -148,11 +148,11 @@ export class UserInteractionsService {
     });
     if (!pet) throw new NotFoundException('Pet not found');
 
-    // Đối tượng sẽ bị block là chủ cá nhân (ownerId), nếu pet thuộc shelter thì có thể không áp dụng block cá nhân
-    const targetOwnerId = pet.ownerId ?? null;
+    // 🌟 SỬA Ở ĐÂY: Lấy ownerId hoặc shelterId để block
+    const targetUserId = pet.ownerId || pet.shelterId;
 
-    // 🌟 Chặn tự report / tự block chính mình
-    if (targetOwnerId && reporterId === targetOwnerId) {
+    // Chặn tự report / tự block chính mình
+    if (targetUserId && reporterId === targetUserId) {
       throw new BadRequestException('Bạn không thể tự báo cáo hoặc chặn nội dung của chính mình.');
     }
 
@@ -163,19 +163,21 @@ export class UserInteractionsService {
 
       let blockRecord: any = null;
 
-      if (isBlockRequested && targetOwnerId) {
+      // Nếu có yêu cầu block và tìm được ID của chủ/trạm
+      if (isBlockRequested && targetUserId) {
         blockRecord = await tx.userBlock.upsert({
           where: {
-            blockerId_blockedId: { blockerId: reporterId, blockedId: targetOwnerId }
+            blockerId_blockedId: { blockerId: reporterId, blockedId: targetUserId }
           },
           update: {},
-          create: { blockerId: reporterId, blockedId: targetOwnerId }
+          create: { blockerId: reporterId, blockedId: targetUserId }
         });
       }
 
       return { report, blockRecord };
     });
   }
+  
   async reportAndHideTagReport(
     reporterId: string,
     tagReportId: string,
