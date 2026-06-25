@@ -154,7 +154,6 @@ model User {
   adoptionApplications AdoptionApplication[]
   interestedEvents EventInterest[]
   tagReports  TagReport[]
-  blockedShelters BlockedShelter[]
   reports         Report[]
   eventReports    EventReport[]
   hiddenEvents    UserHiddenEvent[]
