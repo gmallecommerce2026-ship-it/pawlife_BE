@@ -55,7 +55,7 @@ export class TagsService {
 
     // 🌟 FIX 1: Nếu report chính đã bị ẩn và người xem không phải owner/chính người quét
     // → coi như không tồn tại (chặn xem qua link cũ / deep link)
-    if (report.isHidden && !isOwner && !isMainScanner) {
+    if (report.isHidden) {
       throw new NotFoundException('Tag scan report not found.');
     }
 
@@ -63,6 +63,7 @@ export class TagsService {
       where: {
         tagId: report.tagId,
         id: { not: report.id },
+        isHidden: false,
         // 🌟 FIX 2: chỉ owner mới được thấy cả report đã ẩn (để biết mình đã ẩn gì)
         // user thường (kể cả chính người quét cũ) không thấy report bị ẩn trong list
         ...(isOwner ? {} : { isHidden: false }),
