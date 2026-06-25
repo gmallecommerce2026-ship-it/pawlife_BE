@@ -19,14 +19,14 @@ export class SheltersController {
     return this.sheltersService.getOrganizerProfile(id, userId);
   }
 
-  @Public()
+  @UseGuards(OptionalJwtAuthGuard)
   @Get()
   findAll(@Query() query: GetSheltersDto, @User('id') userId?: string) {
     return this.sheltersService.findAll(query, userId);
   }
 
 
-  @Public()
+  @UseGuards(OptionalJwtAuthGuard)
   @Get('nearby')
   getNearby(
     @Query('lat', ParseFloatPipe) lat: number,
@@ -34,7 +34,7 @@ export class SheltersController {
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @User('id') userId?: string,
   ) {
-    return this.sheltersService.getSheltersNearBy(lat, lng, limit, userId); // 👈 thêm userId
+    return this.sheltersService.getSheltersNearBy(lat, lng, limit, userId);
   }
 
   @UseGuards(JwtAuthGuard)

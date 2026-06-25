@@ -366,7 +366,9 @@ export class SheltersService {
   async getSheltersNearBy(lat: number, lng: number, limit: number = 10, userId?: string) {
     const roundedLat = lat.toFixed(2);
     const roundedLng = lng.toFixed(2);
-    const cacheKey = `shelters:nearby:lat_${roundedLat}:lng_${roundedLng}:limit_${limit}`;
+
+    const version = await this.getCacheVersion(userId);
+    const cacheKey = `shelters:nearby:lat_${roundedLat}:lng_${roundedLng}:limit_${limit}:u_${userId || 'guest'}:v_${version}`;
 
     const cachedData = await this.redisService.get<any>(cacheKey);
     if (cachedData) return cachedData;
@@ -374,9 +376,10 @@ export class SheltersService {
     const lockKey = `${cacheKey}:lock`;
     if (await this.redisService.get(lockKey)) {
       await new Promise(resolve => setTimeout(resolve, 200));
-      return this.getSheltersNearBy(lat, lng, limit);
+      return this.getSheltersNearBy(lat, lng, limit, userId);
     }
     await this.redisService.set(lockKey, true, 10);
+
     const REDIS_KEY = 'shelters:locations';
 
     let nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, 50);
@@ -443,14 +446,14 @@ export class SheltersService {
       return formattedData;
     });
 
-    const result = {
-      data: finalData,
-      meta: { limit, count: finalData.length }
-    };
+    const result = { data: finalData, meta: { limit, count: finalData.length } };
 
-    await this.redisService.set(cacheKey, result, 600);
-    await this.redisService.del(`${cacheKey}:lock`);
+    await this.redisService.set(cacheKey, result, 600); // dùng cacheKey mới có userId+version
+    await this.redisService.del(lockKey); // sửa luôn: trước đó bạn dùng `${cacheKey}:lock` 2 lần
+    // tính lockKey 2 lần độc lập (1 lần khi check, 1 lần khi del)
+    // không sai nhưng nên dùng biến lockKey thống nhất cho rõ ràng
 
     return result;
   }
+
 }
