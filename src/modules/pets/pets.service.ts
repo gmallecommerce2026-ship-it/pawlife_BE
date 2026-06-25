@@ -691,14 +691,43 @@ export class PetsService {
     }
   }
 
-  async searchPets(params: { search?: string; type?: string; limit?: number }) {
-    const { search, type, limit = 20 } = params;
+  async searchPets(params: { search?: string; type?: string; limit?: number; userId?: string }) {
+    const { search, type, limit = 20, userId } = params;
+
+    // Khởi tạo điều kiện tìm kiếm mặc định
     const whereCondition: Prisma.PetWhereInput = {
       status: 'AVAILABLE',
     };
 
+    // 🌟 LOGIC MỚI: FILTER PET ĐÃ BỊ CHẶN (BLOCK) DỰA VÀO USERID
+    if (userId) {
+      // 1. Lấy danh sách ID của Owner đã bị user này block
+      const blockedUserRecords = await this.prisma.userBlock.findMany({
+        where: { blockerId: userId },
+        select: { blockedId: true }
+      });
+      const blockedUserIds = blockedUserRecords.map(b => b.blockedId);
+
+      // 2. Lấy danh sách ID của Shelter đã bị user này block
+      const blockedShelterRecords = await this.prisma.blockedShelter.findMany({
+        where: { userId: userId },
+        select: { shelterId: true }
+      });
+      const blockedShelterIds = blockedShelterRecords.map(b => b.shelterId);
+
+      // 3. Áp dụng điều kiện NOT IN vào query
+      if (blockedUserIds.length > 0) {
+        whereCondition.ownerId = { notIn: blockedUserIds };
+      }
+      if (blockedShelterIds.length > 0) {
+        whereCondition.shelterId = { notIn: blockedShelterIds };
+      }
+    }
+    // 🌟 KẾT THÚC LOGIC FILTER BLOCK
+
     if (search) {
       whereCondition.OR = [
+        // Khuyên dùng thêm mode: 'insensitive' nếu dùng PostgreSQL để tìm kiếm không phân biệt hoa thường
         { name: { contains: search } },
         { breed: { path: ['vi'], string_contains: search } as any },
         { breed: { path: ['en'], string_contains: search } as any },
@@ -723,7 +752,8 @@ export class PetsService {
           select: { id: true, address: true, name: true, avatarUrl: true }
         }
       },
-      orderBy: {}
+      // Nên thêm orderBy để kết quả search nhất quán giữa các lần gọi
+      orderBy: { createdAt: 'desc' }
     });
 
     return {
