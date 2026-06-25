@@ -209,6 +209,30 @@ model Shelter {
   pets  Pet[]
   blockedBy       BlockedShelter[]
 }
+model EventReport {
+  id        String   @id @default(cuid())
+  eventId   String
+  userId    String
+  reason    String   // Lý do report
+  details   String?  // Chi tiết thêm (nếu có)
+  createdAt DateTime @default(now())
+
+  event     Event    @relation(fields: [eventId], references: [id])
+  user      User     @relation(fields: [userId], references: [id]) // Giả sử bạn có bảng User
+}
+
+model UserHiddenEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  eventId   String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+  event     Event    @relation(fields: [eventId], references: [id])
+
+  // Đảm bảo 1 user không thể ẩn 1 event 2 lần gây rác DB
+  @@unique([userId, eventId]) 
+}
 model UserBlockedShelter {
   userId    String
   shelterId String

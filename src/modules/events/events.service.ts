@@ -10,7 +10,7 @@ export class EventsService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly redisService: RedisService
-  ) {}
+  ) { }
 
   async getUpcomingEvents(limit: number) {
     const cacheKey = `events:upcoming:limit_${limit}`;
@@ -69,7 +69,49 @@ export class EventsService {
 
     return { success: true, data: { ...event, isInterested } };
   }
+  async reportEvent(eventId: string, userId: string, data: any) {
+    // Lưu report vào DB
+    await this.prisma.eventReport.create({
+      data: {
+        eventId,
+        userId,
+        reason: data.reason || 'No reason provided',
+        details: JSON.stringify(data)
+      }
+    });
 
+    // Ở hệ thống lớn, thường sẽ bắn 1 event qua Message Queue (RabbitMQ/Kafka) 
+    // hoặc gửi Slack Noti cho Admin kiểm duyệt tại đây.
+
+    return { success: true, message: 'Report submitted successfully' };
+  }
+
+  async hideEvent(eventId: string, userId: string) {
+    // Dùng Transaction để đảm bảo tính toàn vẹn dữ liệu
+    await this.prisma.$transaction(async (prisma) => {
+      // 1. Lưu vào bảng Hidden
+      await prisma.userHiddenEvent.upsert({
+        where: { userId_eventId: { userId, eventId } },
+        update: {},
+        create: { userId, eventId }
+      });
+
+      // 2. Nếu user đã "Interested" event này, xóa bỏ nó (vì đã ẩn thì ko quan tâm nữa)
+      const existingInterest = await prisma.eventInterest.findUnique({
+        where: { userId_eventId: { userId, eventId } }
+      });
+
+      if (existingInterest) {
+        await prisma.eventInterest.delete({ where: { id: existingInterest.id } });
+        await prisma.event.update({
+          where: { id: eventId },
+          data: { interestedCount: { decrement: 1 } },
+        });
+      }
+    });
+
+    return { success: true, message: 'Event hidden successfully' };
+  }
   async toggleInterest(eventId: string, userId: string) {
     const existingInterest = await this.prisma.eventInterest.findUnique({
       where: {

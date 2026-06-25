@@ -4,7 +4,7 @@ import type { Request, Response } from 'express';
 
 @Controller('events')
 export class EventsController {
-  constructor(private readonly eventsService: EventsService) {}
+  constructor(private readonly eventsService: EventsService) { }
 
   // 1. Lấy danh sách sự kiện sắp tới (dùng cho Home Screen)
   @Get('upcoming')
@@ -71,16 +71,31 @@ export class EventsController {
       </body>
       </html>
       `;
-      
+
       res.setHeader('Content-Type', 'text/html');
       res.send(html);
-      return; 
+      return;
     }
 
     // 2. Nếu là App Mobile gọi API, trả về JSON data
     return this.eventsService.getEventDetail(id, userId);
   }
+  @Post(':id/report')
+  async reportEvent(
+    @Param('id') eventId: string,
+    @Body() body: any, // Ở dự án thực tế nên dùng DTO validation
+  ) {
+    const userId = body.userId;
+    return this.eventsService.reportEvent(eventId, userId, body);
+  }
 
+  @Post(':id/hide')
+  async hideEvent(
+    @Param('id') eventId: string,
+    @Body('userId') userId: string,
+  ) {
+    return this.eventsService.hideEvent(eventId, userId);
+  }
   @Get('interested/user')
   async getInterestedEvents(@Query('userId') userId: string) {
     if (!userId) {
@@ -104,7 +119,7 @@ export class EventsController {
   @Post(':id/interest')
   async toggleInterest(
     @Param('id') eventId: string,
-    @Body('userId') userId: string, 
+    @Body('userId') userId: string,
   ) {
     return this.eventsService.toggleInterest(eventId, userId);
   }
