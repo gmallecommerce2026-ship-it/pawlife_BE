@@ -206,7 +206,18 @@ model Shelter {
   users User[] // Danh sách tài khoản quản lý Shelter này
   pets  Pet[]
 }
+model BlockedShelter {
+  id        String   @id @default(uuid())
+  userId    String
+  shelterId String
+  createdAt DateTime @default(now())
 
+  user      User     @relation(fields: [userId], references: [id])
+  shelter   Shelter  @relation(fields: [shelterId], references: [id])
+
+  @@unique([userId, shelterId]) // Đảm bảo không block trùng
+  @@index([userId])
+}
 model FollowedShelter {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())

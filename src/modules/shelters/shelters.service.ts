@@ -11,7 +11,7 @@ export class SheltersService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly redisService: RedisService
-  ) {}
+  ) { }
 
   // =====================================================================
   // FIX: THIS FUNCTION HAS BEEN MOVED TO QUERY THE ORGANIZER TABLE
@@ -64,7 +64,7 @@ export class SheltersService {
 
     const lockKey = `${cacheKey}:lock`;
     const isLocked = await this.redisService.get<boolean>(lockKey);
-    
+
     if (isLocked) {
       await new Promise(resolve => setTimeout(resolve, 200));
       return this.findAll(query);
@@ -74,11 +74,11 @@ export class SheltersService {
     const skip = (page - 1) * limit;
     const whereClause = search
       ? {
-          OR: [
-            { name: { contains: search } },
-            { address: { contains: search } },
-          ],
-        }
+        OR: [
+          { name: { contains: search } },
+          { address: { contains: search } },
+        ],
+      }
       : {};
 
     const [shelters, total] = await Promise.all([
@@ -130,14 +130,14 @@ export class SheltersService {
     }
 
     const adoptedCount = await this.prisma.pet.count({
-      where: { 
-        shelterId: id, 
-        status: 'ADOPTED' 
+      where: {
+        shelterId: id,
+        status: 'ADOPTED'
       },
     });
 
     let isFollowed = false;
-    
+
     if (userId) {
       const followRecord = await this.prisma.followedShelter.findUnique({
         where: {
@@ -261,9 +261,9 @@ export class SheltersService {
         shelter: {
           include: {
             _count: {
-              select: { 
+              select: {
                 pets: { where: { status: 'AVAILABLE' } },
-                followers: true 
+                followers: true
               }
             }
           }
@@ -284,8 +284,22 @@ export class SheltersService {
     });
   }
 
+  async blockShelter(shelterId: string, userId: string) {
+    return await this.prisma.$transaction(async (tx) => {
+      // 1. Xóa follow nếu đang follow
+      await tx.followedShelter.deleteMany({
+        where: { userId, shelterId }
+      });
+
+      // 2. Tạo record block
+      return await tx.blockedShelter.create({
+        data: { userId, shelterId }
+      });
+    });
+  }
+
   private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371; 
+    const R = 6371;
     const dLat = (lat2 - lat1) * (Math.PI / 180);
     const dLon = (lon2 - lon1) * (Math.PI / 180);
     const a =
@@ -311,7 +325,7 @@ export class SheltersService {
     }
     await this.redisService.set(lockKey, true, 10);
     const REDIS_KEY = 'shelters:locations';
-    
+
     let nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, 50);
 
     if (!nearbyShelterIds || nearbyShelterIds.length === 0) {
@@ -343,7 +357,7 @@ export class SheltersService {
     const formattedShelters = shelters.map(shelter => {
       const petCountData = petCounts.find(pc => pc.shelterId === shelter.id);
       const distanceVal = this.calculateDistance(lat, lng, shelter.latitude!, shelter.longitude!);
-      
+
       return {
         ...shelter,
         _count: {
@@ -357,8 +371,8 @@ export class SheltersService {
 
     const finalData = formattedShelters.map(s => {
       const formattedData = {
-         ...s,
-         distance: `${s.distance_val.toFixed(1)} km`,
+        ...s,
+        distance: `${s.distance_val.toFixed(1)} km`,
       };
       delete (formattedData as any).distance_val;
       return formattedData;
@@ -370,7 +384,7 @@ export class SheltersService {
     };
 
     await this.redisService.set(cacheKey, result, 600);
-    await this.redisService.del(`${cacheKey}:lock`); 
+    await this.redisService.del(`${cacheKey}:lock`);
 
     return result;
   }

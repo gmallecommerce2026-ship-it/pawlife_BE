@@ -8,8 +8,8 @@ import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt.guard';
 
 @Controller('shelters')
 export class SheltersController {
-  constructor(private readonly sheltersService: SheltersService) {}
-  
+  constructor(private readonly sheltersService: SheltersService) { }
+
   @Public()
   @Get(':id/organizer-profile')
   async getOrganizerProfile(
@@ -35,20 +35,24 @@ export class SheltersController {
     return this.sheltersService.getSheltersNearBy(lat, lng, limit);
   }
 
-  @UseGuards(JwtAuthGuard) 
+  @UseGuards(JwtAuthGuard)
   @Get('followed')
   getFollowedShelters(@User('id') userId: string) {
     // Gọi đến service để xử lý logic lấy danh sách (bạn cần viết hàm này trong sheltersService)
     return this.sheltersService.getFollowedSheltersByUser(userId);
   }
 
-  @UseGuards(OptionalJwtAuthGuard) 
+  @UseGuards(OptionalJwtAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string, @User('id') userId?: string) {
     return this.sheltersService.findOne(id, userId);
   }
 
- 
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/block')
+  async block(@Param('id') id: string, @User('id') userId: string) {
+    return this.sheltersService.blockShelter(id, userId);
+  }
 
   @UseGuards(JwtAuthGuard) // Yêu cầu đăng nhập để follow
   @Post(':id/follow')
@@ -62,7 +66,7 @@ export class SheltersController {
     return this.sheltersService.unfollow(id, userId);
   }
 
-  
+
   @UseGuards(JwtAuthGuard)
   @Post(':id/toggle-follow')
   toggleFollow(@Param('id') id: string, @User('id') userId: string) {
