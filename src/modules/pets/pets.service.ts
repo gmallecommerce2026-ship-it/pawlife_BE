@@ -678,11 +678,25 @@ export class PetsService {
     }
   }
 
-  async searchPets(params: { search?: string; type?: string; limit?: number }) {
-    const { search, type, limit = 20 } = params;
+  async searchPets(params: { search?: string; type?: string; limit?: number; userId?: string }) {
+    const { search, type, limit = 20, userId } = params;
+
+    let blockedPetIds: string[] = [];
+    if (userId) {
+      const blocked = await this.prisma.blockedPet.findMany({ // 👈 đổi tên model đúng với schema của bạn
+        where: { userId },
+        select: { petId: true }
+      });
+      blockedPetIds = blocked.map(b => b.petId);
+    }
+
     const whereCondition: Prisma.PetWhereInput = {
       status: 'AVAILABLE',
     };
+
+    if (blockedPetIds.length > 0) {
+      whereCondition.id = { notIn: blockedPetIds }; // 👈 thêm
+    }
 
     if (search) {
       whereCondition.OR = [
@@ -703,12 +717,8 @@ export class PetsService {
       where: whereCondition,
       take: limit,
       include: {
-        images: {
-          orderBy: { createdAt: 'asc' }
-        },
-        shelter: {
-          select: { id: true, address: true, name: true, avatarUrl: true }
-        }
+        images: { orderBy: { createdAt: 'asc' } },
+        shelter: { select: { id: true, address: true, name: true, avatarUrl: true } }
       },
       orderBy: {}
     });

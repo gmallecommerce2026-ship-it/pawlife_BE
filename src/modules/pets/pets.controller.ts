@@ -4,7 +4,7 @@ import { PetsService } from './pets.service';
 import { SwipePetDto } from './dto/swipe-pet.dto';
 import { GetFavoritesDto } from './dto/get-favorites.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
-import { User } from '../../common/decorators/user.decorator'; 
+import { User } from '../../common/decorators/user.decorator';
 import { PetGender, PetSize } from '@prisma/client';
 import { CreatePetDto } from './dto/create-pet.dto';
 import { UpdatePetDto } from './dto/update-pet.dto';
@@ -13,9 +13,9 @@ import { ToggleLostModeDto } from './dto/toggle-lost-mode.dto';
 import { ReplaceQrDto } from './dto/replace-qr.dto';
 
 @Controller('pets')
-@UseGuards(JwtAuthGuard) 
+@UseGuards(JwtAuthGuard)
 export class PetsController {
-  constructor(private readonly petsService: PetsService) {}
+  constructor(private readonly petsService: PetsService) { }
 
   @Post(':id/link-qr')
   async linkQrCode(
@@ -47,7 +47,7 @@ export class PetsController {
   async confirmTransfer(@Param('transferId') transferId: string, @Req() req: any) {
     return this.petsService.confirmTransfer(transferId, req.user.id);
   }
-  
+
   @Throttle({ default: { limit: 120, ttl: 60000 } }) // ADDED: Allow feed scrolling 120 times/minute (prevent DB DDoS)
   @Get('feed')
   async getFeed(
@@ -63,10 +63,10 @@ export class PetsController {
     const longitude = lng ? parseFloat(lng) : undefined;
 
     return this.petsService.getFeed(
-      userId, 
-      limit, 
-      { gender, size, species }, 
-      latitude, 
+      userId,
+      limit,
+      { gender, size, species },
+      latitude,
       longitude
     );
   }
@@ -115,7 +115,7 @@ export class PetsController {
   @Post()
   @UseGuards(JwtAuthGuard)
   async createPet(
-    @User('id') userId: string, 
+    @User('id') userId: string,
     @Body() createPetDto: CreatePetDto
   ) {
     return this.petsService.createPet(userId, createPetDto);
@@ -130,10 +130,10 @@ export class PetsController {
     const userId = req.user.id; // Get from JWT payload
     return this.petsService.replaceQrCode(userId, petId, replaceQrDto);
   }
-  
+
   @Get(':id')
   async getPetById(
-    @User('id') userId: string, 
+    @User('id') userId: string,
     @Param('id') id: string
   ) {
     return this.petsService.getPetById(id, userId);
@@ -144,8 +144,9 @@ export class PetsController {
     @Query('search') search?: string,
     @Query('type') type?: string,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
+    @Query('userId') userId?: string, // 👈 thêm
   ) {
-    return this.petsService.searchPets({ search, type, limit });
+    return this.petsService.searchPets({ search, type, limit, userId });
   }
 
   @Patch(':id')
@@ -170,8 +171,8 @@ export class PetsController {
   @Patch(':id/lost-mode')
   @UseGuards(JwtAuthGuard)
   async toggleLostMode(
-    @Req() req: any, 
-    @Param('id') id: string, 
+    @Req() req: any,
+    @Param('id') id: string,
     @Body() dto: ToggleLostModeDto // Get the entire payload sent by the frontend
   ) {
     console.log("BACKEND RECEIVED DTO:", dto);
