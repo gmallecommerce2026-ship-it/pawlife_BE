@@ -297,7 +297,17 @@ export class SheltersService {
       });
     });
   }
-
+  async reportShelter(shelterId: string, userId: string, reportData: { reason: string, detail: string }) {
+    return await this.prisma.report.create({
+      data: {
+        userId,
+        targetId: shelterId,
+        type: 'shelter',
+        reason: reportData.reason,
+        detail: reportData.detail,
+      }
+    });
+  }
   private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371;
     const dLat = (lat2 - lat1) * (Math.PI / 180);

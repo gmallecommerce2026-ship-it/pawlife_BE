@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, Query, UseGuards, Req, ParseFloatPipe, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, Query, UseGuards, Req, ParseFloatPipe, DefaultValuePipe, ParseIntPipe, Body } from '@nestjs/common';
 import { SheltersService } from './shelters.service';
 import { GetSheltersDto } from './dto/get-shelters.dto';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt.guard';
@@ -52,6 +52,16 @@ export class SheltersController {
   @Post(':id/block')
   async block(@Param('id') id: string, @User('id') userId: string) {
     return this.sheltersService.blockShelter(id, userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/report')
+  async report(
+    @Param('id') id: string,
+    @User('id') userId: string,
+    @Body() reportData: { reason: string, detail: string }
+  ) {
+    return this.sheltersService.reportShelter(id, userId, reportData);
   }
 
   @UseGuards(JwtAuthGuard) // Yêu cầu đăng nhập để follow

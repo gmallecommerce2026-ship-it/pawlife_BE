@@ -208,6 +208,17 @@ model Shelter {
   pets  Pet[]
   blockedBy       BlockedShelter[]
 }
+model Report {
+  id        String   @id @default(uuid())
+  userId    String
+  targetId  String   // ID của shelter hoặc đối tượng bị report
+  reason    String
+  detail    String?
+  type      String   // 'shelter', 'pet', 'user'
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+}
 model BlockedShelter {
   id        String   @id @default(uuid())
   userId    String
