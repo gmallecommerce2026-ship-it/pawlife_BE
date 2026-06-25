@@ -53,30 +53,23 @@ export class TagsService {
     const isOwner = currentUserId && currentUserId === report.tag?.pet?.ownerId;
     const isMainScanner = currentUserId && currentUserId === report.userId;
 
-    // 🌟 FIX 1: Nếu report chính đã bị ẩn và người xem không phải owner/chính người quét
-    // → coi như không tồn tại (chặn xem qua link cũ / deep link)
-    if (report.isHidden) {
-      throw new NotFoundException('Tag scan report not found.');
-    }
+    // 🌟 KHÔNG 404 nữa dù report chính có isHidden = true.
+    // Trang theo dõi của owner vẫn phải load được luôn, isHidden chỉ là
+    // cờ để loại record đó khỏi danh sách hiển thị (xử lý ở dưới + ở FE)
 
     const scanHistory = await this.prisma.tagReport.findMany({
       where: {
         tagId: report.tagId,
         id: { not: report.id },
-        isHidden: false,
-        // 🌟 FIX 2: chỉ owner mới được thấy cả report đã ẩn (để biết mình đã ẩn gì)
-        // user thường (kể cả chính người quét cũ) không thấy report bị ẩn trong list
-        ...(isOwner ? {} : { isHidden: false }),
+        isHidden: false, // ✅ chỉ ẩn khỏi list lịch sử, luôn áp dụng cho mọi người xem
       },
       orderBy: { scannedAt: 'desc' }
     });
 
     const radius = report.radius || 0;
 
-    // --- 1. PROCESS MAIN REPORT COORDINATES (Of the scanner) ---
     let finalLat = report.latitude;
     let finalLng = report.longitude;
-
     let isExactLocation = !!isMainScanner;
 
     if (!isExactLocation && radius > 0 && report.latitude && report.longitude) {
@@ -85,7 +78,6 @@ export class TagsService {
       finalLng = fakePoint.lng;
     }
 
-    // --- 2. PROCESS SCAN HISTORY (Orange points on map) ---
     const processedScanHistory = scanHistory.map(hist => {
       const isHistScanner = currentUserId && currentUserId === hist.userId;
       const canViewHistExact = isHistScanner;
@@ -110,6 +102,7 @@ export class TagsService {
       radius: radius,
       isExactLocation,
       isOwner,
+      isHidden: report.isHidden, // 🌟 trả về cờ này để FE biết và tự lọc nếu cần
       scanHistory: processedScanHistory
     };
   }
