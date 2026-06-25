@@ -8,7 +8,7 @@ import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt.guard';
 
 @Controller('shelters')
 export class SheltersController {
-  constructor(private readonly sheltersService: SheltersService) {}
+  constructor(private readonly sheltersService: SheltersService) { }
 
   @Public() // API public cho phép xem danh sách
   @Get()
@@ -22,12 +22,12 @@ export class SheltersController {
     @Query('lat', ParseFloatPipe) lat: number,
     @Query('lng', ParseFloatPipe) lng: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @User('id') userId?: string,
   ) {
-    // Đảm bảo trong sheltersService đã có hàm getSheltersNearBy tương ứng
-    return this.sheltersService.getSheltersNearBy(lat, lng, limit);
+    return this.sheltersService.getSheltersNearBy(lat, lng, limit, userId);
   }
 
-  @UseGuards(OptionalJwtAuthGuard) 
+  @UseGuards(OptionalJwtAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string, @User('id') userId?: string) {
     return this.sheltersService.findOne(id, userId);
@@ -45,7 +45,7 @@ export class SheltersController {
     return this.sheltersService.unfollow(id, userId);
   }
 
-  
+
   @UseGuards(JwtAuthGuard)
   @Post(':id/toggle-follow')
   toggleFollow(@Param('id') id: string, @User('id') userId: string) {

@@ -55,9 +55,21 @@ export class SheltersService {
   // =====================================================================
   // THE REMAINING FUNCTIONS ARE KEPT COMPLETELY UNCHANGED
   // =====================================================================
-  async findAll(query: GetSheltersDto) {
+  async findAll(query: GetSheltersDto, userId?: string) {
     const { search, page = 1, limit = 10 } = query;
-    const cacheKey = `shelters:all:page_${page}:limit_${limit}:search_${search || 'none'}`;
+
+    // Nếu có userId, KHÔNG cache theo cách cũ (cache chung không phân biệt user)
+    // hoặc đưa userId vào cacheKey — xem lưu ý cache bên dưới
+    let blockedIds: string[] = [];
+    if (userId) {
+      const blocked = await this.prisma.blockedShelter.findMany({
+        where: { userId },
+        select: { shelterId: true }
+      });
+      blockedIds = blocked.map(b => b.shelterId);
+    }
+
+    const cacheKey = `shelters:all:page_${page}:limit_${limit}:search_${search || 'none'}:u_${userId || 'guest'}`;
 
     const cachedData = await this.redisService.get<any>(cacheKey);
     if (cachedData) return cachedData;
@@ -72,7 +84,7 @@ export class SheltersService {
     await this.redisService.set(lockKey, true, 10);
 
     const skip = (page - 1) * limit;
-    const whereClause = search
+    const whereClause: any = search
       ? {
         OR: [
           { name: { contains: search } },
@@ -80,6 +92,11 @@ export class SheltersService {
         ],
       }
       : {};
+
+    if (blockedIds.length > 0) {
+      whereClause.id = { notIn: blockedIds };
+    }
+
 
     const [shelters, total] = await Promise.all([
       this.prisma.shelter.findMany({
@@ -344,7 +361,7 @@ export class SheltersService {
     return R * c;
   }
 
-  async getSheltersNearBy(lat: number, lng: number, limit: number = 10) {
+  async getSheltersNearBy(lat: number, lng: number, limit: number = 10, userId?: string) {
     const roundedLat = lat.toFixed(2);
     const roundedLng = lng.toFixed(2);
     const cacheKey = `shelters:nearby:lat_${roundedLat}:lng_${roundedLng}:limit_${limit}`;
@@ -372,7 +389,19 @@ export class SheltersService {
       nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, 50);
     }
 
-    const targetIds = nearbyShelterIds.slice(0, limit);
+    let blockedIds: string[] = [];
+    if (userId) {
+      const blocked = await this.prisma.blockedShelter.findMany({
+        where: { userId },
+        select: { shelterId: true }
+      });
+      blockedIds = blocked.map(b => b.shelterId);
+    }
+
+    const targetIds = nearbyShelterIds
+      .filter(id => !blockedIds.includes(id))
+      .slice(0, limit);
+
 
     if (targetIds.length === 0) {
       return { data: [], meta: { limit, count: 0 } };

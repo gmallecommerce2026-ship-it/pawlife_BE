@@ -18,11 +18,13 @@ export class SheltersController {
   ) {
     return this.sheltersService.getOrganizerProfile(id, userId);
   }
-  @Public() // API public cho phép xem danh sách
+  
+  @Public()
   @Get()
-  findAll(@Query() query: GetSheltersDto) {
-    return this.sheltersService.findAll(query);
+  findAll(@Query() query: GetSheltersDto, @User('id') userId?: string) {
+    return this.sheltersService.findAll(query, userId);
   }
+
 
   @Public()
   @Get('nearby')
