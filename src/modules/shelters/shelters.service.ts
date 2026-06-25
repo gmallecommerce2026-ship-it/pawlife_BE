@@ -51,6 +51,17 @@ export class SheltersService {
       },
     };
   }
+  private async getCacheVersion(userId?: string): Promise<number> {
+    const versionKey = `shelters:cache_version:u_${userId || 'guest'}`;
+    const version = await this.redisService.get<number>(versionKey);
+    return version || 0;
+  }
+
+  private async bumpCacheVersion(userId: string) {
+    const versionKey = `shelters:cache_version:u_${userId}`;
+    const current = await this.getCacheVersion(userId);
+    await this.redisService.set(versionKey, current + 1, 0); // 0 = không hết hạn
+  }
 
   // =====================================================================
   // THE REMAINING FUNCTIONS ARE KEPT COMPLETELY UNCHANGED
@@ -58,8 +69,6 @@ export class SheltersService {
   async findAll(query: GetSheltersDto, userId?: string) {
     const { search, page = 1, limit = 10 } = query;
 
-    // Nếu có userId, KHÔNG cache theo cách cũ (cache chung không phân biệt user)
-    // hoặc đưa userId vào cacheKey — xem lưu ý cache bên dưới
     let blockedIds: string[] = [];
     if (userId) {
       const blocked = await this.prisma.blockedShelter.findMany({
@@ -69,9 +78,12 @@ export class SheltersService {
       blockedIds = blocked.map(b => b.shelterId);
     }
 
-    const cacheKey = `shelters:all:page_${page}:limit_${limit}:search_${search || 'none'}:u_${userId || 'guest'}`;
+    const version = await this.getCacheVersion(userId);
+    const cacheKey = `shelters:all:page_${page}:limit_${limit}:search_${search || 'none'}:u_${userId || 'guest'}:v_${version}`;
 
     const cachedData = await this.redisService.get<any>(cacheKey);
+    if (cachedData) return cachedData;
+
     if (cachedData) return cachedData;
 
     const lockKey = `${cacheKey}:lock`;
@@ -302,38 +314,24 @@ export class SheltersService {
   }
 
   async blockShelter(shelterId: string, userId: string) {
-    return await this.prisma.$transaction(async (tx) => {
-      // 1. Xóa follow nếu đang follow
-      await tx.followedShelter.deleteMany({
-        where: { userId, shelterId }
-      });
-
-      // 2. Tạo record block — dùng upsert để tránh lỗi nếu đã từng block trước đó
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.followedShelter.deleteMany({ where: { userId, shelterId } });
       return await tx.blockedShelter.upsert({
-        where: {
-          userId_shelterId: { userId, shelterId }
-        },
+        where: { userId_shelterId: { userId, shelterId } },
         create: { userId, shelterId },
-        update: {} // đã tồn tại thì không cần làm gì thêm, coi như thành công
+        update: {}
       });
     });
+
+    await this.bumpCacheVersion(userId); // 👈 thêm dòng này
+
+    return result;
   }
 
-  async reportShelter(
-    shelterId: string,
-    userId: string,
-    reportData: { reason: string; detail?: string; isBlockRequested?: boolean }
-  ) {
-    return this.prisma.$transaction(async (tx) => {
-      const report = await tx.report.create({
-        data: {
-          userId,
-          targetId: shelterId,
-          type: 'shelter',
-          reason: reportData.reason,
-          detail: reportData.detail,
-        },
-      });
+
+  async reportShelter(shelterId: string, userId: string, reportData: any) {
+    const report = await this.prisma.$transaction(async (tx) => {
+      const r = await tx.report.create({ data: { userId, targetId: shelterId, type: 'shelter', reason: reportData.reason, detail: reportData.detail } });
 
       if (reportData.isBlockRequested) {
         await tx.followedShelter.deleteMany({ where: { userId, shelterId } });
@@ -343,11 +341,15 @@ export class SheltersService {
           update: {},
         });
       }
-
-      return report;
+      return r;
     });
-  }
 
+    if (reportData.isBlockRequested) {
+      await this.bumpCacheVersion(userId); // 👈 thêm dòng này
+    }
+
+    return report;
+  }
 
   private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371;
