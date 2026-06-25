@@ -297,17 +297,36 @@ export class SheltersService {
       });
     });
   }
-  async reportShelter(shelterId: string, userId: string, reportData: { reason: string, detail: string }) {
-    return await this.prisma.report.create({
-      data: {
-        userId,
-        targetId: shelterId,
-        type: 'shelter',
-        reason: reportData.reason,
-        detail: reportData.detail,
+  async reportShelter(
+    shelterId: string,
+    userId: string,
+    reportData: { reason: string; detail?: string; isBlockRequested?: boolean }
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const report = await tx.report.create({
+        data: {
+          userId,
+          targetId: shelterId,
+          type: 'shelter',
+          reason: reportData.reason,
+          detail: reportData.detail,
+        },
+      });
+
+      if (reportData.isBlockRequested) {
+        await tx.followedShelter.deleteMany({ where: { userId, shelterId } });
+        await tx.blockedShelter.upsert({
+          where: { userId_shelterId: { userId, shelterId } },
+          create: { userId, shelterId },
+          update: {},
+        });
       }
+
+      return report;
     });
   }
+
+
   private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371;
     const dLat = (lat2 - lat1) * (Math.PI / 180);

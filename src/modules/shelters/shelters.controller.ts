@@ -59,10 +59,11 @@ export class SheltersController {
   async report(
     @Param('id') id: string,
     @User('id') userId: string,
-    @Body() reportData: { reason: string, detail: string }
+    @Body() reportData: { reason: string; detail?: string; isBlockRequested?: boolean }
   ) {
     return this.sheltersService.reportShelter(id, userId, reportData);
   }
+
 
   @UseGuards(JwtAuthGuard) // Yêu cầu đăng nhập để follow
   @Post(':id/follow')
