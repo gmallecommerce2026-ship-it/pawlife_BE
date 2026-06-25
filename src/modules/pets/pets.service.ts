@@ -207,7 +207,7 @@ export class PetsService {
     const blockedUserIds = blockedUserRecords.map(b => b.blockedId);
 
     // 1.5 Lấy danh sách SHELTER đã block (THÊM MỚI Ở ĐÂY)
-    const blockedShelterRecords = await this.prisma.blockedShelter.findMany({
+    const blockedShelterRecords = await this.prisma.userBlockedShelter.findMany({
       where: { userId: userId },
       select: { shelterId: true }
     });
@@ -709,7 +709,7 @@ export class PetsService {
       const blockedUserIds = blockedUserRecords.map(b => b.blockedId);
 
       // 2. Lấy danh sách ID của Shelter đã bị user này block
-      const blockedShelterRecords = await this.prisma.blockedShelter.findMany({
+      const blockedShelterRecords = await this.prisma.userBlockedShelter.findMany({
         where: { userId: userId },
         select: { shelterId: true }
       });

@@ -71,7 +71,7 @@ export class SheltersService {
 
     let blockedIds: string[] = [];
     if (userId) {
-      const blocked = await this.prisma.blockedShelter.findMany({
+      const blocked = await this.prisma.userBlockedShelter.findMany({
         where: { userId },
         select: { shelterId: true }
       });
@@ -316,7 +316,7 @@ export class SheltersService {
   async blockShelter(shelterId: string, userId: string) {
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.followedShelter.deleteMany({ where: { userId, shelterId } });
-      return await tx.blockedShelter.upsert({
+      return await tx.userBlockedShelter.upsert({
         where: { userId_shelterId: { userId, shelterId } },
         create: { userId, shelterId },
         update: {}
@@ -335,7 +335,7 @@ export class SheltersService {
 
       if (reportData.isBlockRequested) {
         await tx.followedShelter.deleteMany({ where: { userId, shelterId } });
-        await tx.blockedShelter.upsert({
+        await tx.userBlockedShelter.upsert({
           where: { userId_shelterId: { userId, shelterId } },
           create: { userId, shelterId },
           update: {},
@@ -396,7 +396,7 @@ export class SheltersService {
 
     let blockedIds: string[] = [];
     if (userId) {
-      const blocked = await this.prisma.blockedShelter.findMany({
+      const blocked = await this.prisma.userBlockedShelter.findMany({
         where: { userId },
         select: { shelterId: true }
       });
