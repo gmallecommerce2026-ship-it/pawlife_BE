@@ -142,56 +142,54 @@ export class UserInteractionsService {
     petId: string,
     reason: string,
     details?: string,
-    isBlockRequested?: boolean
+    isBlockRequested?: boolean,
+    blockScope: 'pet' | 'owner' | 'shelter' = 'pet', // mặc định CHỈ ẩn pet này
   ) {
     const pet = await this.prisma.pet.findUnique({
       where: { id: petId },
-      select: { ownerId: true, shelterId: true }, //
+      select: { ownerId: true, shelterId: true },
     });
 
     if (!pet) throw new NotFoundException('Pet not found');
 
-    // Chặn tự report chính mình
     if ((pet.ownerId && reporterId === pet.ownerId) || (pet.shelterId && reporterId === pet.shelterId)) {
       throw new BadRequestException('Bạn không thể tự báo cáo hoặc chặn nội dung của chính mình.');
     }
 
     return this.prisma.$transaction(async (tx) => {
-      // 1. Luôn tạo Report vào bảng ContentReport
+      // Luôn tạo report — bản ghi này CHÍNH LÀ "per-pet block record" luôn,
+      // không cần model UserBlockedPet riêng.
       const report = await tx.contentReport.create({
-        data: { reporterId, targetPetId: petId, reason, details }
+        data: { reporterId, targetPetId: petId, reason, details },
       });
 
       let blockRecord: any = null;
 
-      // 2. Xử lý Block nếu có yêu cầu
+      // Chỉ cascade lên owner/shelter khi UI thực sự yêu cầu (ví dụ nút riêng
+      // "Chặn cả trạm cứu trợ này"), KHÔNG mặc định khi user chỉ chặn 1 pet.
       if (isBlockRequested) {
-        if (pet.ownerId) {
+        if (blockScope === 'owner' && pet.ownerId) {
           blockRecord = await tx.userBlock.upsert({
-            where: {
-              blockerId_blockedId: { blockerId: reporterId, blockedId: pet.ownerId }
-            },
+            where: { blockerId_blockedId: { blockerId: reporterId, blockedId: pet.ownerId } },
             update: {},
-            create: { blockerId: reporterId, blockedId: pet.ownerId }
+            create: { blockerId: reporterId, blockedId: pet.ownerId },
           });
         }
 
-        if (pet.shelterId) {
-          const shelterBlock = await tx.userBlockedShelter.upsert({
-            where: {
-              userId_shelterId: { userId: reporterId, shelterId: pet.shelterId }
-            },
+        if (blockScope === 'shelter' && pet.shelterId) {
+          blockRecord = await tx.userBlockedShelter.upsert({
+            where: { userId_shelterId: { userId: reporterId, shelterId: pet.shelterId } },
             update: {},
-            create: { userId: reporterId, shelterId: pet.shelterId }
+            create: { userId: reporterId, shelterId: pet.shelterId },
           });
-          // Nếu không có ownerId, gán blockRecord bằng shelterBlock để trả về
-          if (!blockRecord) blockRecord = shelterBlock;
         }
+        // blockScope === 'pet' → không tạo gì thêm, report ở trên đã là đủ tín hiệu
       }
 
       return { report, blockRecord };
     });
   }
+
 
   async reportAndHideTagReport(
     reporterId: string,

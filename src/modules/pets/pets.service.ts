@@ -197,13 +197,7 @@ export class PetsService {
       i18n: { key: 'success.qr_linked' }
     };
   }
-  private generateSearchText(name: string, breed: any): string {
-    let breedText = '';
-    if (breed) {
-      breedText = `${breed.vi || ''} ${breed.en || ''}`;
-    }
-    return `${name} ${breedText}`.toLowerCase().trim();
-  }
+
   async getFeed(userId: string, limit: number, filters?: FeedFilters, lat?: number, lng?: number) {
     // 1. Lấy danh sách USER đã block
     const blockedUserRecords = await this.prisma.userBlock.findMany({
