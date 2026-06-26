@@ -701,26 +701,42 @@ export class PetsService {
 
     // 🌟 LOGIC MỚI: FILTER PET ĐÃ BỊ CHẶN (BLOCK) DỰA VÀO USERID
     if (userId) {
-      // 1. Lấy danh sách ID của Owner đã bị user này block
       const blockedUserRecords = await this.prisma.userBlock.findMany({
         where: { blockerId: userId },
         select: { blockedId: true }
       });
       const blockedUserIds = blockedUserRecords.map(b => b.blockedId);
 
-      // 2. Lấy danh sách ID của Shelter đã bị user này block
       const blockedShelterRecords = await this.prisma.userBlockedShelter.findMany({
         where: { userId: userId },
         select: { shelterId: true }
       });
       const blockedShelterIds = blockedShelterRecords.map(b => b.shelterId);
 
-      // 3. Áp dụng điều kiện NOT IN vào query
+      // CÁCH FIX: Khởi tạo mảng AND để chứa các điều kiện block, tránh lỗi NULL của SQL
+      const andConditions: Prisma.PetWhereInput[] = [];
+
       if (blockedUserIds.length > 0) {
-        whereCondition.ownerId = { notIn: blockedUserIds };
+        andConditions.push({
+          OR: [
+            { ownerId: { notIn: blockedUserIds } },
+            { ownerId: null } // Bắt buộc phải cho phép null để không bị mất pet của shelter
+          ]
+        });
       }
+
       if (blockedShelterIds.length > 0) {
-        whereCondition.shelterId = { notIn: blockedShelterIds };
+        andConditions.push({
+          OR: [
+            { shelterId: { notIn: blockedShelterIds } },
+            { shelterId: null } // Bắt buộc phải cho phép null để không bị mất pet của user
+          ]
+        });
+      }
+
+      // Gộp vào whereCondition
+      if (andConditions.length > 0) {
+        whereCondition.AND = andConditions;
       }
     }
     // 🌟 KẾT THÚC LOGIC FILTER BLOCK
