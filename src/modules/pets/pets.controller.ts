@@ -141,10 +141,10 @@ export class PetsController {
 
   @Get()
   async searchPets(
+    @User('id') userId: string, // 👈 FIX: Bắt buộc lấy ID từ Auth Token, không dùng @Query
     @Query('search') search?: string,
     @Query('type') type?: string,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
-    @Query('userId') userId?: string, // 👈 thêm
   ) {
     return this.petsService.searchPets({ search, type, limit, userId });
   }

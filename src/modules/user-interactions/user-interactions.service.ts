@@ -146,34 +146,47 @@ export class UserInteractionsService {
   ) {
     const pet = await this.prisma.pet.findUnique({
       where: { id: petId },
-      select: { ownerId: true, shelterId: true },
+      select: { ownerId: true, shelterId: true }, //
     });
+
     if (!pet) throw new NotFoundException('Pet not found');
 
-    // 🌟 SỬA Ở ĐÂY: Lấy ownerId hoặc shelterId để block
-    const targetUserId = pet.ownerId || pet.shelterId;
-
-    // Chặn tự report / tự block chính mình
-    if (targetUserId && reporterId === targetUserId) {
+    // Chặn tự report chính mình
+    if ((pet.ownerId && reporterId === pet.ownerId) || (pet.shelterId && reporterId === pet.shelterId)) {
       throw new BadRequestException('Bạn không thể tự báo cáo hoặc chặn nội dung của chính mình.');
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // 1. Luôn tạo Report vào bảng ContentReport
       const report = await tx.contentReport.create({
         data: { reporterId, targetPetId: petId, reason, details }
       });
 
       let blockRecord: any = null;
 
-      // Nếu có yêu cầu block và tìm được ID của chủ/trạm
-      if (isBlockRequested && targetUserId) {
-        blockRecord = await tx.userBlock.upsert({
-          where: {
-            blockerId_blockedId: { blockerId: reporterId, blockedId: targetUserId }
-          },
-          update: {},
-          create: { blockerId: reporterId, blockedId: targetUserId }
-        });
+      // 2. Xử lý Block nếu có yêu cầu
+      if (isBlockRequested) {
+        if (pet.ownerId) {
+          blockRecord = await tx.userBlock.upsert({
+            where: {
+              blockerId_blockedId: { blockerId: reporterId, blockedId: pet.ownerId }
+            },
+            update: {},
+            create: { blockerId: reporterId, blockedId: pet.ownerId }
+          });
+        }
+
+        if (pet.shelterId) {
+          const shelterBlock = await tx.userBlockedShelter.upsert({
+            where: {
+              userId_shelterId: { userId: reporterId, shelterId: pet.shelterId }
+            },
+            update: {},
+            create: { userId: reporterId, shelterId: pet.shelterId }
+          });
+          // Nếu không có ownerId, gán blockRecord bằng shelterBlock để trả về
+          if (!blockRecord) blockRecord = shelterBlock;
+        }
       }
 
       return { report, blockRecord };
