@@ -213,6 +213,12 @@ export class PetsService {
     });
     const blockedShelterIds = blockedShelterRecords.map(b => b.shelterId);
 
+    const hiddenPetRecords = await this.prisma.userHiddenPet.findMany({
+      where: { userId: userId },
+      select: { petId: true }
+    });
+    const hiddenPetIds = hiddenPetRecords.map(h => h.petId);
+
     // 2. Tạo điều kiện filter linh hoạt cho Prisma
     const blockFilterCondition: Prisma.PetWhereInput = {};
     if (blockedUserIds.length > 0) {
@@ -221,7 +227,9 @@ export class PetsService {
     if (blockedShelterIds.length > 0) {
       blockFilterCondition.shelterId = { notIn: blockedShelterIds };
     }
-
+    if (hiddenPetIds.length > 0) {
+      blockFilterCondition.id = { notIn: hiddenPetIds };
+    }
     const { gender, size, species } = filters || {};
 
     const matchesFilters = (pet: any) => {
@@ -261,11 +269,17 @@ export class PetsService {
           !allSwipedIds.has(pet.id) &&
           matchesFilters(pet) &&
           (!pet.ownerId || !blockedUserIds.includes(pet.ownerId)) &&
-          (!pet.shelterId || !blockedShelterIds.includes(pet.shelterId)) // <-- Đã sửa
+          (!pet.shelterId || !blockedShelterIds.includes(pet.shelterId)) &&
+          (!hiddenPetIds.includes(pet.id)) // 👈 BỔ SUNG DÒNG NÀY ĐỂ FILTER MẢNG
         );
 
         if (validPets.length === 0) {
-          validPets = allPetsInShelters.filter(pet => passActionIds.has(pet.id) && matchesFilters(pet) && (!pet.shelterId || !blockedShelterIds.includes(pet.shelterId)));
+          validPets = allPetsInShelters.filter(pet =>
+            passActionIds.has(pet.id) &&
+            matchesFilters(pet) &&
+            (!pet.shelterId || !blockedShelterIds.includes(pet.shelterId)) &&
+            (!hiddenPetIds.includes(pet.id)) // 👈 BỔ SUNG DÒNG NÀY
+          );
         }
 
         const formattedData = validPets.map(pet => {
@@ -694,12 +708,10 @@ export class PetsService {
   async searchPets(params: { search?: string; type?: string; limit?: number; userId?: string }) {
     const { search, type, limit = 20, userId } = params;
 
-    // Khởi tạo điều kiện tìm kiếm mặc định
     const whereCondition: Prisma.PetWhereInput = {
       status: 'AVAILABLE',
     };
 
-    // 🌟 LOGIC MỚI: FILTER PET ĐÃ BỊ CHẶN (BLOCK) DỰA VÀO USERID
     if (userId) {
       // 1. Lấy danh sách ID của Owner đã bị user này block
       const blockedUserRecords = await this.prisma.userBlock.findMany({
@@ -715,12 +727,23 @@ export class PetsService {
       });
       const blockedShelterIds = blockedShelterRecords.map(b => b.shelterId);
 
-      // 3. Áp dụng điều kiện NOT IN vào query
+      // 🌟 THÊM MỚI: 3. Lấy danh sách ID Pet đã bị user này ẩn
+      const hiddenPetRecords = await this.prisma.userHiddenPet.findMany({
+        where: { userId: userId },
+        select: { petId: true }
+      });
+      const hiddenPetIds = hiddenPetRecords.map(h => h.petId);
+
+      // Áp dụng điều kiện NOT IN vào query
       if (blockedUserIds.length > 0) {
         whereCondition.ownerId = { notIn: blockedUserIds };
       }
       if (blockedShelterIds.length > 0) {
         whereCondition.shelterId = { notIn: blockedShelterIds };
+      }
+      // 🌟 THÊM MỚI: Áp dụng điều kiện loại bỏ pet
+      if (hiddenPetIds.length > 0) {
+        whereCondition.id = { notIn: hiddenPetIds };
       }
     }
     // 🌟 KẾT THÚC LOGIC FILTER BLOCK
@@ -761,7 +784,48 @@ export class PetsService {
       data: pets,
     };
   }
+  async hidePet(userId: string, petId: string) {
+    // Lưu vào DB
+    await this.prisma.userHiddenPet.upsert({
+      where: { userId_petId: { userId, petId } },
+      create: { userId, petId },
+      update: {}
+    });
 
+    // Lưu ID pet bị ẩn vào Redis Set với TTL (ví dụ 30 ngày)
+    const cacheKey = `user:${userId}:hidden_pets`;
+    await this.redisService.sAdd(cacheKey, petId, 2592000);
+
+    return { success: true, message: 'Thú cưng đã được ẩn khỏi bảng tin của bạn' };
+  }
+
+  // 2. Hàm Report Pet
+  async reportPet(petId: string, userId: string, reportData: any) {
+    const report = await this.prisma.$transaction(async (tx) => {
+      const r = await tx.report.create({
+        data: {
+          userId,
+          targetId: petId,
+          type: 'pet',
+          reason: reportData.reason,
+          detail: reportData.detail
+        }
+      });
+
+      if (reportData.isBlockRequested) {
+        await tx.userHiddenPet.upsert({
+          where: { userId_petId: { userId, petId } },
+          create: { userId, petId },
+          update: {},
+        });
+        // Cập nhật Redis ngay lập tức
+        await this.redisService.sAdd(`user:${userId}:hidden_pets`, petId, 2592000);
+      }
+      return r;
+    });
+
+    return { success: true, data: report };
+  }
   // ── HÀM (trong class PetsService) ──────────────────────────────────────────
   async getPetById(id: string, userId?: string) {
     const cacheKey = `pet:detail:${id}`;

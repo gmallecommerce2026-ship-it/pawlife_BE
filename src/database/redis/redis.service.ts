@@ -17,7 +17,16 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   onModuleDestroy() {
     this.client.disconnect();
   }
+  async sAdd(key: string, member: string, ttlSeconds?: number) {
+    await this.client.sadd(key, member);
+    if (ttlSeconds) {
+      await this.client.expire(key, ttlSeconds);
+    }
+  }
 
+  async sMembers(key: string): Promise<string[]> {
+    return await this.client.smembers(key);
+  }
   async set(key: string, value: any, ttlSeconds?: number) {
     const data = JSON.stringify(value);
     if (ttlSeconds) {
@@ -52,9 +61,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async getNearby(key: string, longitude: number, latitude: number, radiusKm: number): Promise<string[]> {
     // GEOSEARCH key FROMLONLAT lng lat BYRADIUS radius km ASC
     const result = await this.client.geosearch(
-      key, 
-      'FROMLONLAT', longitude, latitude, 
-      'BYRADIUS', radiusKm, 'km', 
+      key,
+      'FROMLONLAT', longitude, latitude,
+      'BYRADIUS', radiusKm, 'km',
       'ASC'
     );
     return result as string[];

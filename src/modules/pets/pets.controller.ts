@@ -130,7 +130,20 @@ export class PetsController {
     const userId = req.user.id; // Get from JWT payload
     return this.petsService.replaceQrCode(userId, petId, replaceQrDto);
   }
+  @Post(':id/hide')
+  async hidePet(@User('id') userId: string, @Param('id') petId: string) {
+    console.log(`Debug: User ${userId} requested to hide pet ${petId}`); // 👈 LOG NÀY
+    return this.petsService.hidePet(userId, petId);
+  }
 
+  @Post(':id/report')
+  async reportPet(
+    @Param('id') id: string,
+    @User('id') userId: string,
+    @Body() reportData: { reason: string; detail?: string; isBlockRequested?: boolean }
+  ) {
+    return this.petsService.reportPet(id, userId, reportData);
+  }
   @Get(':id')
   async getPetById(
     @User('id') userId: string,
