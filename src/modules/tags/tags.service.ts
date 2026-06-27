@@ -45,68 +45,76 @@ export class TagsService {
     const report = await this.prisma.tagReport.findUnique({
       where: { id },
       include: {
-        tag: { include: { pet: { include: { owner: true, images: true } } } }
+        tag: { include: { pet: { include: { owner: true, images: true } } } },
       },
     });
 
     if (!report) throw new NotFoundException('Tag scan report not found.');
 
-    const isOwner = currentUserId && currentUserId === report.tag?.pet?.ownerId;
-    const isMainScanner = currentUserId && currentUserId === report.userId;
+    const ownerId = report.tag?.pet?.ownerId ?? null;
+    const isOwner = !!(currentUserId && currentUserId === ownerId);
+    const isMainScanner = !!(currentUserId && currentUserId === report.userId);
 
-    // 🌟 KHÔNG 404 nữa dù report chính có isHidden = true.
-    // Trang theo dõi của owner vẫn phải load được luôn, isHidden chỉ là
-    // cờ để loại record đó khỏi danh sách hiển thị (xử lý ở dưới + ở FE)
+    // ✅ FIX: Lấy danh sách userId mà owner đã block
+    let blockedUserIds: string[] = [];
+    if (ownerId) {
+      const blocks = await this.prisma.userBlock.findMany({
+        where: { blockerId: ownerId },
+        select: { blockedId: true },
+      });
+      blockedUserIds = blocks.map((b) => b.blockedId);
+    }
 
     const scanHistory = await this.prisma.tagReport.findMany({
       where: {
         tagId: report.tagId,
         id: { not: report.id },
-        isHidden: false, // ✅ chỉ ẩn khỏi list lịch sử, luôn áp dụng cho mọi người xem
+        isHidden: false,
+        // ✅ Loại bỏ scan của những userId bị block
+        ...(blockedUserIds.length > 0 && {
+          NOT: { userId: { in: blockedUserIds } },
+        }),
       },
-      orderBy: { scannedAt: 'desc' }
+      orderBy: { scannedAt: 'desc' },
     });
 
+    // ... phần còn lại giữ nguyên
     const radius = report.radius || 0;
-
     let finalLat = report.latitude;
     let finalLng = report.longitude;
     let isExactLocation = !!isMainScanner;
 
     if (!isExactLocation && radius > 0 && report.latitude && report.longitude) {
-      const fakePoint = generateFakePointInRadius(report.latitude, report.longitude, radius, `scan_${report.id}`);
+      const fakePoint = generateFakePointInRadius(
+        report.latitude, report.longitude, radius, `scan_${report.id}`
+      );
       finalLat = fakePoint.lat;
       finalLng = fakePoint.lng;
     }
 
-    const processedScanHistory = scanHistory.map(hist => {
-      const isHistScanner = currentUserId && currentUserId === hist.userId;
-      const canViewHistExact = isHistScanner;
-
-      if (canViewHistExact || !hist.radius || !hist.latitude || !hist.longitude) {
+    const processedScanHistory = scanHistory.map((hist) => {
+      const isHistScanner = !!(currentUserId && currentUserId === hist.userId);
+      if (isHistScanner || !hist.radius || !hist.latitude || !hist.longitude) {
         return { ...hist, isEstimated: false };
       }
-
-      const fakeHistPoint = generateFakePointInRadius(hist.latitude, hist.longitude, hist.radius, `scan_${hist.id}`);
-      return {
-        ...hist,
-        latitude: fakeHistPoint.lat,
-        longitude: fakeHistPoint.lng,
-        isEstimated: true
-      };
+      const fakeHistPoint = generateFakePointInRadius(
+        hist.latitude, hist.longitude, hist.radius, `scan_${hist.id}`
+      );
+      return { ...hist, latitude: fakeHistPoint.lat, longitude: fakeHistPoint.lng, isEstimated: true };
     });
 
     return {
       ...report,
       latitude: finalLat,
       longitude: finalLng,
-      radius: radius,
+      radius,
       isExactLocation,
       isOwner,
-      isHidden: report.isHidden, // 🌟 trả về cờ này để FE biết và tự lọc nếu cần
-      scanHistory: processedScanHistory
+      isHidden: report.isHidden,
+      scanHistory: processedScanHistory,
     };
   }
+
   async hideAndBlockScanner(reportId: string, currentUserId: string) {
     return this.reportTagReportItem(
       {
@@ -189,10 +197,32 @@ export class TagsService {
     const lat = Number(reportData.lat ?? reportData.latitude);
     const lng = Number(reportData.lng ?? reportData.longitude);
 
+    // ✅ FIX: Lấy ownerId của pet để check block
+    const tag = await this.prisma.tag.findUnique({
+      where: { id: tagId },
+      include: { pet: { select: { ownerId: true, id: true } } },
+    });
+
+    const ownerId = tag?.pet?.ownerId ?? null;
+
+    // ✅ FIX: Nếu scanner bị owner block → lưu với isHidden=true, skip notification
+    let isHiddenByBlock = false;
+    if (currentUserId && ownerId && currentUserId !== ownerId) {
+      const block = await this.prisma.userBlock.findUnique({
+        where: {
+          blockerId_blockedId: {
+            blockerId: ownerId,
+            blockedId: currentUserId,
+          },
+        },
+      });
+      if (block) isHiddenByBlock = true;
+    }
+
     const report = await this.prisma.tagReport.create({
       data: {
-        tagId: tagId,
-        userId: currentUserId, // 🌟 SAVE SCANNER ID HERE
+        tagId,
+        userId: currentUserId,
         latitude: lat,
         longitude: lng,
         radius: reportData.radius,
@@ -200,17 +230,19 @@ export class TagsService {
         phoneNumber: reportData.phoneNumber,
         message: reportData.message,
         images: reportData.images,
+        isHidden: isHiddenByBlock,           // ✅ auto-hide nếu bị block
+        hiddenAt: isHiddenByBlock ? new Date() : null,
       },
       include: { tag: { include: { pet: { include: { owner: true } } } } },
     });
 
-    // 2. REDIS INTEGRATION: If tag is LOST and has coordinates, save to Redis map
-    if (report.tag.status === TagStatus.LOST && lat && lng) {
-      await this.redisService.addLocation(this.LOST_TAGS_KEY, lng, lat, tagId);
+    // ✅ Chỉ add Redis + notify nếu KHÔNG bị block
+    if (!isHiddenByBlock) {
+      if (report.tag.status === TagStatus.LOST && lat && lng) {
+        await this.redisService.addLocation(this.LOST_TAGS_KEY, lng, lat, tagId);
+      }
+      await this.notificationsService.notifyOwner(report);
     }
-
-    // 3. Use NotificationsService to notify the owner
-    await this.notificationsService.notifyOwner(report);
 
     return report;
   }
