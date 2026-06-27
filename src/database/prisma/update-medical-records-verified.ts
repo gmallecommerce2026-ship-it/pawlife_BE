@@ -1,15 +1,12 @@
 // src/database/prisma/update-medical-records-verified.ts
 import { PrismaClient, VerificationStatus } from '@prisma/client';
+import Redis from 'ioredis'; // hoặc import đúng theo cách RedisService của bạn khởi tạo client
 
 const prisma = new PrismaClient();
+const redis = new Redis(process.env.REDIS_URL); // chỉnh theo config thật của bạn
 
-// Tỷ lệ % medical record sẽ được chuyển sang VERIFIED (0.5 = 50%)
 const VERIFIED_RATIO = 0.5;
 
-/**
- * Xáo trộn mảng theo Fisher-Yates để chọn ngẫu nhiên record cần verify,
- * tránh việc luôn verify các record được tạo đầu tiên (data test sẽ thiên lệch)
- */
 function shuffle<T>(array: T[]): T[] {
   const arr = [...array];
   for (let i = arr.length - 1; i > 0; i--) {
@@ -22,9 +19,9 @@ function shuffle<T>(array: T[]): T[] {
 async function main() {
   console.log('Bắt đầu cập nhật trạng thái verification cho Medical Record...');
 
-  // 1. Lấy toàn bộ medical record hiện có (chỉ select id + status hiện tại cho nhẹ)
+  // Lấy kèm petId để biết cache key nào cần xoá
   const medicalRecords = await prisma.medicalRecord.findMany({
-    select: { id: true, type: true, verificationStatus: true },
+    select: { id: true, type: true, verificationStatus: true, petId: true },
   });
 
   if (medicalRecords.length === 0) {
@@ -32,7 +29,6 @@ async function main() {
     return;
   }
 
-  // 2. Xáo trộn ngẫu nhiên rồi cắt lấy đúng 50%
   const shuffled = shuffle(medicalRecords);
   const verifyCount = Math.round(shuffled.length * VERIFIED_RATIO);
   const recordsToVerify = shuffled.slice(0, verifyCount);
@@ -41,13 +37,19 @@ async function main() {
   console.log(`- Tổng số Medical Record: ${shuffled.length}`);
   console.log(`- Số lượng sẽ chuyển sang VERIFIED: ${idsToVerify.length} (${VERIFIED_RATIO * 100}%)`);
 
-  // 3. Update đồng loạt (updateMany nhanh hơn nhiều so với loop update từng cái)
   const result = await prisma.medicalRecord.updateMany({
     where: { id: { in: idsToVerify } },
     data: { verificationStatus: VerificationStatus.VERIFIED },
   });
 
   console.log(`\n✅ Thành công! Đã cập nhật ${result.count} Medical Record sang trạng thái VERIFIED.`);
+
+  // ===== QUAN TRỌNG: xoá cache pet:detail cho TẤT CẢ pet bị ảnh hưởng =====
+  const affectedPetIds = [...new Set(recordsToVerify.map((r) => r.petId))];
+  for (const petId of affectedPetIds) {
+    await redis.del(`pet:detail:${petId}`);
+  }
+  console.log(`🧹 Đã xoá cache pet:detail cho ${affectedPetIds.length} pet bị ảnh hưởng.`);
 }
 
 main()
@@ -57,4 +59,5 @@ main()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    await redis.quit();
   });
