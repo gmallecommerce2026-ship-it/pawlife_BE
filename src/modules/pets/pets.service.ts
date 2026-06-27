@@ -778,6 +778,53 @@ export class PetsService {
       i18n: { key: 'success.medical_record_deleted' },
     };
   }
+  async reportMedicalRecord(
+    userId: string,
+    petId: string,
+    recordId: string,
+    reportData: { reason: string; details?: string },
+  ) {
+    // 1. Kiểm tra pet tồn tại + quyền (giống updateMedicalRecord/deleteMedicalRecord)
+    const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
+    if (!pet) {
+      throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
+    }
+    if (pet.ownerId !== userId && pet.shelterId !== userId) {
+      throw new ConflictException({
+        message: "You do not have permission to report this pet's medical record!",
+        i18n: { key: 'error.pet_unauthorized' },
+      });
+    }
+
+    // 2. Kiểm tra record có thuộc pet này không
+    const record = await this.prisma.medicalRecord.findUnique({ where: { id: recordId } });
+    if (!record || record.petId !== petId) {
+      throw new NotFoundException({
+        message: 'Medical record not found!',
+        i18n: { key: 'error.medical_record_not_found' },
+      });
+    }
+
+    // 3. Tạo report — tái sử dụng model Report sẵn có, không cần migration
+    const report = await this.prisma.report.create({
+      data: {
+        userId,
+        targetId: recordId,
+        type: 'medical_record',
+        reason: reportData.reason,
+        detail: reportData.details,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Report submitted successfully',
+      i18n: { key: 'success.medical_record_reported' },
+      data: report,
+    };
+  }
+
+
   async createPet(userId: string, createPetDto: CreatePetDto) {
     const { images, tagId, medicalRecords, ...petData } = createPetDto;
     const publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN');

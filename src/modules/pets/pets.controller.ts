@@ -169,6 +169,16 @@ export class PetsController {
   ) {
     return this.petsService.deleteMedicalRecord(req.user.id, petId, recordId);
   }
+  @Post(':petId/medical-records/:recordId/report')
+  @UseGuards(JwtAuthGuard)
+  async reportMedicalRecord(
+    @Req() req: any,
+    @Param('petId') petId: string,
+    @Param('recordId') recordId: string,
+    @Body() body: { reason: string; details?: string },
+  ) {
+    return this.petsService.reportMedicalRecord(req.user.id, petId, recordId, body);
+  }
   @Post(':id/report')
   async reportPet(
     @Param('id') id: string,
