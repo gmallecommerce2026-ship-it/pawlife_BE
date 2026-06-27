@@ -653,7 +653,131 @@ export class PetsService {
       throw new InternalServerErrorException({ message: 'Error fetching user\'s pet list', i18n: { key: 'error.get_my_pets_failed' } });
     }
   }
+  // ============================================================
+  // THÊM VÀO pets.service.ts (trong class PetsService)
+  // Method này UPDATE 1 medical record cụ thể, KHÔNG đụng tới
+  // các record khác và KHÔNG reset verificationStatus của chúng
+  // (khác với updatePet() hiện tại đang deleteMany + create lại hết)
+  // ============================================================
 
+  async updateMedicalRecord(
+    userId: string,
+    petId: string,
+    recordId: string,
+    updateData: {
+      type?: string;
+      recordName?: any; // string | {vi,en} | JSON string
+      recordDate?: string;
+      images?: string[];
+      hasNextDueDate?: boolean;
+      nextDueDate?: string | null;
+      nextDueName?: any;
+    },
+  ) {
+    // 1. Kiểm tra quyền sở hữu pet
+    const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
+    if (!pet) {
+      throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
+    }
+    if (pet.ownerId !== userId && pet.shelterId !== userId) {
+      throw new ConflictException({
+        message: "You do not have permission to edit this pet's information!",
+        i18n: { key: 'error.pet_unauthorized' },
+      });
+    }
+
+    // 2. Kiểm tra record có thuộc pet này không
+    const record = await this.prisma.medicalRecord.findUnique({ where: { id: recordId } });
+    if (!record || record.petId !== petId) {
+      throw new NotFoundException({
+        message: 'Medical record not found!',
+        i18n: { key: 'error.medical_record_not_found' },
+      });
+    }
+
+    // 3. (Tuỳ chọn) Chỉ cho sửa khi record còn PENDING, đã VERIFIED thì khoá lại
+    //    Bỏ comment nếu bạn muốn áp dụng rule này:
+    // if (record.verificationStatus === 'VERIFIED') {
+    //   throw new BadRequestException({
+    //     message: 'This record has been verified and can no longer be edited.',
+    //     i18n: { key: 'error.medical_record_locked' },
+    //   });
+    // }
+
+    const dataToUpdate: Prisma.MedicalRecordUpdateInput = {};
+
+    if (updateData.type !== undefined) dataToUpdate.type = updateData.type;
+    if (updateData.recordName !== undefined) {
+      dataToUpdate.recordName = getBilingualText(updateData.recordName) as any;
+    }
+    if (updateData.recordDate !== undefined) {
+      dataToUpdate.recordDate = new Date(updateData.recordDate);
+    }
+    if (updateData.images !== undefined) {
+      dataToUpdate.images = updateData.images as any;
+    }
+    if (updateData.hasNextDueDate !== undefined) {
+      dataToUpdate.hasNextDueDate = updateData.hasNextDueDate;
+    }
+    if (updateData.nextDueDate !== undefined) {
+      dataToUpdate.nextDueDate = updateData.nextDueDate ? new Date(updateData.nextDueDate) : null;
+    }
+    if (updateData.nextDueName !== undefined) {
+      dataToUpdate.nextDueName = updateData.nextDueName
+        ? (getBilingualText(updateData.nextDueName) as any)
+        : null;
+    }
+
+    // Sau khi sửa nội dung, đưa record về lại PENDING để admin xác minh lại
+    // (vì nội dung đã thay đổi, verification cũ không còn áp dụng)
+    dataToUpdate.verificationStatus = 'PENDING';
+
+    const updatedRecord = await this.prisma.medicalRecord.update({
+      where: { id: recordId },
+      data: dataToUpdate,
+    });
+
+    await this.redisService.del(`pet:detail:${petId}`);
+
+    return {
+      message: 'Medical record updated successfully',
+      i18n: { key: 'success.medical_record_updated' },
+      data: updatedRecord,
+    };
+  }
+
+  // ============================================================
+  // (Khuyến nghị thêm luôn) DELETE 1 medical record riêng lẻ,
+  // để nút "Xóa" trong menu cũng không phải replace-all
+  // ============================================================
+  async deleteMedicalRecord(userId: string, petId: string, recordId: string) {
+    const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
+    if (!pet) {
+      throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
+    }
+    if (pet.ownerId !== userId && pet.shelterId !== userId) {
+      throw new ConflictException({
+        message: "You do not have permission to edit this pet's information!",
+        i18n: { key: 'error.pet_unauthorized' },
+      });
+    }
+
+    const record = await this.prisma.medicalRecord.findUnique({ where: { id: recordId } });
+    if (!record || record.petId !== petId) {
+      throw new NotFoundException({
+        message: 'Medical record not found!',
+        i18n: { key: 'error.medical_record_not_found' },
+      });
+    }
+
+    await this.prisma.medicalRecord.delete({ where: { id: recordId } });
+    await this.redisService.del(`pet:detail:${petId}`);
+
+    return {
+      message: 'Medical record deleted successfully',
+      i18n: { key: 'success.medical_record_deleted' },
+    };
+  }
   async createPet(userId: string, createPetDto: CreatePetDto) {
     const { images, tagId, medicalRecords, ...petData } = createPetDto;
     const publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN');

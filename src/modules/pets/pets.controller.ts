@@ -135,7 +135,40 @@ export class PetsController {
     console.log(`Debug: User ${userId} requested to hide pet ${petId}`); // 👈 LOG NÀY
     return this.petsService.hidePet(userId, petId);
   }
+  // ============================================================
+  // THÊM VÀO pets.controller.ts (cùng class chứa các route /pets/...)
+  // Điều chỉnh decorator @UseGuards / cách lấy userId theo đúng
+  // pattern bạn đang dùng cho các route khác (ví dụ @Req() req, req.user.id)
+  // ============================================================
 
+  @Patch(':petId/medical-records/:recordId')
+  @UseGuards(JwtAuthGuard) // dùng đúng guard hiện có trong project
+  async updateMedicalRecord(
+    @Req() req: any,
+    @Param('petId') petId: string,
+    @Param('recordId') recordId: string,
+    @Body() body: {
+      type?: string;
+      recordName?: any;
+      recordDate?: string;
+      images?: string[];
+      hasNextDueDate?: boolean;
+      nextDueDate?: string | null;
+      nextDueName?: any;
+    },
+  ) {
+    return this.petsService.updateMedicalRecord(req.user.id, petId, recordId, body);
+  }
+
+  @Delete(':petId/medical-records/:recordId')
+  @UseGuards(JwtAuthGuard)
+  async deleteMedicalRecord(
+    @Req() req: any,
+    @Param('petId') petId: string,
+    @Param('recordId') recordId: string,
+  ) {
+    return this.petsService.deleteMedicalRecord(req.user.id, petId, recordId);
+  }
   @Post(':id/report')
   async reportPet(
     @Param('id') id: string,
