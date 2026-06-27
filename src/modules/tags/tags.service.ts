@@ -1,5 +1,5 @@
 // src/modules/tags/tags.service.ts
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { TagStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -106,7 +106,67 @@ export class TagsService {
       scanHistory: processedScanHistory
     };
   }
+  async hideAndBlockScanner(reportId: string, currentUserId: string) {
+    // 1. Truy xuất report kèm thông tin pet để verify quyền
+    const report = await this.prisma.tagReport.findUnique({
+      where: { id: reportId },
+      include: {
+        tag: {
+          include: { pet: true }
+        }
+      },
+    });
 
+    if (!report) {
+      throw new NotFoundException('Tag report not found.');
+    }
+
+    // 2. Chỉ chủ sở hữu pet mới có quyền ẩn & block
+    if (report.tag?.pet?.ownerId !== currentUserId) {
+      throw new ForbiddenException('You do not have permission to hide this report.');
+    }
+
+    // 3. Thực thi Transaction đảm bảo Data Integrity
+    await this.prisma.$transaction(async (tx) => {
+      // 3.1 Cập nhật cờ ẩn cho báo cáo
+      await tx.tagReport.update({
+        where: { id: reportId },
+        data: {
+          isHidden: true,
+          hiddenAt: new Date()
+        },
+      });
+
+      // 3.2 Block người dùng đã tạo report (nếu họ có tài khoản và không phải chính chủ)
+      if (report.userId && report.userId !== currentUserId) {
+        await tx.userBlock.upsert({
+          where: {
+            blockerId_blockedId: {
+              blockerId: currentUserId,
+              blockedId: report.userId,
+            }
+          },
+          create: {
+            blockerId: currentUserId,
+            blockedId: report.userId,
+          },
+          update: {} // Bỏ qua nếu đã block từ trước
+        });
+      }
+    });
+
+    // 4. Invalidate Cache trên Redis để đồng bộ Real-time
+    // Xóa cache của Pet Detail và Danh sách Report bị ảnh hưởng
+    await this.redisService.del(`pet:detail:${report.tag.pet.id}`);
+    const lostTagsKey = 'tags:locations:lost';
+    // Xóa location của tag này khỏi bộ nhớ tìm kiếm lân cận nếu cần
+    await this.redisService.removeLocation(lostTagsKey, report.tagId);
+
+    return {
+      success: true,
+      message: 'Đã ẩn báo cáo và chặn người dùng thành công.'
+    };
+  }
   async createTagReport(data: CreateTagReportDto, currentUserId?: string) {
     const { tagId, ...reportData } = data;
     const lat = Number(reportData.lat ?? reportData.latitude);

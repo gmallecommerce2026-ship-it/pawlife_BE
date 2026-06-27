@@ -3,11 +3,12 @@ import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } 
 import { TagsService } from './tags.service';
 import { CreateTagReportDto } from './dto/create-tag-report.dto';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 
 @Controller('tags')
 export class TagsController {
-  constructor(private readonly tagsService: TagsService) {}
-  
+  constructor(private readonly tagsService: TagsService) { }
+
   @Get('reports/:id')
   @UseGuards(OptionalJwtAuthGuard) // Optional: có token thì xác thực, không có thì vẫn pass
   async getTagReportDetail(@Param('id') id: string, @Request() req: any) {
@@ -29,7 +30,16 @@ export class TagsController {
     const currentUserId = req.user?.id ?? null; // Trích xuất ID
     return this.tagsService.createTagReport(createTagReportDto, currentUserId);
   }
-
+  @Post('report/:id/hide-and-block')
+  @UseGuards(JwtAuthGuard) // Bắt buộc phải đăng nhập
+  async hideAndBlock(
+    @Param('id') id: string,
+    @Request() req: any
+  ) {
+    const currentUserId = req.user.id;
+    const data = await this.tagsService.hideAndBlockScanner(id, currentUserId);
+    return { success: true, data };
+  }
   @Patch('report/:id/resolve')
   async resolveReport(@Param('id') id: string) {
     return this.tagsService.resolveTagReport(id);
