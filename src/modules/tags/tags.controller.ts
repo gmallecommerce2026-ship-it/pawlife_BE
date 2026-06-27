@@ -40,6 +40,14 @@ export class TagsController {
     const data = await this.tagsService.hideAndBlockScanner(id, currentUserId);
     return { success: true, data };
   }
+  @Post('report-feedback')
+  @UseGuards(JwtAuthGuard) // Bắt buộc đăng nhập — ContentReport.reporterId là field required trong schema
+  async reportTagReportItem(
+    @Body() dto: ReportTagReportItemDto,
+    @Request() req: any,
+  ) {
+    return this.tagsService.reportTagReportItem(dto, req.user.id);
+  }
   @Patch('report/:id/resolve')
   async resolveReport(@Param('id') id: string) {
     return this.tagsService.resolveTagReport(id);

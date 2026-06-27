@@ -4,6 +4,7 @@ import { PrismaService } from '../../database/prisma/prisma.service';
 import { TagStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateTagReportDto } from './dto/create-tag-report.dto';
+import { ReportTagReportItemDto } from './dto/report-tag-report-item.dto'
 import { RedisService } from '../../database/redis/redis.service'; // IMPORT REDIS
 
 function seededRandom(seed: string): number {
@@ -107,66 +108,82 @@ export class TagsService {
     };
   }
   async hideAndBlockScanner(reportId: string, currentUserId: string) {
-    // 1. Truy xuất report kèm thông tin pet để verify quyền
-    const report = await this.prisma.tagReport.findUnique({
-      where: { id: reportId },
-      include: {
-        tag: {
-          include: { pet: true }
-        }
+    return this.reportTagReportItem(
+      {
+        tagReportId: reportId,
+        reason: 'manual_hide_and_block',
+        isHideRequested: true,
+        isBlockRequested: true,
       },
+      currentUserId,
+    );
+  }
+
+
+  async reportTagReportItem(dto: ReportTagReportItemDto, currentUserId: string) {
+    const { tagReportId, reason, details, isHideRequested, isBlockRequested } = dto;
+
+    const report = await this.prisma.tagReport.findUnique({
+      where: { id: tagReportId },
+      include: { tag: { include: { pet: true } } },
     });
 
     if (!report) {
-      throw new NotFoundException('Tag report not found.');
+      throw new NotFoundException('Tag scan report not found.');
     }
 
-    // 2. Chỉ chủ sở hữu pet mới có quyền ẩn & block
-    if (report.tag?.pet?.ownerId !== currentUserId) {
-      throw new ForbiddenException('You do not have permission to hide this report.');
+    const isOwner = report.tag?.pet?.ownerId === currentUserId;
+
+    // Bảo vệ phía server: dù FE đã ẩn switch Hide/Block với người không phải owner
+    // (allowModeration={isOwner} trong ReportUGCModal), vẫn phải chặn lại ở đây
+    // để tránh người dùng tự ý gửi request tay (Postman/curl) bypass UI.
+    if ((isHideRequested || isBlockRequested) && !isOwner) {
+      throw new ForbiddenException('Only the pet owner can hide or block this content.');
     }
 
-    // 3. Thực thi Transaction đảm bảo Data Integrity
     await this.prisma.$transaction(async (tx) => {
-      // 3.1 Cập nhật cờ ẩn cho báo cáo
-      await tx.tagReport.update({
-        where: { id: reportId },
+      // 1. Luôn lưu báo cáo — kể cả khi người gửi không phải owner,
+      //    miễn họ đã đăng nhập (mọi user đều có quyền report nội dung).
+      await tx.contentReport.create({
         data: {
-          isHidden: true,
-          hiddenAt: new Date()
+          reporterId: currentUserId,
+          targetTagReportId: tagReportId,
+          reason,
+          details,
         },
       });
 
-      // 3.2 Block người dùng đã tạo report (nếu họ có tài khoản và không phải chính chủ)
-      if (report.userId && report.userId !== currentUserId) {
+      // 2. Ẩn report cụ thể này khỏi timeline (chỉ owner mới tới được đây)
+      if (isHideRequested) {
+        await tx.tagReport.update({
+          where: { id: tagReportId },
+          data: { isHidden: true, hiddenAt: new Date() },
+        });
+      }
+
+      // 3. Chặn người quét — bỏ qua nếu họ quét ẩn danh (không có userId)
+      //    hoặc nếu vô tình block chính bản thân mình
+      if (isBlockRequested && report.userId && report.userId !== currentUserId) {
         await tx.userBlock.upsert({
           where: {
-            blockerId_blockedId: {
-              blockerId: currentUserId,
-              blockedId: report.userId,
-            }
+            blockerId_blockedId: { blockerId: currentUserId, blockedId: report.userId },
           },
-          create: {
-            blockerId: currentUserId,
-            blockedId: report.userId,
-          },
-          update: {} // Bỏ qua nếu đã block từ trước
+          create: { blockerId: currentUserId, blockedId: report.userId },
+          update: {},
         });
       }
     });
 
-    // 4. Invalidate Cache trên Redis để đồng bộ Real-time
-    // Xóa cache của Pet Detail và Danh sách Report bị ảnh hưởng
-    await this.redisService.del(`pet:detail:${report.tag.pet.id}`);
-    const lostTagsKey = 'tags:locations:lost';
-    // Xóa location của tag này khỏi bộ nhớ tìm kiếm lân cận nếu cần
-    await this.redisService.removeLocation(lostTagsKey, report.tagId);
+    if (report.tag?.pet?.id) {
+      await this.redisService.del(`pet:detail:${report.tag.pet.id}`);
+    }
 
     return {
       success: true,
-      message: 'Đã ẩn báo cáo và chặn người dùng thành công.'
+      message: 'Đã gửi báo cáo thành công.',
     };
   }
+
   async createTagReport(data: CreateTagReportDto, currentUserId?: string) {
     const { tagId, ...reportData } = data;
     const lat = Number(reportData.lat ?? reportData.latitude);
