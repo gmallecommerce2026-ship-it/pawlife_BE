@@ -8,7 +8,24 @@ import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 
 @Controller('tags')
 export class TagsController {
-  constructor(private readonly tagsService: TagsService) {}
+  constructor(private readonly tagsService: TagsService) { }
+
+
+  @Get('nearby')
+  async getNearbyLostPets(
+    @Query('lat') lat: string,
+    @Query('lng') lng: string,
+    @Query('radius') radius = '5',
+  ) {
+    return this.tagsService.getNearbyLostPets(Number(lat), Number(lng), Number(radius));
+  }
+
+  // ✅ Import đã có, route này hoạt động đúng
+  @Post('report-feedback')
+  @UseGuards(JwtAuthGuard)
+  async reportTagReportItem(@Body() dto: ReportTagReportItemDto, @Request() req: any) {
+    return this.tagsService.reportTagReportItem(dto, req.user.id);
+  }
 
   @Get('reports/:id')
   @UseGuards(OptionalJwtAuthGuard)
@@ -33,24 +50,11 @@ export class TagsController {
     return this.tagsService.hideAndBlockScanner(id, req.user.id);
   }
 
-  // ✅ Import đã có, route này hoạt động đúng
-  @Post('report-feedback')
-  @UseGuards(JwtAuthGuard)
-  async reportTagReportItem(@Body() dto: ReportTagReportItemDto, @Request() req: any) {
-    return this.tagsService.reportTagReportItem(dto, req.user.id);
-  }
+
 
   @Patch('report/:id/resolve')
   async resolveReport(@Param('id') id: string) {
     return this.tagsService.resolveTagReport(id);
   }
 
-  @Get('nearby')
-  async getNearbyLostPets(
-    @Query('lat') lat: string,
-    @Query('lng') lng: string,
-    @Query('radius') radius = '5',
-  ) {
-    return this.tagsService.getNearbyLostPets(Number(lat), Number(lng), Number(radius));
-  }
 }

@@ -136,22 +136,15 @@ export class TagsService {
       include: { tag: { include: { pet: true } } },
     });
 
-    if (!report) {
-      throw new NotFoundException('Tag scan report not found.');
-    }
+    if (!report) throw new NotFoundException('Tag scan report not found.');
 
     const isOwner = report.tag?.pet?.ownerId === currentUserId;
 
-    // Bảo vệ phía server: dù FE đã ẩn switch Hide/Block với người không phải owner
-    // (allowModeration={isOwner} trong ReportUGCModal), vẫn phải chặn lại ở đây
-    // để tránh người dùng tự ý gửi request tay (Postman/curl) bypass UI.
     if ((isHideRequested || isBlockRequested) && !isOwner) {
       throw new ForbiddenException('Only the pet owner can hide or block this content.');
     }
 
     await this.prisma.$transaction(async (tx) => {
-      // 1. Luôn lưu báo cáo — kể cả khi người gửi không phải owner,
-      //    miễn họ đã đăng nhập (mọi user đều có quyền report nội dung).
       await tx.contentReport.create({
         data: {
           reporterId: currentUserId,
@@ -161,7 +154,6 @@ export class TagsService {
         },
       });
 
-      // 2. Ẩn report cụ thể này khỏi timeline (chỉ owner mới tới được đây)
       if (isHideRequested) {
         await tx.tagReport.update({
           where: { id: tagReportId },
@@ -169,15 +161,25 @@ export class TagsService {
         });
       }
 
-      // 3. Chặn người quét — bỏ qua nếu họ quét ẩn danh (không có userId)
-      //    hoặc nếu vô tình block chính bản thân mình
       if (isBlockRequested && report.userId && report.userId !== currentUserId) {
+        // Tạo UserBlock record
         await tx.userBlock.upsert({
           where: {
             blockerId_blockedId: { blockerId: currentUserId, blockedId: report.userId },
           },
           create: { blockerId: currentUserId, blockedId: report.userId },
           update: {},
+        });
+
+        // BUG FIX 3: Backfill — ẩn TẤT CẢ scan cũ của scanner này trên tag này
+        // Không chỉ ẩn report hiện tại, mà toàn bộ history của người bị block
+        await tx.tagReport.updateMany({
+          where: {
+            userId: report.userId,
+            tagId: report.tagId,   // chỉ ẩn trên tag của pet này, không ảnh hưởng tag khác
+            isHidden: false,       // chỉ update những cái chưa bị ẩn
+          },
+          data: { isHidden: true, hiddenAt: new Date() },
         });
       }
     });
@@ -186,34 +188,30 @@ export class TagsService {
       await this.redisService.del(`pet:detail:${report.tag.pet.id}`);
     }
 
-    return {
-      success: true,
-      message: 'Đã gửi báo cáo thành công.',
-    };
+    return { success: true, message: 'Đã gửi báo cáo thành công.' };
   }
+
 
   async createTagReport(data: CreateTagReportDto, currentUserId?: string) {
     const { tagId, ...reportData } = data;
     const lat = Number(reportData.lat ?? reportData.latitude);
     const lng = Number(reportData.lng ?? reportData.longitude);
 
-    // ✅ FIX: Lấy ownerId của pet để check block
+    // BUG FIX 2: Guard nếu tag không tồn tại
     const tag = await this.prisma.tag.findUnique({
       where: { id: tagId },
       include: { pet: { select: { ownerId: true, id: true } } },
     });
 
-    const ownerId = tag?.pet?.ownerId ?? null;
+    if (!tag) throw new NotFoundException('Tag not found.');
 
-    // ✅ FIX: Nếu scanner bị owner block → lưu với isHidden=true, skip notification
+    const ownerId = tag.pet?.ownerId ?? null;
+
     let isHiddenByBlock = false;
     if (currentUserId && ownerId && currentUserId !== ownerId) {
       const block = await this.prisma.userBlock.findUnique({
         where: {
-          blockerId_blockedId: {
-            blockerId: ownerId,
-            blockedId: currentUserId,
-          },
+          blockerId_blockedId: { blockerId: ownerId, blockedId: currentUserId },
         },
       });
       if (block) isHiddenByBlock = true;
@@ -230,13 +228,12 @@ export class TagsService {
         phoneNumber: reportData.phoneNumber,
         message: reportData.message,
         images: reportData.images,
-        isHidden: isHiddenByBlock,           // ✅ auto-hide nếu bị block
+        isHidden: isHiddenByBlock,
         hiddenAt: isHiddenByBlock ? new Date() : null,
       },
       include: { tag: { include: { pet: { include: { owner: true } } } } },
     });
 
-    // ✅ Chỉ add Redis + notify nếu KHÔNG bị block
     if (!isHiddenByBlock) {
       if (report.tag.status === TagStatus.LOST && lat && lng) {
         await this.redisService.addLocation(this.LOST_TAGS_KEY, lng, lat, tagId);
@@ -246,6 +243,7 @@ export class TagsService {
 
     return report;
   }
+
 
   async resolveTagReport(reportId: string) {
     const report = await this.prisma.tagReport.findUnique({ where: { id: reportId } });
