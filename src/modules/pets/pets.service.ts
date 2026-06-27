@@ -784,7 +784,6 @@ export class PetsService {
     recordId: string,
     reportData: { reason: string; details?: string },
   ) {
-    // 1. Kiểm tra pet tồn tại + quyền (giống updateMedicalRecord/deleteMedicalRecord)
     const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
     if (!pet) {
       throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
@@ -796,7 +795,6 @@ export class PetsService {
       });
     }
 
-    // 2. Kiểm tra record có thuộc pet này không
     const record = await this.prisma.medicalRecord.findUnique({ where: { id: recordId } });
     if (!record || record.petId !== petId) {
       throw new NotFoundException({
@@ -805,16 +803,44 @@ export class PetsService {
       });
     }
 
-    // 3. Tạo report — tái sử dụng model Report sẵn có, không cần migration
-    const report = await this.prisma.report.create({
-      data: {
-        userId,
-        targetId: recordId,
-        type: 'medical_record',
-        reason: reportData.reason,
-        detail: reportData.details,
-      },
+    // 🆕 Chỉ cho report record đang VERIFIED — khớp đúng logic FE chỉ hiện nút Report khi verified
+    if (record.verificationStatus !== 'VERIFIED') {
+      throw new BadRequestException({
+        message:
+          record.verificationStatus === 'DISPUTED'
+            ? 'This record is already under dispute and pending review.'
+            : 'Only verified records can be reported.',
+        i18n: {
+          key:
+            record.verificationStatus === 'DISPUTED'
+              ? 'error.medical_record_already_disputed'
+              : 'error.medical_record_not_verified',
+        },
+      });
+    }
+
+    // 🆕 Bọc trong transaction: tạo Report + chuyển record sang DISPUTED cùng lúc
+    const report = await this.prisma.$transaction(async (tx) => {
+      const r = await tx.report.create({
+        data: {
+          userId,
+          targetId: recordId,
+          type: 'medical_record',
+          reason: reportData.reason,
+          detail: reportData.details,
+        },
+      });
+
+      await tx.medicalRecord.update({
+        where: { id: recordId },
+        data: { verificationStatus: 'DISPUTED' },
+      });
+
+      return r;
     });
+
+    // 🆕 Bắt buộc xoá cache pet:detail, vì medicalRecords nằm trong object cache này
+    await this.redisService.del(`pet:detail:${petId}`);
 
     return {
       success: true,
@@ -823,6 +849,7 @@ export class PetsService {
       data: report,
     };
   }
+
 
 
   async createPet(userId: string, createPetDto: CreatePetDto) {

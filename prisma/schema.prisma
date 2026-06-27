@@ -276,6 +276,7 @@ enum VerificationStatus {
   PENDING
   VERIFIED
   REJECTED
+  DISPUTED
 }
 
 model PetTrait {
