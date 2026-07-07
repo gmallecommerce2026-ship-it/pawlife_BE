@@ -92,11 +92,11 @@ async function main() {
         emailAddress: 'hello@pawlife.vn',
         contactInfo: '0913884409',
         address: shelterAddress,
-        bio: 'Đồng hành cùng hành trình tìm mái ấm của các bé bốn chân.',
+        bio: bio,
         description: intro,
         avatarUrl: avatarUrl, // Dùng link thực tế trả về từ hàm upload
         coverUrl: coverUrl,
-      }``
+      }
     });
 
     console.log(`✅ Đã cập nhật DB cho: [${shelterName}]`);
