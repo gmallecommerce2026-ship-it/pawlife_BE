@@ -22,7 +22,7 @@ const s3Client = new S3Client({
 
 // Hàm hỗ trợ đọc file local và đẩy lên R2
 async function uploadLocalFileToR2(fileName: string, contentType: string) {
-  const filePath = path.join(__dirname, '..', 'data', 'images', fileName); // Trỏ tới prisma/data/images/
+  const filePath = path.join(process.cwd(), 'prisma', 'data', 'images', fileName); // Trỏ tới prisma/data/images/
   
   if (!fs.existsSync(filePath)) {
     console.warn(`⚠️ Không tìm thấy file: ${filePath}`);
