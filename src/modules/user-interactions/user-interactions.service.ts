@@ -2,6 +2,7 @@ import { Injectable, ConflictException, NotFoundException } from '@nestjs/common
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { SwipeAction } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
+import { RedisService } from 'src/database/redis/redis.service';
 
 // Added `!` to fix TS2564 error
 export class ShareLocationDto {
@@ -18,7 +19,8 @@ export class ShareLocationDto {
 export class UserInteractionsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationsService: NotificationsService
+    private readonly notificationsService: NotificationsService,
+    private readonly redisService: RedisService
   ) { }
 
   async shareLocation(dto: ShareLocationDto) {
@@ -72,17 +74,12 @@ export class UserInteractionsService {
       where: { userId },
       include: {
         shelter: {
-          select: {
-            id: true,
-            name: true,
-            avatarUrl: true,
-          }
+          select: { id: true, name: true, avatarUrl: true }
         }
       },
       orderBy: { createdAt: 'desc' }
     });
 
-    // Map dữ liệu để trả về format gọn gàng cho Frontend
     return blockedRecords.map(record => ({
       id: record.shelter.id,
       name: record.shelter.name,
@@ -94,7 +91,6 @@ export class UserInteractionsService {
   // 5. Bỏ chặn trạm cứu hộ
   async unblockShelter(userId: string, shelterId: string) {
     const existing = await this.prisma.userBlockedShelter.findUnique({
-      // Trong schema của bạn đã định nghĩa @@id([userId, shelterId])
       where: { userId_shelterId: { userId, shelterId } }
     });
 
@@ -102,9 +98,19 @@ export class UserInteractionsService {
       throw new NotFoundException('Không tìm thấy thông tin chặn trạm cứu hộ này');
     }
 
+    // 1. Xóa record trong DB
     await this.prisma.userBlockedShelter.delete({
       where: { userId_shelterId: { userId, shelterId } }
     });
+
+    // 2. 🌟 QUAN TRỌNG: Đánh dấu cache của Shelter đã cũ để API tự động lấy dữ liệu mới
+    const versionKey = `shelters:cache_version:u_${userId}`;
+    const current = await this.redisService.get<number>(versionKey) || 0;
+    await this.redisService.set(versionKey, current + 1, 0); 
+
+    // 3. 🌟 QUAN TRỌNG: Xóa luôn cache Pet Feed / Matching để Swipe screen hiện lại pet
+    // Mặc dù getFeed không cache result, nhưng việc xóa Redis tương tác là cẩn thiết để DB queries mượt hơn
+    await this.redisService.del(`user:${userId}:swiped_pets`);
 
     return { success: true, unblockedShelterId: shelterId };
   }
