@@ -78,7 +78,6 @@ async function main() {
   const addresses = ['Hà Nội, Việt Nam', 'HCM, Việt Nam', 'Đà Nẵng, Việt Nam'];
   const bio = 'Đồng hành cùng hành trình tìm mái ấm của các bé bốn chân.';
   const intro = 'PawLife xây dựng cầu nối giữa trạm cứu hộ và người nhận nuôi trong một hệ sinh thái minh bạch. Từ danh tính số đến lịch sử thú cưng, mọi thông tin đều được ghi nhận để đảm bảo mỗi quyết định nhận nuôi là đúng đắn và có trách nhiệm.';
-  const fullDescription = `${bio}\n\n${intro}`;
 
   // 3. Cập nhật Database
   for (let i = 0; i < shelters.length; i++) {
@@ -93,7 +92,8 @@ async function main() {
         emailAddress: 'hello@pawlife.vn',
         contactInfo: '0913884409',
         address: shelterAddress,
-        description: fullDescription,
+        bio,
+        description: intro,
         avatarUrl: avatarUrl, // Dùng link thực tế trả về từ hàm upload
         coverUrl: coverUrl,
       }
