@@ -75,7 +75,7 @@ async function main() {
   }
 
   const shelterNames = ['Pawlife (HN)', 'Pawlife (HCM)', 'Pawlife (ĐN)'];
-  const addresses = ['Hà Nội, Việt Nam', 'HCM việt nam', 'Đà nẵng Việt nam'];
+  const addresses = ['Hà Nội, Việt Nam', 'HCM, Việt Nam', 'Đà Nẵng, Việt Nam'];
   const bio = 'Đồng hành cùng hành trình tìm mái ấm của các bé bốn chân.';
   const intro = 'PawLife xây dựng cầu nối giữa trạm cứu hộ và người nhận nuôi trong một hệ sinh thái minh bạch. Từ danh tính số đến lịch sử thú cưng, mọi thông tin đều được ghi nhận để đảm bảo mỗi quyết định nhận nuôi là đúng đắn và có trách nhiệm.';
   const fullDescription = `${bio}\n\n${intro}`;

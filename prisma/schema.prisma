@@ -195,6 +195,7 @@ model Shelter {
   
   emailAddress String?
   shelterType  String?   @default("Animal Shelter & Rescue")
+  bio          String?   @db.Text
   isVerified   Boolean   @default(false)
   createdAt    DateTime  @default(now())
   verifiedAt   DateTime?
