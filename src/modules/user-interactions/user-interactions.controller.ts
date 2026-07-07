@@ -1,29 +1,29 @@
-import { Controller, Post, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Get } from '@nestjs/common';
 import { UserInteractionsService } from './user-interactions.service';
 import { SwipeAction } from '@prisma/client';
-import { JwtAuthGuard } from '../auth/guards/jwt.guard'; 
+import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 
 @Controller('interactions')
-@UseGuards(JwtAuthGuard) 
+@UseGuards(JwtAuthGuard)
 export class UserInteractionsController {
-  constructor(private readonly interactionsService: UserInteractionsService) {}
+  constructor(private readonly interactionsService: UserInteractionsService) { }
 
   @Post('swipe')
   async swipe(
-    @Request() req, 
-    @Body('petId') petId: string, 
+    @Request() req,
+    @Body('petId') petId: string,
     @Body('action') action: SwipeAction
   ) {
     // Tạm thời hardcode userId nếu chưa gắn Auth Guard, 
     // Khi có Auth Guard, dùng req.user.id
-    const userId = req.user?.id || 'TEST_USER_ID'; 
+    const userId = req.user?.id || 'TEST_USER_ID';
     const data = await this.interactionsService.swipePet(userId, petId, action);
     return { success: true, data };
   }
 
   @Post('favorite')
   async toggleFavorite(
-    @Request() req, 
+    @Request() req,
     @Body('petId') petId: string
   ) {
     const userId = req.user?.id || 'TEST_USER_ID';
@@ -31,9 +31,26 @@ export class UserInteractionsController {
     return { success: true, data };
   }
 
+  @Get('blocked-shelters')
+  async getBlockedShelters(@Request() req) {
+    const userId = req.user?.id || 'TEST_USER_ID';
+    const data = await this.interactionsService.getBlockedShelters(userId);
+    return { success: true, data };
+  }
+
+  @Post('unblock-shelter')
+  async unblockShelter(
+    @Request() req,
+    @Body('shelterId') shelterId: string
+  ) {
+    const userId = req.user?.id || 'TEST_USER_ID';
+    const data = await this.interactionsService.unblockShelter(userId, shelterId);
+    return { success: true, data };
+  }
+
   @Post('follow-shelter')
   async toggleFollow(
-    @Request() req, 
+    @Request() req,
     @Body('shelterId') shelterId: string
   ) {
     const userId = req.user?.id || 'TEST_USER_ID';

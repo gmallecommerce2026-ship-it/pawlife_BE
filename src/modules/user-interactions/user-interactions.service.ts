@@ -17,9 +17,9 @@ export class ShareLocationDto {
 @Injectable()
 export class UserInteractionsService {
   constructor(
-    private readonly prisma: PrismaService, 
+    private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService
-  ) {}
+  ) { }
 
   async shareLocation(dto: ShareLocationDto) {
     // A. Get corresponding tagId for petId because TagReport requires tagId
@@ -53,21 +53,61 @@ export class UserInteractionsService {
     const notificationPayload = {
       title: 'Your pet\'s location has been shared!',
       body: dto.message ? `Message: ${dto.message}` : 'Someone just updated the pet\'s location.',
-      referenceId: savedReport.id, 
+      referenceId: savedReport.id,
       data: {
         type: 'SHARED_LOCATION',
         // Even though saved to DB, still pass params to url in case frontend reads from params for speed
-        url: `/tag-report-detail?reportId=${savedReport.id}&lat=${dto.lat}&lng=${dto.lng}&radius=${dto.radius}`, 
+        url: `/tag-report-detail?reportId=${savedReport.id}&lat=${dto.lat}&lng=${dto.lng}&radius=${dto.radius}`,
       },
     };
 
     if (petOwnerId) {
       await this.notificationsService.sendPushNotification(petOwnerId, notificationPayload);
     }
-    
+
     return savedReport;
   }
+  async getBlockedShelters(userId: string) {
+    const blockedRecords = await this.prisma.userBlockedShelter.findMany({
+      where: { userId },
+      include: {
+        shelter: {
+          select: {
+            id: true,
+            name: true,
+            avatarUrl: true,
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
 
+    // Map dữ liệu để trả về format gọn gàng cho Frontend
+    return blockedRecords.map(record => ({
+      id: record.shelter.id,
+      name: record.shelter.name,
+      avatarUrl: record.shelter.avatarUrl,
+      blockedAt: record.createdAt,
+    }));
+  }
+
+  // 5. Bỏ chặn trạm cứu hộ
+  async unblockShelter(userId: string, shelterId: string) {
+    const existing = await this.prisma.userBlockedShelter.findUnique({
+      // Trong schema của bạn đã định nghĩa @@id([userId, shelterId])
+      where: { userId_shelterId: { userId, shelterId } }
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Không tìm thấy thông tin chặn trạm cứu hộ này');
+    }
+
+    await this.prisma.userBlockedShelter.delete({
+      where: { userId_shelterId: { userId, shelterId } }
+    });
+
+    return { success: true, unblockedShelterId: shelterId };
+  }
   private async getPetOwnerId(petId: string): Promise<string> {
     const pet = await this.prisma.pet.findUnique({
       where: { id: petId },

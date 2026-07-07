@@ -1538,24 +1538,76 @@ export class PetsService {
     const { images, medicalRecords, nameLastUpdatedAt, ...petInfo } = updateData;
 
     try {
+      // ── Xử lý medicalRecords KHÔNG xoá hết — giữ nguyên verificationStatus của record cũ ──
+      if (medicalRecords) {
+        // 1. Lấy danh sách record hiện có trong DB của pet này
+        const existingRecords = await this.prisma.medicalRecord.findMany({
+          where: { petId },
+          select: { id: true },
+        });
+        const existingIds = new Set(existingRecords.map((r) => r.id));
+
+        // 2. Phân loại payload: record có id hợp lệ (đã tồn tại) vs record mới (chưa có id hoặc id không khớp DB)
+        const incomingWithId = medicalRecords.filter((r: any) => r.id && existingIds.has(r.id));
+        const incomingNew = medicalRecords.filter((r: any) => !r.id || !existingIds.has(r.id));
+        const incomingIds = new Set(incomingWithId.map((r: any) => r.id));
+
+        // 3. Record nào có trong DB nhưng KHÔNG còn trong payload -> user đã xoá ở FE -> xoá thật trong DB
+        const idsToDelete = [...existingIds].filter((id) => !incomingIds.has(id));
+
+        await this.prisma.$transaction([
+          // Xoá các record bị loại bỏ khỏi form
+          ...(idsToDelete.length > 0
+            ? [this.prisma.medicalRecord.deleteMany({ where: { id: { in: idsToDelete } } })]
+            : []),
+
+          // Update từng record đã tồn tại — KHÔNG đụng tới verificationStatus, giữ nguyên trạng thái VERIFIED/DISPUTED đã có
+          ...incomingWithId.map((record: any) =>
+            this.prisma.medicalRecord.update({
+              where: { id: record.id },
+              data: {
+                type: record.type,
+                recordName: getBilingualText(record.recordName) as any,
+                recordDate: new Date(record.recordDate),
+                images: record.images || [],
+                hasNextDueDate: record.hasNextDueDate || false,
+                nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null,
+                nextDueName: record.nextDueName ? (getBilingualText(record.nextDueName) as any) : null,
+                // Không set verificationStatus ở đây -> giữ nguyên giá trị cũ trong DB
+              },
+            })
+          ),
+
+          // Tạo mới các record chưa từng tồn tại — mặc định PENDING (theo behavior cũ)
+          ...(incomingNew.length > 0
+            ? [
+              this.prisma.medicalRecord.createMany({
+                data: incomingNew.map((record: any) => ({
+                  petId,
+                  type: record.type,
+                  recordName: getBilingualText(record.recordName) as any,
+                  recordDate: new Date(record.recordDate),
+                  images: record.images || [],
+                  hasNextDueDate: record.hasNextDueDate || false,
+                  nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null,
+                  nextDueName: record.nextDueName ? (getBilingualText(record.nextDueName) as any) : null,
+                  // verificationStatus dùng default PENDING từ schema, không cần set tay
+                })),
+              }),
+            ]
+            : []),
+        ]);
+      }
+
+      // ── Update các field còn lại của Pet (không đụng medicalRecords nữa) ──
       const updatedPet = await this.prisma.pet.update({
         where: { id: petId },
         data: {
-          ...petInfo, ...(nameLastUpdatedAt && { nameLastUpdatedAt }),
+          ...petInfo,
+          ...(nameLastUpdatedAt && { nameLastUpdatedAt }),
           ...(images && images.length > 0 && { images: { deleteMany: {}, create: images.map((url: string) => ({ url })) } }),
-          ...(medicalRecords && {
-            medicalRecords: {
-              deleteMany: {},
-              create: medicalRecords.map((record: any) => ({
-                type: record.type, recordName: getBilingualText(record.recordName) as any, recordDate: new Date(record.recordDate),
-                images: record.images || [], hasNextDueDate: record.hasNextDueDate || false,
-                nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null,
-                nextDueName: record.nextDueName ? (getBilingualText(record.nextDueName) as any) : null,
-              }))
-            }
-          })
         },
-        include: { images: true }
+        include: { images: true, medicalRecords: true },
       });
 
       await this.redisService.del(`pet:detail:${petId}`);
@@ -1563,7 +1615,7 @@ export class PetsService {
       return {
         message: 'Pet information updated successfully',
         i18n: { key: 'success.pet_updated' },
-        data: updatedPet
+        data: updatedPet,
       };
     } catch (error) {
       throw new InternalServerErrorException({ message: 'Error updating pet information', i18n: { key: 'error.update_pet_failed' } });
