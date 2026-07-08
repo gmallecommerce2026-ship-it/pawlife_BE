@@ -161,6 +161,39 @@ export class PetsService {
   }
 
   async linkQrCode(userId: string, petId: string, tagId: string) {
+    // ======================================================================
+    // 🔥 LOG DEBUG CHUYÊN SÂU TẬN GỐC - ĐỂ TÌM LỖI QR TRÊN BACKEND
+    // ======================================================================
+    console.log('\n=================== [BACKEND DEBUG QR START] ===================');
+    console.log(`[1] Chuỗi tagId nhận từ Frontend: "${tagId}"`);
+    console.log(`[2] Độ dài thực tế (Length): ${tagId ? tagId.length : 0}`);
+
+    if (tagId) {
+      const charCodes = [];
+      for (let i = 0; i < tagId.length; i++) {
+        charCodes.push(`${tagId[i]}:${tagId.charCodeAt(i)}`);
+      }
+      console.log(`[3] Mã ASCII từng ký tự (Ký tự:Mã): [${charCodes.join(', ')}]`);
+    }
+
+    // Kiểm tra xem Database thực tế đang có những Tag nào (Lấy thử 3 cái mẫu)
+    try {
+      const dbSampleTags = await this.prisma.tag.findMany({
+        take: 3,
+        select: { id: true, status: true }
+      });
+      console.log('[4] Thử lấy 3 Tag mẫu đang có thực tế trong Database:');
+      console.log(JSON.stringify(dbSampleTags, null, 2));
+
+      // Thử tìm kiếm thủ công bằng từ khóa cứng 'PLT-0001' xem DB có ra không
+      const testFind = await this.prisma.tag.findUnique({ where: { id: 'PLT-0001' } });
+      console.log(`[5] Thử tìm kiếm CỨNG mã "PLT-0001" trong DB có ra không?:`, testFind ? 'CÓ THẤY' : 'KHÔNG THẤY');
+    } catch (dbError: any) {
+      console.log('[4-5 LỖI] Không thể đọc bảng Tag từ DB:', dbError.message);
+    }
+    console.log('=================== [BACKEND DEBUG QR END] ===================\n');
+    // ======================================================================
+
     const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
     if (!pet) throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
 
