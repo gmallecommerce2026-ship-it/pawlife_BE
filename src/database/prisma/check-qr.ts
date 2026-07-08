@@ -29,13 +29,11 @@ async function main() {
     console.log(`\n📊 KẾT QUẢ: Tìm thấy TỔNG CỘNG [ ${tags.length} ] mã QR hợp lệ trong hệ thống.`);
 
     if (tags.length > 0) {
-      console.log('📋 Danh sách 20 mã đầu tiên để bạn kiểm tra:');
-      // In ra dạng bảng cho đẹp và dễ đọc
-      console.table(tags.slice(0, 20)); 
+      console.log(`📋 Danh sách TOÀN BỘ ${tags.length} mã trong Database:`);
       
-      if (tags.length > 20) {
-        console.log(`... và ${tags.length - 20} mã khác ẩn bớt để tránh trôi màn hình.`);
-      }
+      // In toàn bộ danh sách ra bảng (không dùng slice nữa)
+      console.table(tags); 
+      
     } else {
       console.log('✅ Hệ thống hiện tại sạch sẽ, KHÔNG CÓ bất kỳ mã QR nào bắt đầu bằng PLT_ hay PLT-.');
     }
