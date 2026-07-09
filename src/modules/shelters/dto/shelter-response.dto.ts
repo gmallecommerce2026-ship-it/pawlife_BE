@@ -17,4 +17,7 @@ export class ShelterResponseDto {
 
   @Expose()
   coverUrl!: string; // Thêm dấu ! ở đây
+
+  @Expose() 
+  _count?: { pets: number };
 }
