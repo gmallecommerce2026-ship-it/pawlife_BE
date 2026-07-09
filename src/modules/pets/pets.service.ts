@@ -474,7 +474,7 @@ export class PetsService {
     const newStatus = isLost ? 'LOST' : 'ACTIVE';
     const activeTag = await this.prisma.tag.findFirst({ where: { petId: petId, status: { not: 'INACTIVE' } } });
 
-    await this.prisma.$transaction([
+    const transactionResults = await this.prisma.$transaction([
       this.prisma.tag.updateMany({ where: { petId: petId }, data: { status: newStatus } }),
       this.prisma.pet.update({
         where: { id: petId },
@@ -502,6 +502,11 @@ export class PetsService {
         })
       ])
     ]);
+
+    let newReportId = null;
+    if (isLost && activeTag && transactionResults.length >= 3) {
+      newReportId = (transactionResults[2] as any)?.id; 
+    }
 
     const tags = await this.prisma.tag.findMany({ where: { petId: petId } });
     await this.redisService.del(`pet:detail:${petId}`);
@@ -540,6 +545,13 @@ export class PetsService {
       message: isLost ? 'Lost mode enabled!' : 'Lost mode disabled, pet is safe.',
       i18n: { key: isLost ? 'success.lost_mode_enabled' : 'success.lost_mode_disabled' },
       isLost: isLost,
+      data: { 
+        isLost, 
+        location, 
+        dateTime, 
+        details, 
+        reportId: newReportId // <-- THÊM DÒNG NÀY ĐỂ FRONTEND NHẬN ĐƯỢC ID
+      }
     };
   }
 
