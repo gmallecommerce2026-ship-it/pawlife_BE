@@ -326,7 +326,9 @@ export class PetsService {
             shelter: {
               name: shelter?.name || 'Unnamed shelter',
               avatarUrl: shelter?.avatarUrl || null,
-              address: shelter?.address || 'Not updated yet'
+              address: shelter?.address || 'Not updated yet',
+              latitude: shelter?.latitude ?? null,   // ✅ thêm
+              longitude: shelter?.longitude ?? null, // ✅ thêm
             }
           };
         });
