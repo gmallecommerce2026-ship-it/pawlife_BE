@@ -359,7 +359,7 @@ export class PetsService {
       orderBy: { createdAt: 'desc' },
       include: {
         images: { orderBy: { createdAt: 'asc' } },
-        shelter: { select: { name: true, avatarUrl: true, address: true } }
+        shelter: { select: { name: true, avatarUrl: true, address: true, latitude: true, longitude: true } }
       }
     });
 
@@ -381,8 +381,20 @@ export class PetsService {
         take: limit,
         include: {
           images: { orderBy: { createdAt: 'asc' } },
-          shelter: { select: { name: true, avatarUrl: true, address: true } }
+          shelter: { select: { name: true, avatarUrl: true, address: true, latitude: true, longitude: true } }
         }
+      });
+    }
+    if (lat && lng) {
+      dbPets = dbPets.map(pet => {
+        const s = pet.shelter;
+        const distanceVal = (s?.latitude && s?.longitude)
+          ? this.calculateDistance(lat, lng, s.latitude, s.longitude)
+          : null;
+        return {
+          ...pet,
+          distance: distanceVal !== null ? `${distanceVal.toFixed(1)} km` : undefined,
+        };
       });
     }
 
@@ -505,7 +517,7 @@ export class PetsService {
 
     let newReportId = null;
     if (isLost && activeTag && transactionResults.length >= 3) {
-      newReportId = (transactionResults[2] as any)?.id; 
+      newReportId = (transactionResults[2] as any)?.id;
     }
 
     const tags = await this.prisma.tag.findMany({ where: { petId: petId } });
@@ -545,11 +557,11 @@ export class PetsService {
       message: isLost ? 'Lost mode enabled!' : 'Lost mode disabled, pet is safe.',
       i18n: { key: isLost ? 'success.lost_mode_enabled' : 'success.lost_mode_disabled' },
       isLost: isLost,
-      data: { 
-        isLost, 
-        location, 
-        dateTime, 
-        details, 
+      data: {
+        isLost,
+        location,
+        dateTime,
+        details,
         reportId: newReportId // <-- THÊM DÒNG NÀY ĐỂ FRONTEND NHẬN ĐƯỢC ID
       }
     };
