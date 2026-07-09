@@ -169,7 +169,7 @@ export class PetsService {
     console.log(`[2] Độ dài thực tế (Length): ${tagId ? tagId.length : 0}`);
 
     if (tagId) {
-      const charCodes = [];
+      const charCodes: string[] = [];
       for (let i = 0; i < tagId.length; i++) {
         charCodes.push(`${tagId[i]}:${tagId.charCodeAt(i)}`);
       }
