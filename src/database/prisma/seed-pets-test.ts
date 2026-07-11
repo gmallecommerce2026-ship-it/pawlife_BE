@@ -873,7 +873,7 @@ async function ensureShelters(): Promise<{ id: string }[]> {
     },
   ];
 
-  const created = [];
+  const created: { id: string }[] = [];
   for (const s of defaults) {
     created.push(await prisma.shelter.create({ data: s }));
   }
