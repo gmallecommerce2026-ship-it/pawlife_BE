@@ -4,49 +4,165 @@
  * Seed script: tạo Pet từ danh sách ảnh có sẵn trong prisma/data/Breeds/...
  * Mỗi Pet được gán ngẫu nhiên vào 1 Shelter đang có sẵn trong DB.
  *
- * ⚠️ VỀ ĐƯỜNG DẪN ẢNH:
- * File ảnh gốc nằm ở <project-root>/prisma/data/Breeds/... (thư mục `prisma`
- * nằm CÙNG CẤP với `src`). Script này KHÔNG đọc file ảnh từ đĩa, nó chỉ build
- * ra chuỗi URL để lưu vào cột `PetImage.url`. Muốn URL đó thực sự truy cập
- * được ảnh, bạn cần 1 trong 2 cách sau:
+ * ⚠️ VỀ ĐƯỜNG DẪN ẢNH (ĐÃ SỬA):
+ * Trước đây script chỉ NỐI CHUỖI ra một URL (path.join kiểu string) mà
+ * KHÔNG hề đọc/đẩy file ảnh lên đâu cả — đó là lý do ảnh bị đen/broken:
+ * URL trỏ tới chỗ không phục vụ (serve) file thật.
  *
- *  (1) DEV LOCAL — serve thư mục prisma/data như static files.
- *      Nếu dùng NestJS, thêm vào AppModule:
- *        import { ServeStaticModule } from '@nestjs/serve-static';
- *        import { join } from 'path';
- *        ServeStaticModule.forRoot({
- *          rootPath: join(__dirname, '..', '..', '..', 'prisma', 'data'), // trỏ tới prisma/data từ dist/src/...
- *          serveRoot: '/pet-images',
- *        }),
- *      Khi đó ảnh sẽ truy cập được tại: http://localhost:<PORT>/pet-images/Breeds/Dog/...
- *      => set PET_IMAGE_BASE_URL=http://localhost:<PORT>/pet-images
+ * Bây giờ script sẽ ĐỌC từng file ảnh tại <project-root>/prisma/data/Breeds/...
+ * và UPLOAD THẬT lên Cloudflare R2 (giống hệt cách file update-shelters.ts
+ * của bạn làm với avatar/cover), sau đó mới lưu URL công khai
+ * (R2_PUBLIC_DOMAIN/...) vào cột PetImage.url.
  *
- *  (2) PRODUCTION — upload ảnh lên R2/S3/CDN thật, rồi set:
- *        PET_IMAGE_BASE_URL=https://<your-cdn-domain>/pet-images
- *
- * Nếu không set biến môi trường PET_IMAGE_BASE_URL, script sẽ dùng path
- * tương đối "/pet-images" (không có domain) — chỉ đúng nếu bạn mở app từ
- * đúng host/port đang serve static folder ở trên.
+ * Cần các biến môi trường sau trong .env (giống r2.service.ts của bạn):
+ *   R2_ACCOUNT_ID
+ *   R2_ACCESS_KEY_ID
+ *   R2_SECRET_ACCESS_KEY
+ *   R2_BUCKET_NAME
+ *   R2_PUBLIC_DOMAIN         (vd: https://cdn.pawlife.vn)
+ *   R2_PET_IMAGE_PREFIX      (tuỳ chọn, mặc định "pet-images")
  *
  * Chạy:
- *   PET_IMAGE_BASE_URL=http://localhost:3000/pet-images npx ts-node src/database/prisma/seed-pets-test.ts
+ *   npx ts-node prisma/seed.ts
+ * (đảm bảo prisma/data/Breeds/... tồn tại trên đĩa nơi bạn chạy script)
  * ------------------------------------------------------------------
  */
 
 import { PrismaClient, PetGender, PetSize, PetStatus, VerificationStatus, TagStatus } from "@prisma/client";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import * as fs from "fs";
+import * as path from "path";
+import * as dotenv from "dotenv";
+
+dotenv.config();
 
 const prisma = new PrismaClient();
 
 // ============================================================
-// 0. CẤU HÌNH
+// 0. CẤU HÌNH R2 (giống hệt r2.service.ts)
 // ============================================================
 
-// Base URL để build ra url ảnh cuối cùng. Đổi bằng biến môi trường
-// PET_IMAGE_BASE_URL — xem hướng dẫn ở comment đầu file.
-const IMAGE_BASE_URL = process.env.PET_IMAGE_BASE_URL || "/pet-images";
+const s3Client = new S3Client({
+  region: "auto",
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
+  },
+  forcePathStyle: true,
+});
+
+// Thư mục gốc chứa ảnh trên đĩa: <project-root>/prisma/data
+const LOCAL_IMAGE_ROOT = path.join(process.cwd(), "prisma", "data");
+
+// Prefix (thư mục ảo) trên R2 để chứa ảnh pet, tránh đụng key với ảnh shelter.
+const R2_PET_IMAGE_PREFIX = process.env.R2_PET_IMAGE_PREFIX || "pet-images";
+
+// Số lượng upload chạy song song cùng lúc (tránh spam quá nhiều request 1 lúc).
+const UPLOAD_CONCURRENCY = 8;
 
 // Nếu true: xoá hết Pet cũ (và các bảng con cascade) trước khi seed lại cho sạch.
 const RESET_PETS_BEFORE_SEED = true;
+
+// ============================================================
+// 0.1 HÀM TIỆN ÍCH UPLOAD ẢNH LÊN R2
+// ============================================================
+
+function guessContentType(fileName: string): string {
+  const ext = path.extname(fileName).toLowerCase();
+  switch (ext) {
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".png":
+      return "image/png";
+    case ".webp":
+      return "image/webp";
+    case ".gif":
+      return "image/gif";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+// Encode từng segment của path (giữ nguyên dấu "/"), để URL public an toàn
+// với các ký tự như dấu nháy đơn ' hoặc khoảng trắng có trong tên file gốc.
+function encodeR2Key(key: string): string {
+  return key
+    .split("/")
+    .map((seg) => encodeURIComponent(seg))
+    .join("/");
+}
+
+/**
+ * Đọc 1 file ảnh từ prisma/data/<relPath> và upload lên R2.
+ * Trả về URL public nếu thành công, null nếu thất bại (file không tồn tại,
+ * lỗi mạng, thiếu env, ...) để caller có thể bỏ qua ảnh đó thay vì crash cả script.
+ */
+async function uploadPetImageToR2(relPath: string): Promise<string | null> {
+  const filePath = path.join(LOCAL_IMAGE_ROOT, relPath);
+
+  if (!fs.existsSync(filePath)) {
+    console.warn(`  ⚠️  Không tìm thấy file ảnh trên đĩa: ${filePath}`);
+    return null;
+  }
+
+  if (!process.env.R2_BUCKET_NAME || !process.env.R2_PUBLIC_DOMAIN) {
+    console.warn(
+      "  ⚠️  Thiếu biến môi trường R2_BUCKET_NAME / R2_PUBLIC_DOMAIN, bỏ qua upload."
+    );
+    return null;
+  }
+
+  const key = `${R2_PET_IMAGE_PREFIX}/${relPath}`;
+
+  try {
+    const fileBuffer = fs.readFileSync(filePath);
+    const command = new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: key,
+      Body: fileBuffer,
+      ContentType: guessContentType(relPath),
+    });
+
+    await s3Client.send(command);
+
+    return `${process.env.R2_PUBLIC_DOMAIN}/${encodeR2Key(key)}`;
+  } catch (error) {
+    console.error(`  ❌ Lỗi upload "${relPath}" lên R2:`, error);
+    return null;
+  }
+}
+
+/**
+ * Upload nhiều ảnh song song có giới hạn concurrency, trả về
+ * Map<relPath, publicUrl> — những ảnh upload lỗi sẽ KHÔNG có mặt trong map.
+ */
+async function uploadAllImages(relPaths: string[]): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  let cursor = 0;
+  let done = 0;
+
+  async function worker() {
+    while (cursor < relPaths.length) {
+      const index = cursor++;
+      const relPath = relPaths[index];
+      const url = await uploadPetImageToR2(relPath);
+      if (url) {
+        result.set(relPath, url);
+      }
+      done++;
+      if (done % 20 === 0 || done === relPaths.length) {
+        console.log(`  📤 Upload ảnh: ${done}/${relPaths.length}`);
+      }
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(UPLOAD_CONCURRENCY, relPaths.length) }, () => worker());
+  await Promise.all(workers);
+
+  return result;
+}
 
 // ============================================================
 // 1. DANH SÁCH ẢNH GỐC (relative path tính từ prisma/data/)
@@ -760,7 +876,11 @@ function buildMedicalRecords(dob: Date, isSpayedNeutered: boolean) {
   return records;
 }
 
-function buildPetCreateData(parsed: ParsedPet, shelterId: string) {
+/**
+ * SỬA: hàm này giờ nhận thêm `imageUrlMap` (đã upload sẵn ở bước trước) thay
+ * vì tự nối chuỗi URL. Ảnh nào upload lỗi sẽ bị bỏ qua, không tạo record rác.
+ */
+function buildPetCreateData(parsed: ParsedPet, shelterId: string, imageUrlMap: Map<string, string>) {
   const isDog = parsed.species === "Dog";
   const breed = BREED_DICT[parsed.breedFolder] || {
     vi: parsed.breedFolder,
@@ -809,9 +929,19 @@ function buildPetCreateData(parsed: ParsedPet, shelterId: string) {
   const description = buildDescription(ctx);
   const idealHome = buildIdealHome(ctx);
 
-  const images = parsed.images.map((relPath) => ({
-    url: `${IMAGE_BASE_URL}/${encodeURI(relPath)}`,
-  }));
+  // Chỉ lấy những ảnh đã upload THÀNH CÔNG (có mặt trong map).
+  const images = parsed.images
+    .map((relPath) => imageUrlMap.get(relPath))
+    .filter((url): url is string => Boolean(url))
+    .map((url) => ({ url }));
+
+  if (images.length === 0) {
+    console.warn(`  ⚠️  Pet "${parsed.petName}" (${parsed.breedFolder}) không có ảnh nào upload thành công.`);
+  } else if (images.length < parsed.images.length) {
+    console.warn(
+      `  ⚠️  Pet "${parsed.petName}" chỉ upload được ${images.length}/${parsed.images.length} ảnh.`
+    );
+  }
 
   return {
     name: parsed.petName,
@@ -915,10 +1045,22 @@ async function main() {
   const parsedPets = parseImagePaths(RAW_IMAGE_PATHS);
   console.log(`🐾 Tìm thấy ${parsedPets.length} pet cần seed.`);
 
+  // ---- BƯỚC MỚI: upload TOÀN BỘ ảnh lên R2 trước khi tạo Pet ----
+  const allRelPaths = parsedPets.flatMap((p) => p.images);
+  console.log(`📤 Bắt đầu upload ${allRelPaths.length} ảnh lên Cloudflare R2 (đọc từ ${LOCAL_IMAGE_ROOT})...`);
+  const imageUrlMap = await uploadAllImages(allRelPaths);
+  console.log(`✅ Upload xong: ${imageUrlMap.size}/${allRelPaths.length} ảnh thành công.`);
+
+  if (imageUrlMap.size === 0) {
+    console.error(
+      "❌ Không upload được ảnh nào — kiểm tra lại: (1) thư mục prisma/data/Breeds có tồn tại đúng chỗ bạn chạy script không, (2) các biến môi trường R2_* trong .env."
+    );
+  }
+
   let count = 0;
   for (const parsed of parsedPets) {
     const shelter = randomItem(shelters);
-    const data = buildPetCreateData(parsed, shelter.id);
+    const data = buildPetCreateData(parsed, shelter.id, imageUrlMap);
 
     try {
       await prisma.pet.create({ data });
