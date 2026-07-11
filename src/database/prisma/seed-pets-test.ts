@@ -4,11 +4,32 @@
  * Seed script: tạo Pet từ danh sách ảnh có sẵn trong prisma/data/Breeds/...
  * Mỗi Pet được gán ngẫu nhiên vào 1 Shelter đang có sẵn trong DB.
  *
+ * ⚠️ VỀ ĐƯỜNG DẪN ẢNH:
+ * File ảnh gốc nằm ở <project-root>/prisma/data/Breeds/... (thư mục `prisma`
+ * nằm CÙNG CẤP với `src`). Script này KHÔNG đọc file ảnh từ đĩa, nó chỉ build
+ * ra chuỗi URL để lưu vào cột `PetImage.url`. Muốn URL đó thực sự truy cập
+ * được ảnh, bạn cần 1 trong 2 cách sau:
+ *
+ *  (1) DEV LOCAL — serve thư mục prisma/data như static files.
+ *      Nếu dùng NestJS, thêm vào AppModule:
+ *        import { ServeStaticModule } from '@nestjs/serve-static';
+ *        import { join } from 'path';
+ *        ServeStaticModule.forRoot({
+ *          rootPath: join(__dirname, '..', '..', '..', 'prisma', 'data'), // trỏ tới prisma/data từ dist/src/...
+ *          serveRoot: '/pet-images',
+ *        }),
+ *      Khi đó ảnh sẽ truy cập được tại: http://localhost:<PORT>/pet-images/Breeds/Dog/...
+ *      => set PET_IMAGE_BASE_URL=http://localhost:<PORT>/pet-images
+ *
+ *  (2) PRODUCTION — upload ảnh lên R2/S3/CDN thật, rồi set:
+ *        PET_IMAGE_BASE_URL=https://<your-cdn-domain>/pet-images
+ *
+ * Nếu không set biến môi trường PET_IMAGE_BASE_URL, script sẽ dùng path
+ * tương đối "/pet-images" (không có domain) — chỉ đúng nếu bạn mở app từ
+ * đúng host/port đang serve static folder ở trên.
+ *
  * Chạy:
- *   npx ts-node prisma/seed.ts
- * hoặc cấu hình trong package.json:
- *   "prisma": { "seed": "ts-node prisma/seed.ts" }
- *   rồi chạy: npx prisma db seed
+ *   PET_IMAGE_BASE_URL=http://localhost:3000/pet-images npx ts-node src/database/prisma/seed-pets-test.ts
  * ------------------------------------------------------------------
  */
 
@@ -20,9 +41,9 @@ const prisma = new PrismaClient();
 // 0. CẤU HÌNH
 // ============================================================
 
-// Base URL public để truy cập ảnh (đổi lại theo domain R2/CDN thật của bạn).
-// Ảnh gốc nằm ở prisma/data/Breeds/... nên ta build path tương ứng.
-const IMAGE_BASE_URL = process.env.PET_IMAGE_BASE_URL || "https://r2.yourdomain.com/pet-images";
+// Base URL để build ra url ảnh cuối cùng. Đổi bằng biến môi trường
+// PET_IMAGE_BASE_URL — xem hướng dẫn ở comment đầu file.
+const IMAGE_BASE_URL = process.env.PET_IMAGE_BASE_URL || "/pet-images";
 
 // Nếu true: xoá hết Pet cũ (và các bảng con cascade) trước khi seed lại cho sạch.
 const RESET_PETS_BEFORE_SEED = true;
