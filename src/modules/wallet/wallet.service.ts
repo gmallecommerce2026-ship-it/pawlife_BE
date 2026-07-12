@@ -56,7 +56,17 @@ export class WalletService {
   }
 
   // Bilingual short gender (matches label style "Gender" on card)
-  private toGenderText(gender: WalletPetGender | null): string {
+  private toGenderText(gender: WalletPetGender | null, lang: 'vi' | 'en'): string {
+    if (lang === 'vi') {
+      switch (gender) {
+        case 'MALE':
+          return 'Đực';
+        case 'FEMALE':
+          return 'Cái';
+        default:
+          return '—';
+      }
+    }
     switch (gender) {
       case 'MALE':
         return 'Male';
@@ -138,9 +148,7 @@ export class WalletService {
     petId: string,
     lang: 'vi' | 'en' = 'en',
   ): Promise<{ buffer: Buffer; fileName: string }> {
-    // 1. Get pet info via port + check ownership.
-    // Ownership is checked HERE (service layer), not in the adapter:
-    // adapter only returns data, service decides who can download the card.
+    // 1. Get pet info (Giữ nguyên)
     const pet = await this.petData.getPetForWallet(petId, lang);
     if (!pet) throw new NotFoundException('Pet not found!');
     if (pet.ownerId !== userId && pet.shelterId !== userId) {
@@ -149,14 +157,32 @@ export class WalletService {
       );
     }
 
-    // 2. Prepare dynamic data printed on the card
+    // 2. Prepare dynamic data (Giữ nguyên)
     const displayCode = this.toDisplayCode(pet.id);
     const profileBaseUrl =
       this.configService.get<string>('WALLET_PROFILE_BASE_URL') ??
       'https://pawlife.vn/profile';
     const profileUrl = `${profileBaseUrl}/${pet.id}`;
 
-    // 3. Generate pass from template + digitally sign with Pass Type ID certificate
+    // --- CẤU HÌNH ĐA NGÔN NGỮ CHO THẺ ---
+    const isVi = lang === 'vi';
+    const t = {
+      docType: isVi ? 'Thẻ ID Thú Cưng' : 'Digital Pet ID',
+      name: isVi ? 'Tên' : 'Name',
+      breed: isVi ? 'Giống' : 'Breed',
+      gender: isVi ? 'Giới tính' : 'Gender',
+      pawLifeId: isVi ? 'Mã PawLife' : 'PawLife ID',
+      dob: isVi ? 'Ngày sinh' : 'Date of Birth',
+      fullId: isVi ? 'Mã đầy đủ' : 'Full Pet ID',
+      profilePage: isVi ? 'Trang hồ sơ' : 'Profile Page',
+      microchip: isVi ? 'Số Microchip' : 'Microchip Number',
+      guideLabel: isVi ? 'Hướng dẫn' : 'Instructions',
+      guideValue: isVi
+        ? 'Quét mã QR trên thẻ để xem hồ sơ thú cưng. Nếu bạn tìm thấy bé, vui lòng liên hệ với chủ nuôi qua trang hồ sơ.'
+        : 'Scan the QR code on the card to view the pet profile. If you found this pet, please contact the owner via the profile page.'
+    };
+
+    // 3. Generate pass from template + digitally sign
     try {
       const pass = await PKPass.from(
         {
@@ -164,8 +190,6 @@ export class WalletService {
           certificates: this.loadCertificates(),
         },
         {
-          // serialNumber = pet.id (UUID): each pet gets a unique card in wallet — users with multiple pets
-          // will have multiple cards, redownloading the card for the same pet will REPLACE, not duplicate it in Wallet
           serialNumber: `${pet.id}_${Math.floor(Date.now() / 1000)}`,
           passTypeIdentifier:
             this.configService.get<string>('WALLET_PASS_TYPE_IDENTIFIER') ??
@@ -176,40 +200,28 @@ export class WalletService {
         },
       );
 
-      // Front of the card (generic pass) — ID card layout simulation:
-      //   top right: "Digital Pet ID" (document type name)
-      //   pet name : left, circular avatar on right (thumbnail)
-      //   row 1    : Breed | PawLife ID (secondary — BIG value font)
-      //   row 2    : Gender | DoB (auxiliary — SMALLER value font, iOS rule)
-      //
-      // ===== "Label padding" trick to LEFT-ALIGN right column (client requirement) =====
-      // iOS anchors last cell to the right edge, cell width = max(label width, value)
-      // → left edges of the two rows only align if cells are EQUALLY WIDE. Pad invisible spaces
-      // at the end of label so both cells reach ~415px@3x — exceeding widest PL-XXXXXXXX
-      // (~409px secondary font, measured with PL-DDDDDDDD) so value can't break cell.
-      // Calibrate by measuring pixels on iOS 26 Simulator: 4 lines all start at x=684±1.
-      // Measuring unit @3x: \u2007 figure space ≈ 21.7px · \u2009 thin ≈ 5px ·
-      // \u200A hair ≈ 2.5px · \u200B zero-width tail anchor against trimming.
-      // Details: wiki components/wallet-module. DO NOT delete these characters!
-      const petCodeLabel =
-        'PawLife ID' + '\u2007'.repeat(10) + '\u2009\u2009\u2009\u200B';
-      const dobLabel =
-        'Date of Birth' + '\u2007'.repeat(6) + '\u2009\u2009\u2009\u2009\u200B';
+      // Label padding trick:
+      // - "PawLife ID" (10 chars) và "Mã PawLife" (10 chars) -> Dùng chung padding
+      // - "Date of Birth" (13 chars) và "Ngày sinh" (9 chars) -> Bản Tiếng Việt cần nhiều padding hơn một chút để cân bằng
+      const petCodeLabel = t.pawLifeId + '\u2007'.repeat(10) + '\u2009\u2009\u2009\u200B';
+      const dobPadding = isVi ? '\u2007'.repeat(10) : '\u2007'.repeat(6);
+      const dobLabel = t.dob + dobPadding + '\u2009\u2009\u2009\u2009\u200B';
 
       pass.headerFields.push({
         key: 'docType',
-        value: 'Digital Pet ID',
+        value: t.docType,
       });
+
       pass.primaryFields.push({
         key: 'petName',
-        label: 'Name',
+        label: t.name,
         value: pet.name,
       });
+
       pass.secondaryFields.push(
         {
           key: 'breed',
-          label: 'Breed',
-          // If breed is unknown, display species (Dog/Cat) — this cell is never empty
+          label: t.breed,
           value: pet.breed ?? pet.species,
         },
         {
@@ -219,11 +231,12 @@ export class WalletService {
           textAlignment: 'PKTextAlignmentLeft',
         },
       );
+
       pass.auxiliaryFields.push(
         {
           key: 'gender',
-          label: 'Gender',
-          value: this.toGenderText(pet.gender),
+          label: t.gender,
+          value: this.toGenderText(pet.gender, lang), // Truyền lang vào đây
         },
         {
           key: 'dob',
@@ -233,8 +246,7 @@ export class WalletService {
         },
       );
 
-      // Circular avatar right of pet name — if pet lacks image or image errors, skip it,
-      // pass is generated normally (don't block user from downloading pass just because of an image)
+      // (Phần Avatar và BackFields giữ nguyên format cũ, chỉ thay text t.*)
       const photoUrl = pet.photoUrl;
       if (photoUrl) {
         try {
@@ -243,34 +255,28 @@ export class WalletService {
           pass.addBuffer('thumbnail@2x.png', thumb.x2);
           pass.addBuffer('thumbnail@3x.png', thumb.x3);
         } catch (error) {
-          console.warn(
-            '⚠️ Skipping thumbnail because pet image could not be downloaded/processed:',
-            error instanceof Error ? error.message : error,
-          );
+          console.warn('⚠️ Skipping thumbnail...', error instanceof Error ? error.message : error);
         }
       }
 
-      // Back of card: full lookup information
+      // Back of card
       pass.backFields.push(
-        { key: 'fullId', label: 'Full Pet ID', value: pet.id },
-        { key: 'profile', label: 'Profile Page', value: profileUrl },
+        { key: 'fullId', label: t.fullId, value: pet.id },
+        { key: 'profile', label: t.profilePage, value: profileUrl },
       );
       if (pet.microchipNumber) {
         pass.backFields.push({
           key: 'microchip',
-          label: 'Microchip Number',
+          label: t.microchip,
           value: pet.microchipNumber,
         });
       }
       pass.backFields.push({
         key: 'guide',
-        label: 'Instructions',
-        value:
-          'Scan the QR code on the card to view the pet profile. If you found this pet, please contact the owner via the profile page.',
+        label: t.guideLabel,
+        value: t.guideValue,
       });
 
-      // QR code points directly to the pet's web profile
-      // (do not set altText — ID is already in the "PawLife ID" cell, avoid duplication)
       pass.setBarcodes({
         message: profileUrl,
         format: 'PKBarcodeFormatQR',
