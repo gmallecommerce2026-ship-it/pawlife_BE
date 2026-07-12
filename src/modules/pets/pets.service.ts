@@ -620,7 +620,13 @@ export class PetsService {
       throw new BadRequestException({ message: 'Invalid or already processed request', i18n: { key: 'error.invalid_transfer_request' } });
     }
 
-    await this.prisma.pet.update({ where: { id: transferReq.petId }, data: { ownerId: receiverId } });
+    await this.prisma.pet.update({ 
+      where: { id: transferReq.petId }, 
+      data: { 
+        ownerId: receiverId,
+        adoptedAt: new Date() // <--- THÊM DÒNG NÀY ĐỂ CẬP NHẬT NGÀY ĐỔI CHỦ
+      } 
+    });
     await this.redisService.del(`pet:detail:${transferReq.petId}`);
 
     await this.prisma.transferRequest.updateMany({
@@ -933,7 +939,7 @@ export class PetsService {
         const result = await this.prisma.$transaction(async (prisma) => {
           const newPet = await prisma.pet.create({
             data: {
-              ...(petData as any), ownerId: userId, status: 'ADOPTED', qrVerificationStatus: 'VERIFIED',
+              ...(petData as any), ownerId: userId, status: 'ADOPTED', adoptedAt: new Date(), qrVerificationStatus: 'VERIFIED',
               qrCodeUrl: `${publicDomain}/qr-codes/${tagId}.svg`, idSetByShelter,
               ...(images && images.length > 0 && { images: { create: images.map(url => ({ url })) } }),
               ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
@@ -948,7 +954,7 @@ export class PetsService {
 
       const newPet = await this.prisma.pet.create({
         data: {
-          ...(petData as any), ownerId: userId, status: 'ADOPTED', idSetByShelter,
+          ...(petData as any), ownerId: userId, status: 'ADOPTED', adoptedAt: new Date(), idSetByShelter,
           ...(images && images.length > 0 && { images: { create: images.map(url => ({ url })) } }),
           ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
         },
@@ -1212,11 +1218,18 @@ export class PetsService {
 
       // 1. CURRENT_OWNER — chỉ push khi pet có owner
       if (pet.owner) {
+        // Lấy ngày sở hữu chính xác:
+        // - Nếu pet đã từng được transfer, lấy ngày hoàn thành transfer gần nhất (completedTransfers[0] vì đã order desc)
+        // - Nếu chưa từng transfer, lấy adoptedAt hoặc ngày tạo profile gốc (createdAt)
+        const ownershipDate = completedTransfers.length > 0 
+          ? completedTransfers[0].updatedAt 
+          : (pet.adoptedAt ?? pet.createdAt);
+
         pawHistory.push({
           id: `owner_current_${pet.id}`,
           type: 'CURRENT_OWNER',
           title: 'Current Owner',
-          date: pet.adoptedAt ?? pet.updatedAt,
+          date: ownershipDate, // <--- SỬA LẠI THÀNH BIẾN NÀY
           description: `Ownership transferred to ${pet.owner.name ?? 'Anonymous'}`,
           i18n: {
             titleKey: 'pawHistory.current_owner_title',

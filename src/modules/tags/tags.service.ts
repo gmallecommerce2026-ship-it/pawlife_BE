@@ -306,6 +306,26 @@ export class TagsService {
     const pet = tag.pet;
     const isLost = tag.status === TagStatus.LOST;
 
+    // Parse lostPhotos an toàn — trong DB đang lưu dạng JSON string (JSON.stringify(photos || []))
+    let lostPhotos: string[] = [];
+    if (isLost && pet.lostPhotos) {
+      try {
+        const parsed = typeof pet.lostPhotos === 'string'
+          ? JSON.parse(pet.lostPhotos)
+          : pet.lostPhotos;
+        if (Array.isArray(parsed)) {
+          lostPhotos = parsed.filter((url: any) => typeof url === 'string' && url.trim() !== '');
+        }
+      } catch (e) {
+        console.warn('[scanTag] Failed to parse lostPhotos for pet', pet.id, e);
+      }
+    }
+
+    // Mảng ảnh gốc của pet (avatar/ảnh thường), để FE nối lostPhotos vào sau
+    const originalImages = (pet.images || [])
+      .map((img) => img.url)
+      .filter((url) => typeof url === 'string' && url.trim() !== '');
+
     return {
       id: pet.id,
       name: pet.name,
@@ -315,9 +335,12 @@ export class TagsService {
       color: pet.color || 'Not updated yet',
       dob: pet.dob,
       status: isLost ? 'lost' : 'safe',
-      image: pet.images && pet.images.length > 0 ? pet.images[0].url : 'https://via.placeholder.com/600',
+      image: originalImages.length > 0 ? originalImages[0] : 'https://via.placeholder.com/600',
 
-      // FIX HERE: Call the exact fields lostContactName, lostContactPhone, lostContactAddress
+      // ✅ THÊM MỚI: trả cả mảng ảnh gốc và ảnh báo lạc để FE ghép slide
+      images: originalImages,
+      lostPhotos: lostPhotos,
+
       owner: isLost ? {
         name: pet.lostContactName || pet.owner?.name || 'Anonymous user',
         phone: pet.lostContactPhone || pet.owner?.phone || 'Phone number not provided',
@@ -325,7 +348,6 @@ export class TagsService {
         avatarUrl: pet.owner?.avatarUrl || null,
       } : null,
 
-      // FIX HERE: Return note field from lostDetails in DB so Frontend can catch it
       note: pet.lostDetails || "Please contact me ASAP",
     };
   }
