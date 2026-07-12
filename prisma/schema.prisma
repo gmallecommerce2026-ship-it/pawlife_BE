@@ -487,6 +487,8 @@ model Tag {
   id     String    @id @default(uuid()) // UUID khớp với mã QR/NFC
   status TagStatus @default(INACTIVE)
 
+  linkCount Int       @default(0)
+
   petId String?
   pet   Pet?    @relation(fields: [petId], references: [id], onDelete: SetNull)
   linkedAt  DateTime?

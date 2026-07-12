@@ -206,6 +206,10 @@ export class PetsService {
       throw new BadRequestException({ message: 'This QR code does not belong to the PawLife system or does not exist!', i18n: { key: 'error.qr_invalid' } });
     }
 
+    if ((tag as any).linkCount >= 3) {
+      throw new BadRequestException({ message: 'This QR code has reached its maximum reuse limit (3 times)!', i18n: { key: 'error.qr_limit_reached' } });
+    }
+
     if (tag.petId) {
       if (tag.petId === petId) throw new BadRequestException({ message: 'This QR code is already assigned to this pet!', i18n: { key: 'error.qr_already_assigned' } });
       throw new BadRequestException({ message: 'This QR code is already in use for another pet!', i18n: { key: 'error.qr_in_use' } });
@@ -214,7 +218,7 @@ export class PetsService {
     await this.prisma.$transaction([
       this.prisma.tag.update({
         where: { id: tagId },
-        data: { petId: petId, status: 'ACTIVE', linkedAt: new Date() }
+        data: { petId: petId, status: 'ACTIVE', linkedAt: new Date(), linkCount: { increment: 1 } }
       }),
       this.prisma.pet.update({
         where: { id: petId },
@@ -467,7 +471,22 @@ export class PetsService {
       throw new ConflictException({ message: 'You do not have permission to delete this pet!', i18n: { key: 'error.pet_unauthorized' } });
     }
 
-    await this.prisma.pet.delete({ where: { id: petId } });
+    // SỬA Ở ĐÂY: Dùng Transaction để nhả Tag và xoá Pet cùng lúc
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Nhả tất cả Tag đang gắn với Pet này về INACTIVE
+      await tx.tag.updateMany({
+        where: { petId: petId },
+        data: {
+          status: 'INACTIVE',
+          petId: null,
+          linkedAt: null,
+        }
+      });
+
+      // 2. Xoá Pet
+      await tx.pet.delete({ where: { id: petId } });
+    });
+
     await this.redisService.del(`pet:detail:${petId}`);
 
     return {
@@ -620,12 +639,12 @@ export class PetsService {
       throw new BadRequestException({ message: 'Invalid or already processed request', i18n: { key: 'error.invalid_transfer_request' } });
     }
 
-    await this.prisma.pet.update({ 
-      where: { id: transferReq.petId }, 
-      data: { 
+    await this.prisma.pet.update({
+      where: { id: transferReq.petId },
+      data: {
         ownerId: receiverId,
         adoptedAt: new Date() // <--- THÊM DÒNG NÀY ĐỂ CẬP NHẬT NGÀY ĐỔI CHỦ
-      } 
+      }
     });
     await this.redisService.del(`pet:detail:${transferReq.petId}`);
 
@@ -935,7 +954,7 @@ export class PetsService {
         const tag = await this.prisma.tag.findUnique({ where: { id: tagId } });
         if (!tag) throw new BadRequestException({ message: 'This QR code does not exist in the system!', i18n: { key: 'error.qr_not_found' } });
         if (tag.petId) throw new BadRequestException({ message: 'This QR code is already in use for another pet!', i18n: { key: 'error.qr_in_use' } });
-
+        if ((tag as any).linkCount >= 3) throw new BadRequestException({ message: 'This QR code has reached its maximum reuse limit!', i18n: { key: 'error.qr_limit_reached' } });
         const result = await this.prisma.$transaction(async (prisma) => {
           const newPet = await prisma.pet.create({
             data: {
@@ -946,7 +965,7 @@ export class PetsService {
             },
             include: { images: true }
           });
-          await prisma.tag.update({ where: { id: tagId }, data: { petId: newPet.id, status: 'ACTIVE', linkedAt: new Date() } });
+          await prisma.tag.update({ where: { id: tagId }, data: { petId: newPet.id, status: 'ACTIVE', linkedAt: new Date(), linkCount: { increment: 1 } } });
           return newPet;
         });
         return result;
@@ -1221,8 +1240,8 @@ export class PetsService {
         // Lấy ngày sở hữu chính xác:
         // - Nếu pet đã từng được transfer, lấy ngày hoàn thành transfer gần nhất (completedTransfers[0] vì đã order desc)
         // - Nếu chưa từng transfer, lấy adoptedAt hoặc ngày tạo profile gốc (createdAt)
-        const ownershipDate = completedTransfers.length > 0 
-          ? completedTransfers[0].updatedAt 
+        const ownershipDate = completedTransfers.length > 0
+          ? completedTransfers[0].updatedAt
           : (pet.adoptedAt ?? pet.createdAt);
 
         pawHistory.push({
@@ -1458,6 +1477,9 @@ export class PetsService {
     if (newTag.petId && newTag.petId !== petId) {
       throw new ConflictException({ message: 'This QR code is already in use for another pet.', i18n: { key: 'error.qr_in_use' } });
     }
+    if ((newTag as any).linkCount >= 3) {
+      throw new BadRequestException({ message: 'This new QR code has reached its maximum reuse limit!', i18n: { key: 'error.qr_limit_reached' } });
+    }
     if (newTag.petId === petId) {
       return { message: 'This QR code is already assigned to this pet.', i18n: { key: 'error.qr_already_assigned' } };
     }
@@ -1465,14 +1487,16 @@ export class PetsService {
     await this.prisma.$transaction(async (tx) => {
       if (pet.tags && pet.tags.length > 0) {
         await tx.tag.updateMany({
+          // Nhả Tag cũ về INACTIVE
           where: { petId: pet.id }, data: { petId: null, status: 'INACTIVE' },
         });
       }
       await tx.tag.update({
-        where: { id: newTagId }, data: { petId: pet.id, status: 'ACTIVE', linkedAt: new Date() },
+        // Gán Tag mới và tăng biến đếm
+        where: { id: newTagId }, data: { petId: pet.id, status: 'ACTIVE', linkedAt: new Date(), linkCount: { increment: 1 } } as any,
       });
 
-      const qrCodeUrl = `https://yourdomain.com/scan/${newTagId}`;
+      const qrCodeUrl = `https://pawcare.app/tag/${newTagId}`;
 
       await tx.pet.update({
         where: { id: pet.id },
@@ -1496,8 +1520,19 @@ export class PetsService {
       },
     });
 
-    if (!tag || !tag.pet) {
+    // 1. Nếu mã QR hoàn toàn không tồn tại trong hệ thống
+    if (!tag) {
       throw new NotFoundException({ message: 'No pet found with this tag code', i18n: { key: 'error.pet_not_found_by_qr' } });
+    }
+
+    // 2. SỬA Ở ĐÂY: Nếu QR tồn tại nhưng ĐANG TRỐNG (chưa có Pet)
+    if (!tag.pet) {
+      return {
+        isUnlinked: true, // Báo cho Frontend biết đây là QR trống
+        tagId: tag.id,
+        status: tag.status,
+        linkCount: (tag as any).linkCount || 0
+      };
     }
 
     const pet = tag.pet;
@@ -1508,6 +1543,7 @@ export class PetsService {
     }
 
     return {
+      isUnlinked: false, // QR đã có thú cưng
       ...pet, dob: pet.dob ?? null,
       avatarUrl: pet.images?.length > 0 ? pet.images[0].url : null, isLost,
       lostInfo: isLost ? {
