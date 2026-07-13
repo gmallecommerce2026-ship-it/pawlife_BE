@@ -871,7 +871,7 @@ function buildMedicalRecords(dob: Date, isSpayedNeutered: boolean) {
       recordDate: randomDateBetweenYearsAgo(0.2, 3),
       verificationStatus: VerificationStatus.VERIFIED,
     });
-  }
+  } 
 
   return records;
 }
