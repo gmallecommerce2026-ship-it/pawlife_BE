@@ -203,9 +203,18 @@ export class WalletService {
       // Label padding trick:
       // - "PawLife ID" (10 chars) và "Mã PawLife" (10 chars) -> Dùng chung padding
       // - "Date of Birth" (13 chars) và "Ngày sinh" (9 chars) -> Bản Tiếng Việt cần nhiều padding hơn một chút để cân bằng
-      const petCodeLabel = t.pawLifeId + '\u2007'.repeat(10) + '\u2009\u2009\u2009\u200B';
-      const dobPadding = isVi ? '\u2007'.repeat(10) : '\u2007'.repeat(6);
-      const dobLabel = t.dob + dobPadding + '\u2009\u2009\u2009\u2009\u200B';
+      const FIGURE_BASE = 10;
+      // Spacer cuối PHẢI giống nhau tuyệt đối giữa mọi label cùng cột, không được lệch số lượng
+      const TRAILING_SPACER = '\u2009\u2009\u2009\u200B';
+
+      // petCode luôn dùng FIGURE_BASE làm chuẩn tham chiếu
+      const petCodeLabel = t.pawLifeId + '\u2007'.repeat(FIGURE_BASE) + TRAILING_SPACER;
+
+      // dob: bù trừ theo đúng số ký tự chênh lệch so với label petCode (không đoán mò theo ngôn ngữ nữa)
+      const lengthDiff = t.pawLifeId.length - t.dob.length; // vi: 10-9=+1 | en: 10-13=-3
+      const dobFigureCount = Math.max(FIGURE_BASE + lengthDiff, 0); // vi: 11 | en: 7
+      const dobLabel = t.dob + '\u2007'.repeat(dobFigureCount) + TRAILING_SPACER;
+
 
       pass.headerFields.push({
         key: 'docType',
@@ -277,11 +286,15 @@ export class WalletService {
         value: t.guideValue,
       });
 
+      const qrValue = pet.qrCodeUrl ?? profileUrl;
+
       pass.setBarcodes({
-        message: profileUrl,
+        message: qrValue,
         format: 'PKBarcodeFormatQR',
         messageEncoding: 'iso-8859-1',
       });
+
+
 
       return {
         buffer: pass.getAsBuffer(),
