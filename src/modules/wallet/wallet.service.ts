@@ -162,7 +162,7 @@ export class WalletService {
         'You do not have permission to perform actions on this pet!',
       );
     }
-
+    const activeTagId = this.getActiveTagId(pet.tags);
     // 2. Prepare dynamic data (Giữ nguyên)
     const displayCode = this.toDisplayCode(pet.id);
     const profileBaseUrl =
@@ -294,7 +294,7 @@ export class WalletService {
 
       // ✅ SỬA: trước đây dùng pet.qrCodeUrl (field tĩnh, không đồng bộ khi
       // user Replace/Transfer tag) → giờ lấy đúng tag ACTIVE giống FE
-      const activeTagId = this.getActiveTagId(pet.tags);
+
       const qrValue = activeTagId ?? profileUrl;
 
       pass.setBarcodes({
