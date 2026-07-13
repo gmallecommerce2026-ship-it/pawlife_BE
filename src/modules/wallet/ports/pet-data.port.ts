@@ -20,6 +20,7 @@ export interface PetWalletData {
   microchipNumber: string | null;
   ownerId: string | null;
   shelterId: string | null;
+  qrCodeUrl: string | null; 
   // URL ảnh đại diện (ảnh đầu tiên của pet) — null nếu pet chưa có ảnh
   photoUrl: string | null;
 }

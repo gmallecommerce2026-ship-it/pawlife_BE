@@ -32,6 +32,7 @@ export class PrismaPetDataAdapter implements PetDataProvider {
         microchipNumber: true,
         ownerId: true,
         shelterId: true,
+        qrCodeUrl: true,
         // Ảnh đầu tiên làm avatar tròn trên thẻ
         images: {
           select: { url: true },
@@ -54,6 +55,7 @@ export class PrismaPetDataAdapter implements PetDataProvider {
       microchipNumber: pet.microchipNumber,
       ownerId: pet.ownerId,
       shelterId: pet.shelterId,
+      qrCodeUrl: pet.qrCodeUrl,     
       photoUrl: pet.images[0]?.url ?? null,
     };
   }
