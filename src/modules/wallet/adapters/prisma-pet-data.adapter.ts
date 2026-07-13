@@ -13,6 +13,7 @@ import {
   PetDataProvider,
   PetWalletData,
   WalletPetGender,
+  WalletPetTag,
 } from '../ports/pet-data.port';
 
 @Injectable()
@@ -60,7 +61,10 @@ export class PrismaPetDataAdapter implements PetDataProvider {
       shelterId: pet.shelterId,
       qrCodeUrl: pet.qrCodeUrl,     
       photoUrl: pet.images[0]?.url ?? null,
-      tags: pet.tags.map(tag => ({ id: tag.id, status: tag.status })),
+      tags: pet.tags.map(tag => ({
+        id: tag.id,
+        status: tag.status as WalletPetTag['status'],
+      })),
     };
   }
   private resolveBilingualText(field: unknown, lang: 'vi' | 'en'): string {
