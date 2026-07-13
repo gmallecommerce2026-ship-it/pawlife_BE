@@ -51,9 +51,10 @@ export class WalletService {
 
   // Display ID on card: PL-XXXXXXXX (first 8 chars of UUID, uppercase)
   // DO NOT display full UUID because 36 chars will be cut off on the card face — full UUID is on the back
-  private toDisplayCode(petId: string): string {
-    return `PL-${petId.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
-  }
+  private toDisplayCode(sourceId: string): string {
+  return `PL-${sourceId.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+}
+
 
   // Bilingual short gender (matches label style "Gender" on card)
   private toGenderText(gender: WalletPetGender | null, lang: 'vi' | 'en'): string {
@@ -164,7 +165,7 @@ export class WalletService {
     }
     const activeTagId = this.getActiveTagId(pet.tags);
     // 2. Prepare dynamic data (Giữ nguyên)
-    const displayCode = this.toDisplayCode(pet.id);
+    const displayCode = this.toDisplayCode(activeTagId ?? pet.id);
     const profileBaseUrl =
       this.configService.get<string>('WALLET_PROFILE_BASE_URL') ??
       'https://pawlife.vn/profile';
