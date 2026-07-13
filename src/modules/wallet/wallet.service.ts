@@ -141,6 +141,11 @@ export class WalletService {
       );
     }
   }
+  private getActiveTagId(tags: { id: string; status: string }[] | undefined): string | null {
+    if (!tags || tags.length === 0) return null;
+    const activeTag = tags.find(t => t.status === 'ACTIVE') ?? tags[0];
+    return activeTag.id;
+  }
 
   // Generate .pkpass (Static Pass) for a pet — returns buffer for controller to stream to client
   async generatePetPass(
@@ -269,7 +274,7 @@ export class WalletService {
       }
 
       // Back of card
-      pass.backFields.push(
+            pass.backFields.push(
         { key: 'fullId', label: t.fullId, value: pet.id },
         { key: 'profile', label: t.profilePage, value: profileUrl },
       );
@@ -286,15 +291,18 @@ export class WalletService {
         value: t.guideValue,
       });
 
-      const qrValue = pet.qrCodeUrl ?? profileUrl;
+      // ✅ SỬA: trước đây dùng pet.qrCodeUrl (field tĩnh, không đồng bộ khi
+      // user Replace/Transfer tag) → giờ lấy đúng tag ACTIVE giống FE
+      const activeTagId = this.getActiveTagId(pet.tags);
+      const qrValue = activeTagId
+        ? `${profileBaseUrl}/${pet.id}?tag=${activeTagId}` // TODO: thay bằng đúng format mà FE/QR thật đang dùng
+        : profileUrl;
 
       pass.setBarcodes({
         message: qrValue,
         format: 'PKBarcodeFormatQR',
         messageEncoding: 'iso-8859-1',
       });
-
-
 
       return {
         buffer: pass.getAsBuffer(),

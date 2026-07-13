@@ -33,6 +33,9 @@ export class PrismaPetDataAdapter implements PetDataProvider {
         ownerId: true,
         shelterId: true,
         qrCodeUrl: true,
+        tags: {
+          select: { id: true, status: true },
+        },
         // Ảnh đầu tiên làm avatar tròn trên thẻ
         images: {
           select: { url: true },
@@ -57,6 +60,7 @@ export class PrismaPetDataAdapter implements PetDataProvider {
       shelterId: pet.shelterId,
       qrCodeUrl: pet.qrCodeUrl,     
       photoUrl: pet.images[0]?.url ?? null,
+      tags: pet.tags.map(tag => ({ id: tag.id, status: tag.status })),
     };
   }
   private resolveBilingualText(field: unknown, lang: 'vi' | 'en'): string {

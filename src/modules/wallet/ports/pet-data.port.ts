@@ -7,6 +7,10 @@
 // Giới tính dạng domain RIÊNG của Wallet — cố tình KHÔNG import PetGender từ
 // '@prisma/client' để module không dính kiểu của BE lõi.
 export type WalletPetGender = 'MALE' | 'FEMALE' | 'UNKNOWN';
+export interface WalletPetTag {
+  id: string;
+  status: 'ACTIVE' | 'LOST' | 'INACTIVE';
+}
 
 // Đúng-và-đủ dữ liệu Wallet cần để in lên thẻ. Đã làm phẳng (vd ảnh đầu tiên
 // thành photoUrl) nên service không phải hiểu cấu trúc bảng/quan hệ của BE.
@@ -21,13 +25,12 @@ export interface PetWalletData {
   ownerId: string | null;
   shelterId: string | null;
   qrCodeUrl: string | null; 
+  tags: WalletPetTag[]; 
   // URL ảnh đại diện (ảnh đầu tiên của pet) — null nếu pet chưa có ảnh
   photoUrl: string | null;
 }
 
 export interface PetDataProvider {
-  // Trả về dữ liệu pet để dựng thẻ, hoặc null nếu không tồn tại.
-  // KHÔNG kiểm tra quyền sở hữu ở đây — đó là việc của tầng service.
   getPetForWallet(petId: string, lang: 'vi' | 'en'): Promise<PetWalletData | null>;
 }
 
