@@ -525,7 +525,7 @@ export class PetsService {
         this.prisma.tagReport.create({
           data: {
             tagId: activeTag.id, userId: userId, latitude: latitude || null, longitude: longitude || null,
-            message: note ? `Lost report: ${note}` : 'The owner has reported the pet missing', scannedBy: ownerName || 'Owner', status: 'PENDING',
+            message: note ? `${note}` : 'The owner has reported the pet missing', scannedBy: ownerName || 'Owner', status: 'PENDING',
           }
         })
       ] : []),
