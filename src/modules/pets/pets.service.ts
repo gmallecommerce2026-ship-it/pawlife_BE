@@ -594,13 +594,32 @@ export class PetsService {
         status: 'PENDING',
       },
       include: {
-        pet: true,
+        // SỬA Ở ĐÂY: Include thêm images để lấy ảnh pet
+        pet: {
+          include: {
+            images: {
+              orderBy: { createdAt: 'asc' },
+              take: 1 // Chỉ lấy 1 ảnh đầu tiên làm avatar cho nhẹ
+            }
+          }
+        },
         sender: { select: { id: true, name: true, avatarUrl: true } }
       },
       orderBy: { createdAt: 'desc' }
     });
 
-    return pendingTransfer || null;
+    if (!pendingTransfer) return null;
+
+    // THÊM BƯỚC NÀY: Map images[0] thành avatarUrl cho Frontend dễ dùng
+    const petWithAvatar = {
+      ...pendingTransfer.pet,
+      avatarUrl: pendingTransfer.pet.images?.length > 0 ? pendingTransfer.pet.images[0].url : null,
+    };
+
+    return {
+      ...pendingTransfer,
+      pet: petWithAvatar
+    };
   }
   async requestTransfer(petId: string, payload: { email?: string; phone?: string }, senderId: string) {
     if (!payload.email && !payload.phone) {
@@ -635,11 +654,17 @@ export class PetsService {
       include: { owner: { select: { name: true, avatarUrl: true } }, images: true }
     });
 
+    // THÊM ĐOẠN NÀY: Map avatarUrl cho FE
+    const formattedPet = {
+      ...petDataForSocket,
+      avatarUrl: petDataForSocket?.images?.length > 0 ? petDataForSocket.images[0].url : null,
+    };
+
     // ✅ CHỈ 1 payload duy nhất, đầy đủ, dùng transferId để FE match chính xác
     const eventPayload = {
       transferId: transferRequest.id,
       petId,
-      pet: petDataForSocket,
+      pet: formattedPet, // SỬA Ở ĐÂY: Truyền formattedPet thay vì petDataForSocket gốc
       senderName: petDataForSocket?.owner?.name,
     };
 
