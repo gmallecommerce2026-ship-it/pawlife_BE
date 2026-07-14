@@ -11,6 +11,7 @@ import { UpdatePetDto } from './dto/update-pet.dto';
 import { Throttle } from '@nestjs/throttler'; // ADDED IMPORT
 import { ToggleLostModeDto } from './dto/toggle-lost-mode.dto';
 import { ReplaceQrDto } from './dto/replace-qr.dto';
+import { ApiOperation } from '@nestjs/swagger';
 
 @Controller('pets')
 @UseGuards(JwtAuthGuard)
@@ -194,7 +195,12 @@ export class PetsController {
   ) {
     return this.petsService.getPetById(id, userId);
   }
-
+  @Get('transfer-requests/pending')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Lấy yêu cầu chuyển nhượng đang chờ xác nhận của user hiện tại' })
+  async checkPendingTransfer(@User() user: any) {
+    return this.petsService.getPendingTransferForUser(user.id);
+  }
   @Get()
   async searchPets(
     @User('id') userId: string, // 👈 FIX: Bắt buộc lấy ID từ Auth Token, không dùng @Query

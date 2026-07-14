@@ -587,7 +587,22 @@ export class PetsService {
       }
     };
   }
+  async getPendingTransferForUser(userId: string) {
+    // Tìm transfer request đang PENDING mà user hiện tại là receiver
+    const pendingTransfer = await this.prisma.transferRequest.findFirst({
+      where: {
+        receiverId: userId,
+        status: 'PENDING',
+      },
+      include: {
+        pet: true,
+        sender: { select: { id: true, name: true, avatarUrl: true } }
+      },
+      orderBy: { createdAt: 'desc' } // Lấy cái mới nhất nếu có nhiều
+    });
 
+    return pendingTransfer || null;
+  }
   async requestTransfer(petId: string, payload: { email?: string; phone?: string }, senderId: string) {
     if (!payload.email && !payload.phone) {
       throw new BadRequestException({ message: 'Please provide the recipient\'s email or phone number', i18n: { key: 'error.missing_transfer_contact' } });
