@@ -35,7 +35,25 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       await this.client.set(key, data);
     }
   }
+  async setTransferState(petId: string, state: any, ttlSeconds = 60 * 60 * 24) {
+    await this.client.set(`transfer:${petId}`, JSON.stringify(state), 'EX', ttlSeconds);
+  }
+  async getTransferState(petId: string) {
+    const raw = await this.client.get(`transfer:${petId}`);
+    return raw ? JSON.parse(raw) : null;
+  }
+  async delTransferState(petId: string) {
+    await this.client.del(`transfer:${petId}`);
+  }
 
+  // Lock chống double-submit khi Confirm/Cancel bị bấm 2 lần / 2 thiết bị cùng lúc
+  async acquireTransferLock(key: string, ttlMs = 5000) {
+    const result = await this.client.set(`lock:transfer:${key}`, '1', 'PX', ttlMs, 'NX');
+    return result === 'OK';
+  }
+  async releaseTransferLock(key: string) {
+    await this.client.del(`lock:transfer:${key}`);
+  }
   async get<T>(key: string): Promise<T | null> {
     const data = await this.client.get(key);
     return data ? JSON.parse(data) : null;

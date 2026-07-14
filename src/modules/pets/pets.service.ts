@@ -616,10 +616,22 @@ export class PetsService {
       data: { petId, senderId, receiverId: receiver.id, status: 'PENDING' },
     });
 
+    const petDataForSocket = await this.prisma.pet.findUnique({
+      where: { id: petId },
+      include: { owner: { select: { name: true, avatarUrl: true } }, images: true }
+    });
+
     await this.notificationsService.createAndSendNotification({
       userId: receiver.id, title: '🎁 New transfer request', body: 'You have received an adoption request from the pet\'s previous owner.',
       type: NotificationType.SYSTEM, referenceId: petId,
       metadata: { i18n: { titleKey: 'notification.transfer_request_title', bodyKey: 'notification.transfer_request_body' } }
+    });
+
+    this.notificationsGateway.notifyUserSmartly(receiver.id, 'transfer_requested', {
+      transferId: transferRequest.id,
+      petId,
+      pet: petDataForSocket,
+      senderName: petDataForSocket?.owner?.name
     });
 
     this.notificationsGateway.server.to(`user_${receiver.id}`).emit('transfer_requested', { transferId: transferRequest.id, petId });

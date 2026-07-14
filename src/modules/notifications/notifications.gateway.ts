@@ -12,18 +12,18 @@ import { RedisService } from '../../database/redis/redis.service'; // IMPORT RED
 
 @WebSocketGateway({
   cors: { origin: '*' },
-  namespace: '/notifications', 
+  namespace: '/notifications',
 })
 export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server!: Server;
-  
+
   private logger = new Logger('NotificationsGateway');
 
   constructor(
     private readonly jwtService: JwtService,
     private readonly redisService: RedisService // INJECT REDIS
-  ) {}
+  ) { }
 
   async handleConnection(client: Socket) {
     try {
@@ -33,16 +33,16 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
       }
 
       const token = authHeader.replace('Bearer ', '');
-      const payload = this.jwtService.verify(token); 
-      
+      const payload = this.jwtService.verify(token);
+
       // Lấy userId từ token (bổ sung thêm payload.userId đề phòng cấu trúc auth đổi)
-      const userId = payload.id || payload.sub || payload.userId; 
+      const userId = payload.id || payload.sub || payload.userId;
 
       // 1. LƯU LẠI userId VÀO DATA CỦA SOCKET (để dùng lúc disconnect)
       client.data.userId = userId;
 
       client.join(`user_${userId}`);
-      
+
       // 2. LƯU TRẠNG THÁI ONLINE VÀO REDIS
       await this.redisService.addSocket(userId, client.id);
 
@@ -52,18 +52,21 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
       client.disconnect();
     }
   }
+  broadcastTransferEvent(eventName: string, targetUserIds: string[], payload: any) {
+    targetUserIds.forEach(uid => this.notifyUserSmartly(uid, eventName, payload));
+  }
 
   async handleDisconnect(client: Socket) {
     // 3. LẤY LẠI userId KHI USER MẤT MẠNG / TẮT APP
     const userId = client.data.userId;
-    
+
     if (userId) {
       // Xóa socket khỏi thiết bị hiện tại
       await this.redisService.removeSocket(userId, client.id);
 
       // Kiểm tra xem User còn mở app trên máy khác (VD: máy tính, ipad) không
       const isStillOnline = await this.redisService.isUserOnline(userId);
-      
+
       if (!isStillOnline) {
         this.logger.log(`[Offline] User ${userId} is fully offline.`);
       } else {
@@ -82,7 +85,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   // --- TÍNH NĂNG MỚI: GỬI THÔNG BÁO THÔNG MINH ---
   async notifyUserSmartly(userId: string, eventName: string, payload: any) {
     const isOnline = await this.redisService.isUserOnline(userId);
-    
+
     if (isOnline) {
       // Nếu user đang online -> Bắn socket ngay lập tức để app tự rung/đổ chuông
       this.server.to(`user_${userId}`).emit(eventName, payload);
