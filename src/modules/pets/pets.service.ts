@@ -699,7 +699,12 @@ export class PetsService {
   }
 
   async confirmTransfer(transferId: string, receiverId: string) {
-    const transferReq = await this.prisma.transferRequest.findUnique({ where: { id: transferId } });
+    // SỬA Ở ĐÂY: Thêm include { receiver: true, sender: true } để lấy tên hiển thị
+    const transferReq = await this.prisma.transferRequest.findUnique({
+      where: { id: transferId },
+      include: { receiver: true, sender: true }
+    });
+
     if (!transferReq || transferReq.status !== 'PENDING') {
       throw new BadRequestException({ message: 'Invalid or already processed request', i18n: { key: 'error.invalid_transfer_request' } });
     }
@@ -716,10 +721,27 @@ export class PetsService {
     });
     await this.prisma.transferRequest.update({ where: { id: transferId }, data: { status: 'COMPLETED' } });
 
-    // ✅ payload đầy đủ, có transferId + status, emit qua 1 cơ chế duy nhất cho cả 2 phía
-    const eventPayload = { petId: transferReq.petId, transferId, status: 'COMPLETED' };
-    await this.notificationsGateway.notifyUserSmartly(transferReq.senderId, 'transfer_completed', eventPayload);
-    await this.notificationsGateway.notifyUserSmartly(receiverId, 'transfer_completed', eventPayload);
+    // ==========================================
+    // SỬA Ở ĐÂY: Tách biệt Payload cho Sender và Receiver
+    // ==========================================
+    const senderPayload = {
+      petId: transferReq.petId,
+      transferId,
+      status: 'COMPLETED',
+      role: 'sender',
+      targetName: transferReq.receiver?.name || 'Người dùng mới' // Lấy tên người nhận cho Sender
+    };
+
+    const receiverPayload = {
+      petId: transferReq.petId,
+      transferId,
+      status: 'COMPLETED',
+      role: 'receiver',
+      targetName: transferReq.sender?.name || 'Chủ cũ' // Lấy tên người gửi cho Receiver
+    };
+
+    await this.notificationsGateway.notifyUserSmartly(transferReq.senderId, 'transfer_completed', senderPayload);
+    await this.notificationsGateway.notifyUserSmartly(receiverId, 'transfer_completed', receiverPayload);
 
     // ✅ Tạo notification cho cả 2 bên, đánh dấu uiAction để notification screen biết chỉ show popup
     for (const uid of [transferReq.senderId, receiverId]) {
