@@ -124,6 +124,39 @@ export class AuthService {
     await this.prisma.userBlock.deleteMany({ where: { blockerId, blockedId } });
     return { success: true, message: 'User unblocked successfully.' };
   }
+  async reportUser(
+    reporterId: string,
+    targetId: string,
+    reason: string,
+    detail?: string,
+    isBlockRequested?: boolean,
+  ) {
+    if (reporterId === targetId) {
+      throw new BadRequestException('You cannot report yourself.');
+    }
+
+    const targetUser = await this.prisma.user.findUnique({ where: { id: targetId } });
+    if (!targetUser) {
+      throw new BadRequestException('Reported user does not exist.');
+    }
+
+    const report = await this.prisma.report.create({
+      data: {
+        userId: reporterId,
+        targetId,
+        type: 'user',
+        reason,
+        detail,
+      },
+    });
+
+    // Nếu người dùng tick "Chặn" khi report -> block luôn
+    if (isBlockRequested) {
+      await this.blockUser(reporterId, targetId);
+    }
+
+    return { success: true, message: 'Report submitted successfully.', data: report };
+  }
 
   async getBlockedUsers(blockerId: string) {
     // 1. Lấy danh sách bản ghi block (không include vì không có relation)

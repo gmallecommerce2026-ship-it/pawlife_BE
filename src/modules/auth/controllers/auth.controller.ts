@@ -148,6 +148,22 @@ export class AuthController {
   async getBlockedUsers(@User('id') userId: string) {
     return this.authService.getBlockedUsers(userId);
   }
+  @Post('report-user/:userId')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async reportUser(
+    @User('id') userId: string,
+    @Param('userId') targetUserId: string,
+    @Body() body: { reason: string; detail?: string; isBlockRequested?: boolean },
+  ) {
+    return this.authService.reportUser(
+      userId,
+      targetUserId,
+      body.reason,
+      body.detail,
+      body.isBlockRequested,
+    );
+  }
   @Get('devices')
   @UseGuards(JwtAuthGuard)
   async getDevices(@User() user: any) {
