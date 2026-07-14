@@ -106,7 +106,6 @@ export class AuthService {
       update: {},
     });
 
-    // Hủy mọi transfer request đang PENDING giữa 2 bên khi block
     await this.prisma.transferRequest.updateMany({
       where: {
         status: 'PENDING',
@@ -127,19 +126,37 @@ export class AuthService {
   }
 
   async getBlockedUsers(blockerId: string) {
+    // 1. Lấy danh sách bản ghi block (không include vì không có relation)
     const blocks = await this.prisma.userBlock.findMany({
       where: { blockerId },
-      include: { blocked: { select: { id: true, name: true, avatarUrl: true } } },
       orderBy: { createdAt: 'desc' },
     });
 
-    return blocks.map((b) => ({
-      id: b.blocked.id,
-      name: b.blocked.name,
-      avatarUrl: b.blocked.avatarUrl,
-      blockedAt: b.createdAt,
-    }));
+    if (blocks.length === 0) return [];
+
+    // 2. Lấy thông tin User tương ứng
+    const blockedIds = blocks.map((b) => b.blockedId);
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: blockedIds } },
+      select: { id: true, name: true, avatarUrl: true },
+    });
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
+    // 3. Map lại theo đúng thứ tự blockedAt desc, bỏ qua user đã bị xoá (nếu có)
+    return blocks
+      .map((b) => {
+        const u = userMap.get(b.blockedId);
+        if (!u) return null;
+        return {
+          id: u.id,
+          name: u.name,
+          avatarUrl: u.avatarUrl,
+          blockedAt: b.createdAt,
+        };
+      })
+      .filter(Boolean);
   }
+
 
   async getDevices(userId: string, currentSessionId?: string) {
     const devices = await this.prisma.deviceSession.findMany({ where: { userId }, orderBy: { lastActive: 'desc' }, });
