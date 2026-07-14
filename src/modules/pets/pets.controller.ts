@@ -197,7 +197,7 @@ export class PetsController {
   }
   @Get('transfer-requests/pending')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Lấy yêu cầu chuyển nhượng đang chờ xác nhận của user hiện tại' })
+  @ApiOperation({ summary: 'Lấy yêu cầu chuyển nhượng thú cưng đang chờ xử lý của user (Catch-up API)' })
   async checkPendingTransfer(@User() user: any) {
     return this.petsService.getPendingTransferForUser(user.id);
   }

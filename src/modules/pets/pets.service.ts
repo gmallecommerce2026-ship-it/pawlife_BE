@@ -588,7 +588,6 @@ export class PetsService {
     };
   }
   async getPendingTransferForUser(userId: string) {
-    // Tìm transfer request đang PENDING mà user hiện tại là receiver
     const pendingTransfer = await this.prisma.transferRequest.findFirst({
       where: {
         receiverId: userId,
@@ -598,7 +597,7 @@ export class PetsService {
         pet: true,
         sender: { select: { id: true, name: true, avatarUrl: true } }
       },
-      orderBy: { createdAt: 'desc' } // Lấy cái mới nhất nếu có nhiều
+      orderBy: { createdAt: 'desc' }
     });
 
     return pendingTransfer || null;
@@ -631,9 +630,18 @@ export class PetsService {
       data: { petId, senderId, receiverId: receiver.id, status: 'PENDING' },
     });
 
+    // Lấy data để emit socket
     const petDataForSocket = await this.prisma.pet.findUnique({
       where: { id: petId },
       include: { owner: { select: { name: true, avatarUrl: true } }, images: true }
+    });
+
+    // Emit qua NotificationsGateway (chạy qua Redis)
+    this.notificationsGateway.notifyUserSmartly(receiver.id, 'transfer_requested', {
+      transferId: transferRequest.id,
+      petId,
+      pet: petDataForSocket,
+      senderName: petDataForSocket?.owner?.name
     });
 
     await this.notificationsService.createAndSendNotification({
@@ -642,12 +650,6 @@ export class PetsService {
       metadata: { i18n: { titleKey: 'notification.transfer_request_title', bodyKey: 'notification.transfer_request_body' } }
     });
 
-    this.notificationsGateway.notifyUserSmartly(receiver.id, 'transfer_requested', {
-      transferId: transferRequest.id,
-      petId,
-      pet: petDataForSocket,
-      senderName: petDataForSocket?.owner?.name
-    });
 
     this.notificationsGateway.server.to(`user_${receiver.id}`).emit('transfer_requested', { transferId: transferRequest.id, petId });
     await this.redisService.del(`pet:detail:${petId}`);
