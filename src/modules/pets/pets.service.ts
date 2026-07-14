@@ -630,50 +630,47 @@ export class PetsService {
       data: { petId, senderId, receiverId: receiver.id, status: 'PENDING' },
     });
 
-    // Lấy data để emit socket
     const petDataForSocket = await this.prisma.pet.findUnique({
       where: { id: petId },
       include: { owner: { select: { name: true, avatarUrl: true } }, images: true }
     });
 
-    // Emit qua NotificationsGateway (chạy qua Redis)
-    this.notificationsGateway.notifyUserSmartly(receiver.id, 'transfer_requested', {
+    // ✅ CHỈ 1 payload duy nhất, đầy đủ, dùng transferId để FE match chính xác
+    const eventPayload = {
       transferId: transferRequest.id,
       petId,
       pet: petDataForSocket,
-      senderName: petDataForSocket?.owner?.name
-    });
+      senderName: petDataForSocket?.owner?.name,
+    };
+
+    // ✅ XOÁ dòng server.to().emit() thô bên dưới — chỉ giữ 1 nguồn emit
+    await this.notificationsGateway.notifyUserSmartly(receiver.id, 'transfer_requested', eventPayload);
 
     await this.notificationsService.createAndSendNotification({
-      userId: receiver.id, title: '🎁 New transfer request', body: 'You have received an adoption request from the pet\'s previous owner.',
+      userId: receiver.id, title: '🎁 New transfer request',
+      body: 'You have received an adoption request from the pet\'s previous owner.',
       type: NotificationType.SYSTEM, referenceId: petId,
-      metadata: { i18n: { titleKey: 'notification.transfer_request_title', bodyKey: 'notification.transfer_request_body' } }
+      metadata: {
+        transferId: transferRequest.id,
+        uiAction: 'navigate_transfer', // 👈 dùng để FE biết tap vào thì điều hướng
+        i18n: { titleKey: 'notification.transfer_request_title', bodyKey: 'notification.transfer_request_body' }
+      }
     });
 
-
-    this.notificationsGateway.server.to(`user_${receiver.id}`).emit('transfer_requested', { transferId: transferRequest.id, petId });
     await this.redisService.del(`pet:detail:${petId}`);
 
-    return {
-      success: true,
-      message: 'Request sent',
-      i18n: { key: 'success.transfer_requested' }
-    };
+    return { success: true, message: 'Request sent', i18n: { key: 'success.transfer_requested' } };
   }
 
   async confirmTransfer(transferId: string, receiverId: string) {
     const transferReq = await this.prisma.transferRequest.findUnique({ where: { id: transferId } });
-
     if (!transferReq || transferReq.status !== 'PENDING') {
       throw new BadRequestException({ message: 'Invalid or already processed request', i18n: { key: 'error.invalid_transfer_request' } });
     }
 
-    await this.prisma.pet.update({
+    const pet = await this.prisma.pet.update({
       where: { id: transferReq.petId },
-      data: {
-        ownerId: receiverId,
-        adoptedAt: new Date() // <--- THÊM DÒNG NÀY ĐỂ CẬP NHẬT NGÀY ĐỔI CHỦ
-      }
+      data: { ownerId: receiverId, adoptedAt: new Date() },
     });
     await this.redisService.del(`pet:detail:${transferReq.petId}`);
 
@@ -681,18 +678,30 @@ export class PetsService {
       where: { petId: transferReq.petId, status: 'PENDING', id: { not: transferId } },
       data: { status: 'CANCELED' },
     });
-
     await this.prisma.transferRequest.update({ where: { id: transferId }, data: { status: 'COMPLETED' } });
 
-    const payload = { petId: transferReq.petId };
-    this.notificationsGateway.server.to(`user_${transferReq.senderId}`).emit('transfer_completed', payload);
-    this.notificationsGateway.server.to(`user_${receiverId}`).emit('transfer_completed', payload);
+    // ✅ payload đầy đủ, có transferId + status, emit qua 1 cơ chế duy nhất cho cả 2 phía
+    const eventPayload = { petId: transferReq.petId, transferId, status: 'COMPLETED' };
+    await this.notificationsGateway.notifyUserSmartly(transferReq.senderId, 'transfer_completed', eventPayload);
+    await this.notificationsGateway.notifyUserSmartly(receiverId, 'transfer_completed', eventPayload);
 
-    return {
-      success: true,
-      message: 'Transfer successful',
-      i18n: { key: 'success.transfer_completed' }
-    };
+    // ✅ Tạo notification cho cả 2 bên, đánh dấu uiAction để notification screen biết chỉ show popup
+    for (const uid of [transferReq.senderId, receiverId]) {
+      await this.notificationsService.createAndSendNotification({
+        userId: uid,
+        title: '✅ Transfer completed',
+        body: 'The pet ownership transfer has been completed successfully.',
+        type: NotificationType.SYSTEM,
+        referenceId: transferReq.petId,
+        metadata: {
+          transferId,
+          uiAction: 'show_success_popup', // 👈 KHÁC với 'navigate_transfer'
+          i18n: { titleKey: 'notification.transfer_completed_title', bodyKey: 'notification.transfer_completed_body' }
+        }
+      });
+    }
+
+    return { success: true, message: 'Transfer successful', i18n: { key: 'success.transfer_completed' } };
   }
 
   async removeFavorite(userId: string, petId: string) {
@@ -1585,23 +1594,15 @@ export class PetsService {
 
   async cancelTransfer(petId: string, userId: string) {
     const transferReq = await this.prisma.transferRequest.findFirst({
-      where: {
-        petId: petId, status: 'PENDING',
-        OR: [{ senderId: userId }, { receiverId: userId }]
-      },
+      where: { petId, status: 'PENDING', OR: [{ senderId: userId }, { receiverId: userId }] },
     });
+    if (!transferReq) throw new BadRequestException({ message: 'No pending transfer request found.', i18n: { key: 'error.transfer_not_found' } });
 
-    if (!transferReq) {
-      throw new BadRequestException({ message: 'No pending transfer request found.', i18n: { key: 'error.transfer_not_found' } });
-    }
+    await this.prisma.transferRequest.update({ where: { id: transferReq.id }, data: { status: 'CANCELED' } });
 
-    await this.prisma.transferRequest.update({
-      where: { id: transferReq.id }, data: { status: 'CANCELED' },
-    });
-
-    const payload = { petId: petId };
-    this.notificationsGateway.server.to(`user_${transferReq.senderId}`).emit('transfer_cancelled', payload);
-    this.notificationsGateway.server.to(`user_${transferReq.receiverId}`).emit('transfer_cancelled', payload);
+    const eventPayload = { petId, transferId: transferReq.id, status: 'CANCELED' };
+    await this.notificationsGateway.notifyUserSmartly(transferReq.senderId, 'transfer_cancelled', eventPayload);
+    await this.notificationsGateway.notifyUserSmartly(transferReq.receiverId, 'transfer_cancelled', eventPayload);
 
     const targetUserId = userId === transferReq.senderId ? transferReq.receiverId : transferReq.senderId;
     const isSenderCanceling = userId === transferReq.senderId;
@@ -1610,17 +1611,17 @@ export class PetsService {
       userId: targetUserId, title: '❌ Transfer cancelled',
       body: isSenderCanceling ? 'The previous owner has cancelled the pet transfer request to you.' : 'The recipient has declined your pet transfer request.',
       type: NotificationType.SYSTEM, referenceId: petId,
-      metadata: { i18n: { titleKey: 'notification.transfer_cancelled_title', bodyKey: isSenderCanceling ? 'notification.transfer_cancelled_by_sender' : 'notification.transfer_cancelled_by_receiver' } }
+      metadata: {
+        transferId: transferReq.id,
+        uiAction: 'navigate_transfer', // cho biết vẫn nên vào screen để xem trạng thái "Canceled"
+        i18n: { titleKey: 'notification.transfer_cancelled_title', bodyKey: isSenderCanceling ? 'notification.transfer_cancelled_by_sender' : 'notification.transfer_cancelled_by_receiver' }
+      }
     });
 
     await this.redisService.del(`pet:detail:${petId}`);
-
-    return {
-      success: true,
-      message: 'Transfer request cancelled.',
-      i18n: { key: 'success.transfer_cancelled' }
-    };
+    return { success: true, message: 'Transfer request cancelled.', i18n: { key: 'success.transfer_cancelled' } };
   }
+
 
   async updatePet(userId: string, petId: string, updateData: any) {
     const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
