@@ -657,7 +657,7 @@ export class PetsService {
     // THÊM ĐOẠN NÀY: Map avatarUrl cho FE
     const formattedPet = {
       ...petDataForSocket,
-      avatarUrl: petDataForSocket?.images?.length > 0 ? petDataForSocket.images[0].url : null,
+      avatarUrl: petDataForSocket?.images?.[0]?.url || null,
     };
 
     // ✅ CHỈ 1 payload duy nhất, đầy đủ, dùng transferId để FE match chính xác
