@@ -40,13 +40,9 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
 
       // 1. LƯU LẠI userId VÀO DATA CỦA SOCKET (để dùng lúc disconnect)
       client.data.userId = userId;
-
       client.join(`user_${userId}`);
-
-      // 2. LƯU TRẠNG THÁI ONLINE VÀO REDIS
       await this.redisService.addSocket(userId, client.id);
-
-      this.logger.log(`[Online] Client connected: ${client.id} - User: ${userId}`);
+      this.logger.log(`[${new Date().toISOString()}] [CONNECT] socket=${client.id} userId="${userId}"`);
     } catch (error: any) {
       this.logger.error(`Connection failed: ${error.message}`);
       client.disconnect();
@@ -59,6 +55,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   async handleDisconnect(client: Socket) {
     // 3. LẤY LẠI userId KHI USER MẤT MẠNG / TẮT APP
     const userId = client.data.userId;
+    this.logger.log(`[${new Date().toISOString()}] [DISCONNECT] socket=${client.id} userId="${userId}"`);
 
     if (userId) {
       // Xóa socket khỏi thiết bị hiện tại
@@ -86,7 +83,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   // --- TÍNH NĂNG MỚI: GỬI THÔNG BÁO THÔNG MINH ---
   async notifyUserSmartly(userId: string, eventName: string, payload: any) {
     const isOnline = await this.redisService.isUserOnline(userId);
-    this.logger.log(`[notifyUserSmartly] userId=${userId} isOnline=${isOnline} event=${eventName}`);
+    this.logger.log(`[${new Date().toISOString()}] [notifyUserSmartly] userId="${userId}" isOnline=${isOnline}`);
     if (isOnline) {
       // Nếu user đang online -> Bắn socket ngay lập tức để app tự rung/đổ chuông
       this.server.to(`user_${userId}`).emit(eventName, payload);
