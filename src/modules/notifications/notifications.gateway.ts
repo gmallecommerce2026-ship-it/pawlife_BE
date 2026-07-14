@@ -82,10 +82,11 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
     this.server.to(`user_${userId}`).emit('new_notification', notification);
   }
 
+
   // --- TÍNH NĂNG MỚI: GỬI THÔNG BÁO THÔNG MINH ---
   async notifyUserSmartly(userId: string, eventName: string, payload: any) {
     const isOnline = await this.redisService.isUserOnline(userId);
-
+    this.logger.log(`[notifyUserSmartly] userId=${userId} isOnline=${isOnline} event=${eventName}`);
     if (isOnline) {
       // Nếu user đang online -> Bắn socket ngay lập tức để app tự rung/đổ chuông
       this.server.to(`user_${userId}`).emit(eventName, payload);
