@@ -43,7 +43,7 @@ export class AuthService {
   // =======================================================
   async sendOtp(dto: SendOtpDto) {
     const { email, type } = dto;
-    
+
     if (type === OtpType.FORGOT_PASSWORD) {
       const userExists = await this.prisma.user.findUnique({ where: { email } });
       if (!userExists) throw new BadRequestException('Email not found');
@@ -57,7 +57,7 @@ export class AuthService {
 
     const isSignUp = type === OtpType.SIGNUP;
     const subject = isSignUp ? 'Verification code' : 'Password reset verification code';
-    
+
     // 2. PUSH TASK TO BACKGROUND JOB
     // Server will dispatch immediately (1ms) without waiting for MailerService to finish
     await this.mailQueue.add(
@@ -90,6 +90,56 @@ export class AuthService {
     const accessToken = this.jwtService.sign({ sub: user.id, email: user.email });
     return { accessToken, user, isNewUser, };
   }
+  async blockUser(blockerId: string, blockedId: string) {
+    if (blockerId === blockedId) {
+      throw new BadRequestException('You cannot block yourself.');
+    }
+
+    const targetUser = await this.prisma.user.findUnique({ where: { id: blockedId } });
+    if (!targetUser) {
+      throw new BadRequestException('User to block does not exist.');
+    }
+
+    await this.prisma.userBlock.upsert({
+      where: { blockerId_blockedId: { blockerId, blockedId } },
+      create: { blockerId, blockedId },
+      update: {},
+    });
+
+    // Hủy mọi transfer request đang PENDING giữa 2 bên khi block
+    await this.prisma.transferRequest.updateMany({
+      where: {
+        status: 'PENDING',
+        OR: [
+          { senderId: blockedId, receiverId: blockerId },
+          { senderId: blockerId, receiverId: blockedId },
+        ],
+      },
+      data: { status: 'CANCELED' },
+    });
+
+    return { success: true, message: 'User blocked successfully.' };
+  }
+
+  async unblockUser(blockerId: string, blockedId: string) {
+    await this.prisma.userBlock.deleteMany({ where: { blockerId, blockedId } });
+    return { success: true, message: 'User unblocked successfully.' };
+  }
+
+  async getBlockedUsers(blockerId: string) {
+    const blocks = await this.prisma.userBlock.findMany({
+      where: { blockerId },
+      include: { blocked: { select: { id: true, name: true, avatarUrl: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return blocks.map((b) => ({
+      id: b.blocked.id,
+      name: b.blocked.name,
+      avatarUrl: b.blocked.avatarUrl,
+      blockedAt: b.createdAt,
+    }));
+  }
 
   async getDevices(userId: string, currentSessionId?: string) {
     const devices = await this.prisma.deviceSession.findMany({ where: { userId }, orderBy: { lastActive: 'desc' }, });
@@ -100,7 +150,7 @@ export class AuthService {
     const device = await this.prisma.deviceSession.findUnique({ where: { id: deviceId }, });
     if (!device || device.userId !== userId) throw new BadRequestException('The device does not exist or does not belong to you.');
     await this.prisma.deviceSession.delete({ where: { id: deviceId } });
-      // INVALIDATE SESSION IN REDIS
+    // INVALIDATE SESSION IN REDIS
     await this.redisService.del(`auth:session:${deviceId}`);
     return { success: true, message: 'Logged out of device.' };
   }
@@ -142,37 +192,37 @@ export class AuthService {
     const { email, otp, newPassword } = dto;
     const redisKey = `auth:otp:${OtpType.FORGOT_PASSWORD}:${email}`;
     const otpRecord = await this.redisService.get<{ otp: string }>(redisKey);
-    
+
     if (!otpRecord) throw new BadRequestException('Please submit a new password reset request or the code has expired.');
     if (otpRecord.otp !== otp) throw new BadRequestException('The OTP you entered is invalid.');
-    
+
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    const updatedUser = await this.prisma.$transaction(async (tx) => { 
-      return await tx.user.update({ 
-        where: { email }, 
-        data: { password: hashedPassword }, 
-      }); 
+    const updatedUser = await this.prisma.$transaction(async (tx) => {
+      return await tx.user.update({
+        where: { email },
+        data: { password: hashedPassword },
+      });
     });
-    
+
     // 1. Delete used OTP
     await this.redisService.del(redisKey);
-    
+
     // =========================================================================
     // 2. ADDED: CLEAR USER PROFILE CACHE TO INVALIDATE OLD JWT TOKEN
     // =========================================================================
     await this.redisService.del(`auth:user_profile:${updatedUser.id}`);
-    
+
     // 3. Send notification
-    await this.notificationsService.createAndSendNotification({ 
-      userId: updatedUser.id, 
-      title: '🔒 Password changed successfully', 
-      body: 'Your account password has just been updated. If you did not do this, please contact us immediately.', 
-      type: NotificationType.SECURITY, 
+    await this.notificationsService.createAndSendNotification({
+      userId: updatedUser.id,
+      title: '🔒 Password changed successfully',
+      body: 'Your account password has just been updated. If you did not do this, please contact us immediately.',
+      type: NotificationType.SECURITY,
     });
-    
+
     return { message: 'Password has been changed successfully. You can log in with the new password.' };
   }
-  
+
   async generateTwoFactorAuthenticationSecret(userId: string, email: string) {
     const secret = speakeasy.generateSecret({ name: `PawLife (${email})`, });
     await this.prisma.user.update({ where: { id: userId }, data: { twoFactorSecret: secret.base32 }, });
@@ -196,25 +246,25 @@ export class AuthService {
   }
 
   async login(
-    dto: LoginDto, 
-    userAgent: string, 
-    ip: string, 
-    deviceNameHeader?: string, 
-    deviceOsHeader?: string, 
+    dto: LoginDto,
+    userAgent: string,
+    ip: string,
+    deviceNameHeader?: string,
+    deviceOsHeader?: string,
     deviceIdHeader?: string // <-- 1. ADD THIS PARAMETER
   ) {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    
+
     if (!user || !user.password) throw new UnauthorizedException('Incorrect account or password.');
-    
+
     const isPasswordMatch = await bcrypt.compare(dto.password, user.password);
     if (!isPasswordMatch) throw new UnauthorizedException('Incorrect account or password.');
-    
+
     if (user.isTwoFactorEnabled) {
       const tempToken = this.jwtService.sign({ userId: user.id, is2FAPending: true }, { expiresIn: '5m' });
       return { requires2FA: true, tempToken, message: 'Please enter the Authenticator code to continue.', };
     }
-    
+
     // <-- 2. PASS DOWN TO MAIN HANDLER FUNCTION
     return await this.generateAuthResponse(user, userAgent, ip, deviceNameHeader, deviceOsHeader, deviceIdHeader, dto.rememberMe);
   }
@@ -266,7 +316,7 @@ export class AuthService {
       const user = await this.prisma.user.findUnique({ where: { id: userId }, });
       if (!user) return { success: true };
       if (user.avatarUrl) {
-        const fileKey = this.extractFileKey(user.avatarUrl); 
+        const fileKey = this.extractFileKey(user.avatarUrl);
         await this.r2Service.deleteFile(fileKey);
       }
       await this.prisma.$transaction(async (tx) => {
@@ -297,14 +347,14 @@ export class AuthService {
             `https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${dto.token}`,
             { httpsAgent }
           );
-          
+
           if (!data) throw new BadRequestException('Cannot connect to the Facebook system.');
-          
+
           // EMAIL FALLBACK STRATEGY: 
           // Many users create FB with a phone number so they won't have an email. We create a dummy email to avoid disrupting the login flow.
-          email = data.email || `${data.id}@facebook.pawlife.local`; 
-          
-          if (!name) name = data.name || `User_${data.id.substring(0, 6)}`; 
+          email = data.email || `${data.id}@facebook.pawlife.local`;
+
+          if (!name) name = data.name || `User_${data.id.substring(0, 6)}`;
           picture = data.picture?.data?.url || null;
           break;
         }
@@ -315,7 +365,7 @@ export class AuthService {
         }
         default: throw new BadRequestException('Unsupported provider.');
       }
-    } catch (error: any) { 
+    } catch (error: any) {
       // 1. Log detailed errors from Axios (Facebook API) for easy debugging
       const realError = error?.response?.data?.error?.message || error?.message || 'Unknown error';
       console.error('Real Social Login Error:', realError);
@@ -343,33 +393,33 @@ export class AuthService {
   }
 
   private async generateAuthResponse(
-    user: any, 
-    userAgent: string, 
-    ip: string, 
-    deviceNameHeader?: string, 
+    user: any,
+    userAgent: string,
+    ip: string,
+    deviceNameHeader?: string,
     deviceOsHeader?: string,
     deviceIdHeader?: string, // <-- ADDED 6TH PARAMETER: Physical device ID
     rememberMe?: boolean // <-- ADDED 7TH PARAMETER: Remember login
   ) {
-    
+
     let updatedData: any = {}; let needsUpdate = false;
     if (!user.name || user.name.trim() === '' || user.name === 'User') { updatedData.name = user.email.split('@')[0]; user.name = updatedData.name; needsUpdate = true; }
     if (!user.gender) { updatedData.gender = 'UNKNOWN'; user.gender = updatedData.gender; needsUpdate = true; }
     if (needsUpdate) { await this.prisma.user.update({ where: { id: user.id }, data: updatedData, }); }
 
-    const parser = new UAParser(userAgent); 
-    const os = parser.getOS(); 
+    const parser = new UAParser(userAgent);
+    const os = parser.getOS();
     const device = parser.getDevice();
-    
+
     let deviceType = 'smartphone';
     if (device.type === 'tablet') deviceType = 'tablet';
-    if (!device.type && (os.name === 'Mac OS' || os.name === 'Windows' || os.name === 'Linux' || os.name === 'Ubuntu')) { 
-      deviceType = 'laptop'; 
+    if (!device.type && (os.name === 'Mac OS' || os.name === 'Windows' || os.name === 'Linux' || os.name === 'Ubuntu')) {
+      deviceType = 'laptop';
     }
-    
+
     const geo = geoip.lookup(ip);
     const location = geo ? `${geo.city || ''}, ${geo.country || ''}`.replace(/^, |, $/g, '') || 'Unknown Location' : 'Unknown Location';
-    
+
     // Prioritize Header sent from Mobile because it is more accurate than the default User-Agent
     const finalDeviceName = deviceNameHeader || device.model || os.name || 'Unknown Device';
     const finalOsName = deviceOsHeader || `${os.name || ''} ${os.version || ''}`.trim() || 'Unknown OS';
@@ -409,7 +459,7 @@ export class AuthService {
           ipAddress: ip,
           location: location,
           deviceIdentifier: deviceIdHeader || session.deviceIdentifier, // Sync ID to DB if old record does not have it
-          deviceName: finalDeviceName, 
+          deviceName: finalDeviceName,
           os: finalOsName // Always update OS in case they just updated iOS/Android
         }
       });
@@ -428,37 +478,37 @@ export class AuthService {
       }
 
       // Create a new device on first login
-      session = await this.prisma.deviceSession.create({ 
-        data: { 
-          userId: user.id, 
+      session = await this.prisma.deviceSession.create({
+        data: {
+          userId: user.id,
           deviceIdentifier: deviceIdHeader, // Save additional device ID to DB
-          deviceName: finalDeviceName, 
-          deviceType: deviceType, 
-          os: finalOsName, 
-          ipAddress: ip, 
-          location: location, 
-        } 
+          deviceName: finalDeviceName,
+          deviceType: deviceType,
+          os: finalOsName,
+          ipAddress: ip,
+          location: location,
+        }
       });
     }
     // =========================================================================
-    const expiresIn = rememberMe ? '30d' : '1d'; 
+    const expiresIn = rememberMe ? '30d' : '1d';
     const redisTtlSeconds = rememberMe ? (30 * 24 * 60 * 60) : (24 * 60 * 60);
     await this.redisService.set(`auth:session:${session.id}`, "active", redisTtlSeconds); // TTL equals JWT lifespan
 
     const payload = { userId: user.id, sessionId: session.id, email: user.email, role: user.role };
     const accessToken = this.jwtService.sign(payload, { expiresIn });
-    
+
     const isProfileComplete = !!(
-      user.name && 
-      user.name !== 'User' && 
+      user.name &&
+      user.name !== 'User' &&
       user.name !== user.email.split('@')[0] && // Exclude the case of default name taken from email
       user.phone &&
-      user.gender && 
+      user.gender &&
       user.gender !== 'UNKNOWN' &&
       user.dob &&
       user.avatarUrl
     );
-    
+
     return {
       message: 'Login successful',
       accessToken,

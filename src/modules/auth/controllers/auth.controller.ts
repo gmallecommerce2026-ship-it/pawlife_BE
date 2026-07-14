@@ -9,7 +9,7 @@ import { SkipProfileCheck } from 'src/common/decorators/skip-profile-check.decor
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Throttle({ default: { limit: 3, ttl: 60000 } }) // BỔ SUNG: Tối đa 3 lần / 1 phút
   @Post('send-otp')
@@ -34,7 +34,7 @@ export class AuthController {
   @Get('me')
   @UseGuards(JwtAuthGuard)
   async getProfile(@User() user: any) {
-    return user; 
+    return user;
   }
 
   @Post('change-password')
@@ -61,7 +61,7 @@ export class AuthController {
   ) {
     const realIp = forwardedIp ? forwardedIp.split(',')[0] : ip;
     // <-- 2. TRUYỀN THÊM BIẾN deviceIdHeader VÀO CUỐI HÀM
-    return this.authService.login(loginDto, userAgent, realIp, deviceNameHeader, deviceOsHeader, deviceIdHeader); 
+    return this.authService.login(loginDto, userAgent, realIp, deviceNameHeader, deviceOsHeader, deviceIdHeader);
   }
 
   @Post('2fa/generate')
@@ -123,7 +123,31 @@ export class AuthController {
     console.log("social login start debugging!");
     return this.authService.socialLogin(socialLoginDto, userAgent, realIp, deviceNameHeader, deviceOsHeader);
   }
+  @Post('block/:userId')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async blockUser(
+    @User('id') userId: string,
+    @Param('userId') targetUserId: string,
+  ) {
+    return this.authService.blockUser(userId, targetUserId);
+  }
 
+  @Delete('block/:userId')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async unblockUser(
+    @User('id') userId: string,
+    @Param('userId') targetUserId: string,
+  ) {
+    return this.authService.unblockUser(userId, targetUserId);
+  }
+
+  @Get('blocked-users')
+  @UseGuards(JwtAuthGuard)
+  async getBlockedUsers(@User('id') userId: string) {
+    return this.authService.getBlockedUsers(userId);
+  }
   @Get('devices')
   @UseGuards(JwtAuthGuard)
   async getDevices(@User() user: any) {
@@ -141,7 +165,7 @@ export class AuthController {
   }
 
   @Delete('account')
-  @UseGuards(JwtAuthGuard) 
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   async deleteAccount(@User('id') userId: string) {
     return this.authService.deleteAccount(userId);

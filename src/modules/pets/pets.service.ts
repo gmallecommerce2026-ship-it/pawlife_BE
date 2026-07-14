@@ -643,6 +643,17 @@ export class PetsService {
       throw new BadRequestException({ message: 'Cannot transfer a pet to yourself.', i18n: { key: 'error.transfer_to_self' } });
     }
 
+    // 🆕 CHẶN GỬI YÊU CẦU NẾU RECEIVER ĐÃ BLOCK SENDER
+    const isBlocked = await this.prisma.userBlock.findUnique({
+      where: { blockerId_blockedId: { blockerId: receiver.id, blockedId: senderId } },
+    });
+    if (isBlocked) {
+      throw new ForbiddenException({
+        message: 'This user is not accepting transfer requests from you.',
+        i18n: { key: 'error.transfer_blocked' },
+      });
+    }
+
     await this.prisma.transferRequest.updateMany({ where: { petId, status: 'PENDING' }, data: { status: 'CANCELED' } });
 
     const transferRequest = await this.prisma.transferRequest.create({
