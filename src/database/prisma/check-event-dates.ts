@@ -3,14 +3,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  const events = await prisma.event.findMany({
-    where: {
-      OR: [
-        { title: { path: ['vi'], string_contains: 'Interpetfest' } },
-        { title: { path: ['vi'], string_contains: 'Grand Season' } },
-        { title: { path: ['vi'], string_contains: 'WCF Jubilee' } },
-      ],
-    },
+  const allEvents = await prisma.event.findMany({
     select: {
       id: true,
       title: true,
@@ -18,6 +11,13 @@ async function main() {
       endDate: true,
       createdAt: true,
     },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const keywords = ['Interpetfest', 'Grand Season', 'WCF Jubilee'];
+  const events = allEvents.filter((ev) => {
+    const titleStr = JSON.stringify(ev.title);
+    return keywords.some((kw) => titleStr.includes(kw));
   });
 
   console.log(`Tìm thấy ${events.length} event khớp:\n`);
