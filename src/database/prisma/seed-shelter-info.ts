@@ -103,7 +103,7 @@ const eventsData: EventSeedData[] = [
       en: 'NECC, Tu Liem Ward, Hanoi',
     },
     address:
-      'National Exhibition Construction Center (NECC) - 1 phố Đỗ Đức Dục, phường Từ Liêm, Hà Nội',
+      'National Exhibition Construction Center (NECC) - 799 Đường Nguyễn Văn Linh, Khu đô thị Phú Mỹ Hưng, Tân Mỹ, Hồ Chí Minh',
     // Nhiều khung giờ khác nhau theo ngày -> lưu chi tiết trong description,
     // startDate/endDate chỉ lấy mốc sớm nhất -> muộn nhất.
     description: {
@@ -203,7 +203,7 @@ At Grand Season Festival, every connection is genuine, and every experience is f
     // vẻ nhầm lẫn khi copy dữ liệu. Mình tạm dùng địa chỉ SECC thực tế phổ
     // biến, bạn kiểm tra và sửa lại nếu không đúng.
     address:
-      'Saigon Exhibition and Convention Center (SECC) - 799 Nguyễn Văn Linh, phường Tân Mỹ, TP. Hồ Chí Minh',
+      'Saigon Exhibition and Convention Center (SECC) - 799 Đường Nguyễn Văn Linh, Khu đô thị Phú Mỹ Hưng, Tân Mỹ, Hồ Chí Minh',
     description: {
       vi: `Nằm trong khuôn khổ Triển lãm và Lễ hội Thú cưng InterPetFest 2026, WCF Jubilee Cat Show 2026 là đấu trường chuyên nghiệp hàng đầu dành cho giới nuôi mèo chuyên nghiệp và cộng đồng yêu mèo tại Việt Nam và các nước lân cận.
 
