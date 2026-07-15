@@ -249,12 +249,6 @@ INTERNATIONAL JUDGING PANEL:
 async function main() {
   console.log('🌱 Bắt đầu seed dữ liệu Event...');
 
-  // 0. XOÁ TOÀN BỘ SỰ KIỆN CŨ trước khi seed lại từ đầu
-  console.log('🗑️  Đang xoá toàn bộ Event cũ (và ảnh liên quan)...');
-  await prisma.eventImage.deleteMany({}); // xoá ảnh trước nếu không có onDelete: Cascade
-  const deleted = await prisma.event.deleteMany({});
-  console.log(`🗑️  Đã xoá ${deleted.count} Event cũ.`);
-
   for (const eventData of eventsData) {
     console.log(`\n--- Đang xử lý: [${eventData.title.vi}] ---`);
 
@@ -291,7 +285,20 @@ async function main() {
       },
     });
 
-    // 3. Vì đã xoá sạch Event cũ ở bước 0, giờ luôn CREATE mới hoàn toàn
+    // 3. "Giả lập upsert" cho Event vì Event chưa có unique key riêng
+    //    (không tính id uuid tự sinh). Match theo organizerId + startDate.
+    //    LƯU Ý: nếu sau này bạn đổi startDate của 1 event đã seed rồi chạy
+    //    lại, script sẽ KHÔNG nhận ra là event cũ (vì key match đã đổi)
+    //    và sẽ tạo thêm 1 event mới thay vì update. Nếu bạn thường xuyên
+    //    đổi ngày giờ event, nên chuyển sang cách dùng slug unique.
+    const existingEvent = await prisma.event.findFirst({
+      where: {
+        organizerId: organizer.id,
+        startDate: eventData.startDate,
+      },
+    });
+
+    // Payload dùng chung cho cả nhánh update và create
     const eventPayload = {
       title: eventData.title as unknown as Prisma.InputJsonValue,
       category: eventData.category as unknown as Prisma.InputJsonValue,
@@ -305,21 +312,45 @@ async function main() {
       longitude: eventData.longitude,
     };
 
-    const event = await prisma.event.create({
-      data: {
-        ...eventPayload,
-        organizer: {
-          connect: { id: organizer.id },
+    let event;
+
+    if (existingEvent) {
+      // Event đã tồn tại -> UPDATE (đè dữ liệu mới lên, không tạo bản trùng)
+      event = await prisma.event.update({
+        where: { id: existingEvent.id },
+        data: {
+          ...eventPayload,
+          organizer: {
+            connect: { id: organizer.id },
+          },
+          images: {
+            deleteMany: {}, // xóa toàn bộ ảnh cũ của event này trước khi tạo lại
+            create: [
+              { url: heroImageUrl },
+              { url: organizerAvatarUrl },
+            ],
+          },
         },
-        images: {
-          create: [
-            { url: heroImageUrl },
-            { url: organizerAvatarUrl },
-          ],
+      });
+      console.log(`♻️  Đã cập nhật Event id: ${event.id}`);
+    } else {
+      // Event chưa tồn tại -> CREATE mới
+      event = await prisma.event.create({
+        data: {
+          ...eventPayload,
+          organizer: {
+            connect: { id: organizer.id },
+          },
+          images: {
+            create: [
+              { url: heroImageUrl },
+              { url: organizerAvatarUrl },
+            ],
+          },
         },
-      },
-    });
-    console.log(`✅ Đã tạo mới Event id: ${event.id}`);
+      });
+      console.log(`✅ Đã tạo mới Event id: ${event.id}`);
+    }
   }
 
   console.log('\n🎉 Hoàn tất seed Event!');
