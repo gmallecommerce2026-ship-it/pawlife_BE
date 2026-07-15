@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -49,27 +49,39 @@ async function uploadLocalFileToR2(fileName: string, contentType: string) {
   }
 }
 
+// Helper: tạo handle (slug) từ tên organizer, VD: "Eventure JSC" -> "eventure-jsc"
+function slugify(input: string): string {
+  return input
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // bỏ dấu tiếng Việt
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 // ============================================================
 // DỮ LIỆU SEED — SONG NGỮ VI / EN
-// ⚠️ NOTE: field name (titleVi/titleEn, ...) là GIẢ ĐỊNH theo
-// pattern phổ biến. Hãy đối chiếu với prisma/schema.prisma thật
-// của bạn (model Event / Organizer / EventGallery) và đổi tên
-// field cho khớp trước khi chạy script này.
+// title / category / description / locationName sẽ được lưu
+// dạng Json { vi, en } theo đúng schema thật (model Event).
+// address là String đơn ngữ -> dùng bản tiếng Việt làm mặc định.
 // ============================================================
 
+interface Bilingual {
+  vi: string;
+  en: string;
+}
+
 interface EventSeedData {
-  titleVi: string;
-  titleEn: string;
-  tagVi: string;
-  tagEn: string;
-  locationShortVi: string;
-  locationShortEn: string;
-  locationFullVi: string;
-  locationFullEn: string;
-  timeVi: string;
-  timeEn: string;
-  descriptionVi: string;
-  descriptionEn: string;
+  title: Bilingual;
+  category: Bilingual;
+  locationName: Bilingual;
+  address: string; // String đơn ngữ theo schema
+  description: Bilingual;
+  startDate: Date;
+  endDate: Date;
   organizerName: string;
   heroImageFileName: string;
   organizerAvatarFileName: string;
@@ -78,30 +90,44 @@ interface EventSeedData {
 const eventsData: EventSeedData[] = [
   // ---------------- SỰ KIỆN 1 ----------------
   {
-    titleVi: 'Triển lãm & lễ hội thú cưng Interpetfest',
-    titleEn: 'InterPetFest – Pet Exhibition & Festival',
-    tagVi: 'Mùa lễ hội',
-    tagEn: 'Festival Season',
-    locationShortVi: 'NECC, Phường Từ Liêm, Hà Nội',
-    locationShortEn: 'NECC, Tu Liem Ward, Hanoi',
-    locationFullVi:
+    title: {
+      vi: 'Triển lãm & lễ hội thú cưng Interpetfest',
+      en: 'InterPetFest – Pet Exhibition & Festival',
+    },
+    category: {
+      vi: 'Mùa lễ hội',
+      en: 'Festival Season',
+    },
+    locationName: {
+      vi: 'NECC, Phường Từ Liêm, Hà Nội',
+      en: 'NECC, Tu Liem Ward, Hanoi',
+    },
+    address:
       'National Exhibition Construction Center (NECC) - 1 phố Đỗ Đức Dục, phường Từ Liêm, Hà Nội',
-    locationFullEn:
-      'National Exhibition Construction Center (NECC) - 1 Do Duc Duc Street, Tu Liem Ward, Hanoi',
-    timeVi:
-      '17/04/2026 lúc 9:30AM - 5:30PM\n18-19/04/2026 lúc 9:30AM - 6:30PM',
-    timeEn:
-      'April 17, 2026, 9:30AM - 5:30PM\nApril 18-19, 2026, 9:30AM - 6:30PM',
-    descriptionVi: `A. HÀNH TRÌNH TOÀN CẦU
+    // Nhiều khung giờ khác nhau theo ngày -> lưu chi tiết trong description,
+    // startDate/endDate chỉ lấy mốc sớm nhất -> muộn nhất.
+    description: {
+      vi: `THỜI GIAN CHI TIẾT:
+• 17/04/2026: 9:30AM - 5:30PM
+• 18-19/04/2026: 9:30AM - 6:30PM
+
+A. HÀNH TRÌNH TOÀN CẦU
 Ban tổ chức InterPetFest thành lập các đoàn khách tham quan thương mại và đơn vị triển lãm Việt Nam để tham dự các sự kiện thú cưng uy tín trên khắp thế giới. Quảng bá gian hàng InterPetFest 2026 tại các triển lãm thú cưng quốc tế lớn trên toàn cầu. Ban tổ chức InterPetFest đến tham quan các sự kiện thú cưng tại những quốc gia phát triển. Chúng tôi luôn mong muốn tiếp thu những ý tưởng mới, công nghệ mới để áp dụng cho kỳ InterPetFest 2026, đồng thời mở rộng mạng lưới quốc tế nhằm mang lại lợi ích thiết thực cho các đơn vị triển lãm và khách tham quan.
 
 B. SỰ KIỆN QUẢNG BÁ TRONG NƯỚC
 Hướng tới phát triển ngành thú cưng Việt Nam, ban tổ chức InterPetFest không chỉ tạo điều kiện kết nối kinh doanh trong ngành, cập nhật xu hướng thú cưng toàn cầu, mà còn mang sứ mệnh nâng cao kiến thức cho người tiêu dùng, khuyến khích nuôi thú cưng, và thay đổi nhận thức của công chúng về thú cưng tại Việt Nam. Điều này đạt được thông qua việc tổ chức các sự kiện cộng đồng như MallPetFest (sự kiện thú cưng tại trung tâm thương mại) và Dogathon (Giải Chạy vì Tương lai Chó Mèo Việt Nam).`,
-    descriptionEn: `A. A GLOBAL JOURNEY
+      en: `DETAILED SCHEDULE:
+• April 17, 2026: 9:30AM - 5:30PM
+• April 18-19, 2026: 9:30AM - 6:30PM
+
+A. A GLOBAL JOURNEY
 InterPetFest's organizing committee forms delegations of trade visitors and Vietnamese exhibitors to attend leading pet industry events around the world. The InterPetFest 2026 booth is promoted at major international pet exhibitions worldwide. The organizing committee also visits pet events in developed countries, always seeking new ideas and technologies to apply to InterPetFest 2026, while expanding its international network to bring practical benefits to exhibitors and visitors alike.
 
 B. DOMESTIC PROMOTIONAL EVENTS
 With a vision to grow Vietnam's pet industry, InterPetFest's organizers not only foster business connections and keep the industry updated on global pet trends, but also carry a mission to raise consumer awareness, encourage pet ownership, and shift public perception of pets in Vietnam. This is achieved through community events such as MallPetFest (pet events held at shopping malls) and Dogathon (the Run for the Future of Vietnamese Dogs and Cats).`,
+    },
+    startDate: new Date('2026-04-17T09:30:00+07:00'),
+    endDate: new Date('2026-04-19T18:30:00+07:00'),
     organizerName: 'Eventure JSC',
     heroImageFileName: 'event-1-hero-banner.png',
     organizerAvatarFileName: 'organizer-1-avt.png',
@@ -109,21 +135,26 @@ With a vision to grow Vietnam's pet industry, InterPetFest's organizers not only
 
   // ---------------- SỰ KIỆN 2 ----------------
   {
-    titleVi: 'A Grand Season Festival - Petfair Vietnam',
-    titleEn: 'A Grand Season Festival - Petfair Vietnam',
-    tagVi: 'Mùa lễ hội',
-    tagEn: 'Festival Season',
-    locationShortVi: 'VEC, Phường Đông Anh, Hà Nội',
-    locationShortEn: 'VEC, Dong Anh Ward, Hanoi',
-    locationFullVi:
+    title: {
+      vi: 'A Grand Season Festival - Petfair Vietnam',
+      en: 'A Grand Season Festival - Petfair Vietnam',
+    },
+    category: {
+      vi: 'Mùa lễ hội',
+      en: 'Festival Season',
+    },
+    locationName: {
+      vi: 'VEC, Phường Đông Anh, Hà Nội',
+      en: 'VEC, Dong Anh Ward, Hanoi',
+    },
+    address:
       'Vietnam Exposition Center (VEC) - Đường Cầu Tứ Liên, phường Đông Anh, Hà Nội',
-    locationFullEn:
-      'Vietnam Exposition Center (VEC) - Cau Tu Lien Street, Dong Anh Ward, Hanoi',
-    timeVi:
-      '18-20/11/2026 lúc 9:00AM - 17:00PM\n21/11/2026 lúc 9:00AM - 16:00PM',
-    timeEn:
-      'November 18-20, 2026, 9:00AM - 5:00PM\nNovember 21, 2026, 9:00AM - 4:00PM',
-    descriptionVi: `Tại Grand Season Festival, chúng mình không chỉ mang đến một triển lãm - chúng mình tạo ra một không gian để bạn cùng "người bạn bốn chân" viết nên những kỷ niệm thật đẹp. Đây là nơi hàng nghìn tâm hồn đồng điệu của cộng đồng yêu thú cưng miền Bắc sẽ hội ngộ, cùng sẻ chia và lan tỏa tình yêu thương vô điều kiện!
+    description: {
+      vi: `THỜI GIAN CHI TIẾT:
+• 18-20/11/2026: 9:00AM - 5:00PM
+• 21/11/2026: 9:00AM - 4:00PM
+
+Tại Grand Season Festival, chúng mình không chỉ mang đến một triển lãm - chúng mình tạo ra một không gian để bạn cùng "người bạn bốn chân" viết nên những kỷ niệm thật đẹp. Đây là nơi hàng nghìn tâm hồn đồng điệu của cộng đồng yêu thú cưng miền Bắc sẽ hội ngộ, cùng sẻ chia và lan tỏa tình yêu thương vô điều kiện!
 
 Đến đây, bạn sẽ thấy hạnh phúc hiện hữu qua từng trải nghiệm.
 • Nơi hàng nghìn "đồng môn" cùng đam mê gặp gỡ, sẻ chia bí kíp chăm Boss và cùng nhau tạo nên một cộng đồng vững mạnh.
@@ -132,7 +163,11 @@ With a vision to grow Vietnam's pet industry, InterPetFest's organizers not only
 • Dành tặng cho Boss yêu những trải nghiệm chăm sóc sức khỏe và làm đẹp từ các đối tác thú y uy tín.
 
 Tại Grand Season Festival, mọi kết nối đều là thật, mọi trải nghiệm đều đầy ắp sự thấu hiểu.`,
-    descriptionEn: `At Grand Season Festival, we don't just bring you an exhibition — we create a space for you and your four-legged best friend to write beautiful memories together. This is where thousands of like-minded souls from the Northern pet-loving community come together to share and spread unconditional love!
+      en: `DETAILED SCHEDULE:
+• November 18-20, 2026: 9:00AM - 5:00PM
+• November 21, 2026: 9:00AM - 4:00PM
+
+At Grand Season Festival, we don't just bring you an exhibition — we create a space for you and your four-legged best friend to write beautiful memories together. This is where thousands of like-minded souls from the Northern pet-loving community come together to share and spread unconditional love!
 
 Here, happiness comes alive in every experience.
 • A place where thousands of fellow enthusiasts meet, exchange tips on caring for their "Boss," and build a strong community together.
@@ -141,6 +176,9 @@ Here, happiness comes alive in every experience.
 • Special health and beauty care experiences for your beloved Boss, provided by trusted veterinary partners.
 
 At Grand Season Festival, every connection is genuine, and every experience is filled with understanding.`,
+    },
+    startDate: new Date('2026-11-18T09:00:00+07:00'),
+    endDate: new Date('2026-11-21T16:00:00+07:00'),
     organizerName: 'Minh Vi VEAS',
     heroImageFileName: 'event-2-hero-banner.png',
     organizerAvatarFileName: 'organizer-2-avt.png',
@@ -148,24 +186,26 @@ At Grand Season Festival, every connection is genuine, and every experience is f
 
   // ---------------- SỰ KIỆN 3 ----------------
   {
-    titleVi: 'WCF Jubilee Cat Show 2026',
-    titleEn: 'WCF Jubilee Cat Show 2026',
-    tagVi: 'Cuộc thi cho mèo',
-    tagEn: 'Cat Competition',
-    locationShortVi: 'SECC, Phường Tân Mỹ, TP. Hồ Chí Minh',
-    locationShortEn: 'SECC, Tan My Ward, Ho Chi Minh City',
-    // ⚠️ Địa chỉ chi tiết bạn cung cấp cho sự kiện 3 trùng với địa chỉ
-    // của NECC (Hà Nội) ở sự kiện 1, trong khi tên địa điểm là SECC
-    // (TP.HCM) — có thể là nhầm lẫn khi copy dữ liệu. Mình tạm dùng
-    // địa chỉ SECC thực tế phổ biến (799 Nguyễn Văn Linh, Q.7,
-    // TP.HCM), bạn kiểm tra và sửa lại nếu không đúng.
-    locationFullVi:
+    title: {
+      vi: 'WCF Jubilee Cat Show 2026',
+      en: 'WCF Jubilee Cat Show 2026',
+    },
+    category: {
+      vi: 'Cuộc thi cho mèo',
+      en: 'Cat Competition',
+    },
+    locationName: {
+      vi: 'SECC, Phường Tân Mỹ, TP. Hồ Chí Minh',
+      en: 'SECC, Tan My Ward, Ho Chi Minh City',
+    },
+    // ⚠️ Địa chỉ chi tiết bạn cung cấp cho sự kiện 3 trùng với địa chỉ NECC
+    // (Hà Nội) ở sự kiện 1, trong khi tên địa điểm là SECC (TP.HCM) — có
+    // vẻ nhầm lẫn khi copy dữ liệu. Mình tạm dùng địa chỉ SECC thực tế phổ
+    // biến, bạn kiểm tra và sửa lại nếu không đúng.
+    address:
       'Saigon Exhibition and Convention Center (SECC) - 799 Nguyễn Văn Linh, phường Tân Mỹ, TP. Hồ Chí Minh',
-    locationFullEn:
-      'Saigon Exhibition and Convention Center (SECC) - 799 Nguyen Van Linh, Tan My Ward, Ho Chi Minh City',
-    timeVi: '29-30/08/2026',
-    timeEn: 'August 29-30, 2026',
-    descriptionVi: `Nằm trong khuôn khổ Triển lãm và Lễ hội Thú cưng InterPetFest 2026, WCF Jubilee Cat Show 2026 là đấu trường chuyên nghiệp hàng đầu dành cho giới nuôi mèo chuyên nghiệp và cộng đồng yêu mèo tại Việt Nam và các nước lân cận.
+    description: {
+      vi: `Nằm trong khuôn khổ Triển lãm và Lễ hội Thú cưng InterPetFest 2026, WCF Jubilee Cat Show 2026 là đấu trường chuyên nghiệp hàng đầu dành cho giới nuôi mèo chuyên nghiệp và cộng đồng yêu mèo tại Việt Nam và các nước lân cận.
 
 Sự kiện quy tụ gần 100 thí sinh mèo xuất sắc thuộc đa dạng các giống mèo, cùng sự xuất hiện của dàn Ban giám khảo (BGK) quốc tế uy tín từ Liên đoàn Mèo Thế giới (WCF).
 
@@ -180,7 +220,7 @@ BAN GIÁM KHẢO QUỐC TẾ:
 • Giám khảo Jurgen Gunther Trautmann từ CHLB Đức
 • Giám khảo Olga Kuznetsova từ Liên Bang Nga
 • Giám khảo Ekaterina Shershavikova từ Liên Bang Nga`,
-    descriptionEn: `Held as part of InterPetFest 2026 — the Pet Exhibition & Festival — WCF Jubilee Cat Show 2026 is the leading professional arena for serious cat breeders and cat-loving communities in Vietnam and neighboring countries.
+      en: `Held as part of InterPetFest 2026 — the Pet Exhibition & Festival — WCF Jubilee Cat Show 2026 is the leading professional arena for serious cat breeders and cat-loving communities in Vietnam and neighboring countries.
 
 The event brings together nearly 100 outstanding feline contestants from a wide variety of breeds, judged by a distinguished panel of international judges from the World Cat Federation (WCF).
 
@@ -195,6 +235,11 @@ INTERNATIONAL JUDGING PANEL:
 • Judge Jurgen Gunther Trautmann, Germany
 • Judge Olga Kuznetsova, Russian Federation
 • Judge Ekaterina Shershavikova, Russian Federation`,
+    },
+    // Không có khung giờ cụ thể trong dữ liệu gốc -> mình giả định 9:00-18:00,
+    // bạn chỉnh lại nếu ban tổ chức có giờ chính thức khác.
+    startDate: new Date('2026-08-29T09:00:00+07:00'),
+    endDate: new Date('2026-08-30T18:00:00+07:00'),
     organizerName: 'Interpetfest',
     heroImageFileName: 'event-3-hero-banner.png',
     organizerAvatarFileName: 'organizer-3-avt.png',
@@ -205,7 +250,7 @@ async function main() {
   console.log('🌱 Bắt đầu seed dữ liệu Event...');
 
   for (const eventData of eventsData) {
-    console.log(`\n--- Đang xử lý: [${eventData.titleVi}] ---`);
+    console.log(`\n--- Đang xử lý: [${eventData.title.vi}] ---`);
 
     // 1. Upload ảnh hero banner + avatar ban tổ chức lên R2
     const heroImageUrl = await uploadLocalFileToR2(
@@ -219,52 +264,54 @@ async function main() {
 
     if (!heroImageUrl || !organizerAvatarUrl) {
       console.error(
-        `❌ Bỏ qua [${eventData.titleVi}] vì thiếu ảnh upload lên R2.`,
+        `❌ Bỏ qua [${eventData.title.vi}] vì thiếu ảnh upload lên R2.`,
       );
       continue;
     }
 
-    // 2. Upsert Organizer (tránh tạo trùng nếu chạy seed nhiều lần)
+    // 2. Upsert Organizer theo handle (unique field thật trong schema)
+    const organizerHandle = slugify(eventData.organizerName);
+
     const organizer = await prisma.organizer.upsert({
-      where: { name: eventData.organizerName },
+      where: { handle: organizerHandle },
       update: {
+        name: eventData.organizerName,
         avatarUrl: organizerAvatarUrl,
       },
       create: {
         name: eventData.organizerName,
+        handle: organizerHandle,
         avatarUrl: organizerAvatarUrl,
       },
     });
 
-    // 3. Tạo Event kèm gallery ảnh (random ảnh minh hoạ hợp lý theo hero banner)
+    // 3. Tạo Event — title/category/description/locationName là Json {vi, en}
     const event = await prisma.event.create({
       data: {
-        titleVi: eventData.titleVi,
-        titleEn: eventData.titleEn,
-        tagVi: eventData.tagVi,
-        tagEn: eventData.tagEn,
-        locationShortVi: eventData.locationShortVi,
-        locationShortEn: eventData.locationShortEn,
-        locationFullVi: eventData.locationFullVi,
-        locationFullEn: eventData.locationFullEn,
-        timeVi: eventData.timeVi,
-        timeEn: eventData.timeEn,
-        descriptionVi: eventData.descriptionVi,
-        descriptionEn: eventData.descriptionEn,
-        heroImageUrl: heroImageUrl,
+        title: eventData.title as unknown as Prisma.InputJsonValue,
+        category: eventData.category as unknown as Prisma.InputJsonValue,
+        description: eventData.description as unknown as Prisma.InputJsonValue,
+        locationName: eventData.locationName as unknown as Prisma.InputJsonValue,
+        address: eventData.address,
+        bannerUrl: heroImageUrl,
+        startDate: eventData.startDate,
+        endDate: eventData.endDate,
         organizer: {
           connect: { id: organizer.id },
         },
-        gallery: {
+        // ⚠️ Field ảnh gallery đang GIẢ ĐỊNH là `imageUrl` theo pattern
+        // bannerUrl/avatarUrl/coverUrl của toàn schema. Nếu model
+        // EventImage dùng tên khác (VD: `url`), đổi lại field bên dưới.
+        images: {
           create: [
-            { imageUrl: heroImageUrl, order: 0 },
-            { imageUrl: organizerAvatarUrl, order: 1 },
+            { imageUrl: heroImageUrl } as unknown as Prisma.EventImageUncheckedCreateWithoutEventInput,
+            { imageUrl: organizerAvatarUrl } as unknown as Prisma.EventImageUncheckedCreateWithoutEventInput,
           ],
         },
       },
     });
 
-    console.log(`✅ Đã tạo Event: [${event.titleVi}] (id: ${event.id})`);
+    console.log(`✅ Đã tạo Event id: ${event.id}`);
   }
 
   console.log('\n🎉 Hoàn tất seed Event!');
