@@ -203,7 +203,7 @@ At Grand Season Festival, every connection is genuine, and every experience is f
     // vẻ nhầm lẫn khi copy dữ liệu. Mình tạm dùng địa chỉ SECC thực tế phổ
     // biến, bạn kiểm tra và sửa lại nếu không đúng.
     address:
-      'Saigon Exhibition and Convention Center (SECC) - 799 Đường Nguyễn Văn Linh, Khu đô thị Phú Mỹ Hưng, Tân Mỹ, Hồ Chí Minh',
+      'Saigon Exhibition and Convention Center (SECC) - 799 Nguyễn Văn Linh, phường Tân Mỹ, TP. Hồ Chí Minh',
     description: {
       vi: `Nằm trong khuôn khổ Triển lãm và Lễ hội Thú cưng InterPetFest 2026, WCF Jubilee Cat Show 2026 là đấu trường chuyên nghiệp hàng đầu dành cho giới nuôi mèo chuyên nghiệp và cộng đồng yêu mèo tại Việt Nam và các nước lân cận.
 
@@ -299,13 +299,10 @@ async function main() {
         organizer: {
           connect: { id: organizer.id },
         },
-        // ⚠️ Field ảnh gallery đang GIẢ ĐỊNH là `imageUrl` theo pattern
-        // bannerUrl/avatarUrl/coverUrl của toàn schema. Nếu model
-        // EventImage dùng tên khác (VD: `url`), đổi lại field bên dưới.
         images: {
           create: [
-            { imageUrl: heroImageUrl } as unknown as Prisma.EventImageUncheckedCreateWithoutEventInput,
-            { imageUrl: organizerAvatarUrl } as unknown as Prisma.EventImageUncheckedCreateWithoutEventInput,
+            { url: heroImageUrl },
+            { url: organizerAvatarUrl },
           ],
         },
       },
