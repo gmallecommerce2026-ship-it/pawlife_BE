@@ -105,9 +105,7 @@ const eventsData: EventSeedData[] = [
       en: 'NECC, Tan My ward, Ho Chi Minh city',
     },
     address:
-      'National Exhibition Construction Center (NECC) - 799 Nguyễn Văn Linh, Khu đô thị Phú Mỹ Hưng, Tân Mỹ, Hồ Chí Minh',
-    // Nhiều khung giờ khác nhau theo ngày -> lưu chi tiết trong description,
-    // startDate/endDate chỉ lấy mốc sớm nhất -> muộn nhất.
+      'National Exhibition Construction Center (NECC)    799 Nguyễn Văn Linh, Khu đô thị Phú Mỹ Hưng, Tân Mỹ, Hồ Chí Minh',
     description: {
       vi: `THỜI GIAN CHI TIẾT:
 • 17/04/2026: 9:30AM - 5:30PM
@@ -152,7 +150,7 @@ With a vision to grow Vietnam's pet industry, InterPetFest's organizers not only
       en: 'VEC, Dong Anh Ward, Hanoi city',
     },
     address:
-      'Vietnam Exposition Center (VEC) - Cầu Tứ Liên, Đông Anh, Hà Nội',
+      'Vietnam Exposition Center (VEC)   Cầu Tứ Liên, Đông Anh, Hà Nội',
     description: {
       vi: `THỜI GIAN CHI TIẾT:
 • 18-20/11/2026: 9:00AM - 5:00PM
@@ -188,9 +186,6 @@ At Grand Season Festival, every connection is genuine, and every experience is f
     organizerAvatarFileName: 'organizer-2-avt.png',
     latitude: 21.086891623772072,
     longitude: 105.86276110933576,
-    // ⚠️ Chưa có tọa độ chính xác cho VEC (Đông Anh, Hà Nội) — khác địa chỉ
-    // với sự kiện 1 & 3 nên KHÔNG dùng chung tọa độ Phú Mỹ Hưng. Bổ sung
-    // latitude/longitude thật của VEC khi có dữ liệu. 21.086891623772072, 105.86276110933576
   },
 
   // ---------------- SỰ KIỆN 3 ----------------
@@ -205,14 +200,10 @@ At Grand Season Festival, every connection is genuine, and every experience is f
     },
     locationName: {
       vi: 'SECC, 799 Đường Nguyễn Văn Linh, Khu đô thị Phú Mỹ Hưng, Tân Mỹ, Hồ Chí Minh',
-      en: 'Saigon Exhibition and Convention Center (SECC), 799 Nguyen Van Linh, Tan My Ward, Ho Chi Minh City',
+      en: 'SECC, 799 Nguyen Van Linh, Tan My Ward, Ho Chi Minh City',
     },
-    // ⚠️ Địa chỉ chi tiết bạn cung cấp cho sự kiện 3 trùng với địa chỉ NECC
-    // (Hà Nội) ở sự kiện 1, trong khi tên địa điểm là SECC (TP.HCM) — có
-    // vẻ nhầm lẫn khi copy dữ liệu. Mình tạm dùng địa chỉ SECC thực tế phổ
-    // biến, bạn kiểm tra và sửa lại nếu không đúng.
     address:
-      'Saigon Exhibition and Convention Center (SECC) - 799 Nguyễn Văn Linh, Tân Mỹ, Hồ Chí Minh',
+      'Saigon Exhibition and Convention Center (SECC)   799 Nguyễn Văn Linh, Tân Mỹ, Hồ Chí Minh',
     description: {
       vi: `Nằm trong khuôn khổ Triển lãm và Lễ hội Thú cưng InterPetFest 2026, WCF Jubilee Cat Show 2026 là đấu trường chuyên nghiệp hàng đầu dành cho giới nuôi mèo chuyên nghiệp và cộng đồng yêu mèo tại Việt Nam và các nước lân cận.
 
@@ -245,8 +236,6 @@ INTERNATIONAL JUDGING PANEL:
 • Judge Olga Kuznetsova, Russian Federation
 • Judge Ekaterina Shershavikova, Russian Federation`,
     },
-    // Không có khung giờ cụ thể trong dữ liệu gốc -> mình giả định 9:00-18:00,
-    // bạn chỉnh lại nếu ban tổ chức có giờ chính thức khác.
     startDate: new Date('2026-08-29T09:00:00+07:00'),
     endDate: new Date('2026-08-30T18:00:00+07:00'),
     organizerName: 'Interpetfest',
@@ -296,32 +285,72 @@ async function main() {
       },
     });
 
-    // 3. Tạo Event — title/category/description/locationName là Json {vi, en}
-    const event = await prisma.event.create({
-      data: {
-        title: eventData.title as unknown as Prisma.InputJsonValue,
-        category: eventData.category as unknown as Prisma.InputJsonValue,
-        description: eventData.description as unknown as Prisma.InputJsonValue,
-        locationName: eventData.locationName as unknown as Prisma.InputJsonValue,
-        address: eventData.address,
-        bannerUrl: heroImageUrl,
+    // 3. "Giả lập upsert" cho Event vì Event chưa có unique key riêng
+    //    (không tính id uuid tự sinh). Match theo organizerId + startDate.
+    //    LƯU Ý: nếu sau này bạn đổi startDate của 1 event đã seed rồi chạy
+    //    lại, script sẽ KHÔNG nhận ra là event cũ (vì key match đã đổi)
+    //    và sẽ tạo thêm 1 event mới thay vì update. Nếu bạn thường xuyên
+    //    đổi ngày giờ event, nên chuyển sang cách dùng slug unique.
+    const existingEvent = await prisma.event.findFirst({
+      where: {
+        organizerId: organizer.id,
         startDate: eventData.startDate,
-        endDate: eventData.endDate,
-        latitude: eventData.latitude,
-        longitude: eventData.longitude,
-        organizer: {
-          connect: { id: organizer.id },
-        },
-        images: {
-          create: [
-            { url: heroImageUrl },
-            { url: organizerAvatarUrl },
-          ],
-        },
       },
     });
 
-    console.log(`✅ Đã tạo Event id: ${event.id}`);
+    // Payload dùng chung cho cả nhánh update và create
+    const eventPayload = {
+      title: eventData.title as unknown as Prisma.InputJsonValue,
+      category: eventData.category as unknown as Prisma.InputJsonValue,
+      description: eventData.description as unknown as Prisma.InputJsonValue,
+      locationName: eventData.locationName as unknown as Prisma.InputJsonValue,
+      address: eventData.address,
+      bannerUrl: heroImageUrl,
+      startDate: eventData.startDate,
+      endDate: eventData.endDate,
+      latitude: eventData.latitude,
+      longitude: eventData.longitude,
+    };
+
+    let event;
+
+    if (existingEvent) {
+      // Event đã tồn tại -> UPDATE (đè dữ liệu mới lên, không tạo bản trùng)
+      event = await prisma.event.update({
+        where: { id: existingEvent.id },
+        data: {
+          ...eventPayload,
+          organizer: {
+            connect: { id: organizer.id },
+          },
+          images: {
+            deleteMany: {}, // xóa toàn bộ ảnh cũ của event này trước khi tạo lại
+            create: [
+              { url: heroImageUrl },
+              { url: organizerAvatarUrl },
+            ],
+          },
+        },
+      });
+      console.log(`♻️  Đã cập nhật Event id: ${event.id}`);
+    } else {
+      // Event chưa tồn tại -> CREATE mới
+      event = await prisma.event.create({
+        data: {
+          ...eventPayload,
+          organizer: {
+            connect: { id: organizer.id },
+          },
+          images: {
+            create: [
+              { url: heroImageUrl },
+              { url: organizerAvatarUrl },
+            ],
+          },
+        },
+      });
+      console.log(`✅ Đã tạo mới Event id: ${event.id}`);
+    }
   }
 
   console.log('\n🎉 Hoàn tất seed Event!');
