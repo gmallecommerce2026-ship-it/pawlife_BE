@@ -343,8 +343,8 @@ export class TagsService {
 
       owner: isLost ? {
         name: pet.lostContactName || pet.owner?.name || 'Anonymous user',
-        phone: pet.lostContactPhone || pet.owner?.phone || 'Phone number not provided',
-        address: pet.lostContactAddress || 'Address not updated yet',
+        phone: pet.lostContactPhone?.trim() ? pet.lostContactPhone : 'Phone number not provided',
+        address: pet.lostContactAddress?.trim() ? pet.lostContactAddress : 'Address not updated yet',
         avatarUrl: pet.owner?.avatarUrl || null,
       } : null,
 
