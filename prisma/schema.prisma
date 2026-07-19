@@ -635,12 +635,19 @@ model Organizer {
   events Event[] // Mối quan hệ: 1 Organizer có nhiều Event
 }
 model Ingredient {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  description String?
-  imageUrl    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id // Dùng luôn id dạng chuỗi (vd: 'garlic', 'avocado') từ mock data
+  icon         String
+  badge        String   // 'safe' | 'caution' | 'toxic' | 'emergency'
+  title        Json     // { en: string, vi: string }
+  riskLabel    Json     // { en: string, vi: string }
+  shortContent Json     // { en: string, vi: string }
+  pets         Json     // Mảng: ['dog', 'cat']
+  
+  details      Json?    // Dành cho caution/toxic/emergency
+  benefits     Json?    // Dành cho safe
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 model Event {
   id          String  @id @default(uuid())
