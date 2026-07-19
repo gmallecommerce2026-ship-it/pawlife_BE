@@ -635,16 +635,16 @@ model Organizer {
   events Event[] // Mối quan hệ: 1 Organizer có nhiều Event
 }
 model Ingredient {
-  id           String   @id // Dùng luôn id dạng chuỗi (vd: 'garlic', 'avocado') từ mock data
+  id           String   @id
   icon         String
-  badge        String   // 'safe' | 'caution' | 'toxic' | 'emergency'
-  title        Json     // { en: string, vi: string }
-  riskLabel    Json     // { en: string, vi: string }
-  shortContent Json     // { en: string, vi: string }
-  pets         Json     // Mảng: ['dog', 'cat']
+  badge        String
+  title        Json
+  riskLabel    Json
+  shortContent Json
+  pets         Json
   
-  details      Json?    // Dành cho caution/toxic/emergency
-  benefits     Json?    // Dành cho safe
+  details      Json?
+  benefits     Json?
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
