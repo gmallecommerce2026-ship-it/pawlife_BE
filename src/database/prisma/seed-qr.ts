@@ -10,8 +10,8 @@ const s3Client = new S3Client({
   region: 'auto',
   endpoint: 'https://c9d5f5eea00514a9996556bae3e098d8.r2.cloudflarestorage.com', // Endpoint của bạn
   credentials: {
-    accessKeyId: 'ĐIỀN_ACCESS_KEY_ID_CỦA_BẠN_VÀO_ĐÂY',
-    secretAccessKey: 'ĐIỀN_SECRET_ACCESS_KEY_CỦA_BẠN_VÀO_ĐÂY',
+    accessKeyId: 'abd4d87e215fef71990e437e5e60a714',
+    secretAccessKey: '4a21a869e74605e6506d7357c6ee9b1cff2b23a2df88e831129acebbab20d4fa',
   },
 });
 
