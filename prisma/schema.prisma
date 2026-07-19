@@ -31,6 +31,7 @@ enum SwipeAction {
   LIKE
   PASS
 }
+
 enum PetGender {
   MALE
   FEMALE
@@ -45,7 +46,7 @@ enum PetSize {
 
 enum PetStatus {
   AVAILABLE
-  PENDING   // Đang có người xin nhận nuôi
+  PENDING // Đang có người xin nhận nuôi
   ADOPTED
 }
 
@@ -53,23 +54,24 @@ model Otp {
   id        String   @id @default(uuid())
   email     String
   otp       String
-  type      String   // Lưu loại OTP: "SIGNUP" hoặc "FORGOT_PASSWORD"
+  type      String // Lưu loại OTP: "SIGNUP" hoặc "FORGOT_PASSWORD"
   expiresAt DateTime // Thời gian hết hạn
   createdAt DateTime @default(now())
 
   // Đảm bảo mỗi email chỉ có 1 mã OTP active cho mỗi loại tại một thời điểm
-  @@unique([email, type]) 
+  @@unique([email, type])
 }
+
 model PetInteraction {
   id        String      @id @default(uuid())
   action    SwipeAction
   createdAt DateTime    @default(now())
 
-  userId    String
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  petId     String
-  pet       Pet         @relation(fields: [petId], references: [id], onDelete: Cascade)
+  petId String
+  pet   Pet    @relation(fields: [petId], references: [id], onDelete: Cascade)
 
   @@unique([userId, petId]) // Đảm bảo 1 user chỉ quẹt 1 pet 1 lần
 }
@@ -78,28 +80,28 @@ model FavoritePet {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
 
-  userId    String
-  user      User     @relation("UserFavorites", fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation("UserFavorites", fields: [userId], references: [id], onDelete: Cascade)
 
-  petId     String
-  pet       Pet      @relation("PetFavoritedBy", fields: [petId], references: [id], onDelete: Cascade)
+  petId String
+  pet   Pet    @relation("PetFavoritedBy", fields: [petId], references: [id], onDelete: Cascade)
 
   @@unique([userId, petId])
 }
 
 model DeviceSession {
-  id          String   @id @default(uuid())
+  id               String   @id @default(uuid())
   deviceIdentifier String?
-  deviceName  String?  // VD: "iPhone", "Mac OS"
-  deviceType  String   @default("smartphone") // "smartphone", "laptop", "tablet"
-  os          String?  // VD: "iOS 16.5", "Windows 11"
-  ipAddress   String?  // VD: "14.232.xxx.xxx"
-  location    String?  // VD: "Hanoi, Vietnam"
-  lastActive  DateTime @default(now())
-  createdAt   DateTime @default(now())
+  deviceName       String? // VD: "iPhone", "Mac OS"
+  deviceType       String   @default("smartphone") // "smartphone", "laptop", "tablet"
+  os               String? // VD: "iOS 16.5", "Windows 11"
+  ipAddress        String? // VD: "14.232.xxx.xxx"
+  location         String? // VD: "Hanoi, Vietnam"
+  lastActive       DateTime @default(now())
+  createdAt        DateTime @default(now())
 
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model TransferRequest {
@@ -112,60 +114,61 @@ model TransferRequest {
   updatedAt  DateTime @updatedAt
 
   // Quan hệ (Relations) - Hãy đảm bảo tên field trùng với schema Pet và User hiện tại của bạn
-  pet        Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
-  sender     User     @relation("SentTransfers", fields: [senderId], references: [id])
-  receiver   User     @relation("ReceivedTransfers", fields: [receiverId], references: [id])
+  pet      Pet  @relation(fields: [petId], references: [id], onDelete: Cascade)
+  sender   User @relation("SentTransfers", fields: [senderId], references: [id])
+  receiver User @relation("ReceivedTransfers", fields: [receiverId], references: [id])
 }
 
 model User {
-  id        String  @id @default(uuid())
-  email     String  @unique
+  id        String    @id @default(uuid())
+  email     String    @unique
   password  String? // Đổi thành Optional để hỗ trợ Social Login
-  role      Role    @default(USER)
+  role      Role      @default(USER)
   name      String? // Đổi từ fullName thành name để khớp DTO
-  phone     String?   // Thêm trường này
-  gender    String?   // Thêm trường này
+  phone     String? // Thêm trường này
+  gender    String? // Thêm trường này
   dob       DateTime? // Thêm trường này
   avatarUrl String?
   provider  String    @default("local")
   // Trạng thái tài khoản (Quan trọng cho App Store - Account Deletion)
-  isDeleted Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isDeleted Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   deletedAt DateTime?
   // Liên kết
-  shelterId        String? // Nếu User này là chủ một Shelter
-  shelter          Shelter?          @relation(fields: [shelterId], references: [id])
+  shelterId String? // Nếu User này là chủ một Shelter
+  shelter   Shelter?  @relation(fields: [shelterId], references: [id])
 
   sentTransfers     TransferRequest[] @relation("SentTransfers")
   receivedTransfers TransferRequest[] @relation("ReceivedTransfers")
 
-  pets             Pet[]             @relation("UserPets")
-  adoptionRequests AdoptionRequest[]
-  messagesSent     Message[]         @relation("SenderMessages")
-  chatRooms        ChatRoomUser[]
-  notifications    Notification[]
-  interactions     PetInteraction[]
-  favoritePets     FavoritePet[]     @relation("UserFavorites")
-  followedShelters FollowedShelter[]
-  deviceSessions   DeviceSession[]
-  twoFactorSecret      String?  
-  isTwoFactorEnabled   Boolean  @default(false)
+  pets                 Pet[]                 @relation("UserPets")
+  adoptionRequests     AdoptionRequest[]
+  messagesSent         Message[]             @relation("SenderMessages")
+  chatRooms            ChatRoomUser[]
+  notifications        Notification[]
+  interactions         PetInteraction[]
+  favoritePets         FavoritePet[]         @relation("UserFavorites")
+  followedShelters     FollowedShelter[]
+  deviceSessions       DeviceSession[]
+  twoFactorSecret      String?
+  isTwoFactorEnabled   Boolean               @default(false)
   adoptionApplications AdoptionApplication[]
-  interestedEvents EventInterest[]
-  tagReports  TagReport[]
-  reports         Report[]
-  eventReports    EventReport[]
-  hiddenEvents    UserHiddenEvent[]
-  blockedShelters UserBlockedShelter[]
-  hiddenPets UserHiddenPet[]
+  interestedEvents     EventInterest[]
+  tagReports           TagReport[]
+  reports              Report[]
+  eventReports         EventReport[]
+  hiddenEvents         UserHiddenEvent[]
+  blockedShelters      UserBlockedShelter[]
+  hiddenPets           UserHiddenPet[]
 }
+
 // Bảng lưu trữ việc chặn người dùng (Apple bắt buộc phải có)
 model UserBlock {
-  id          String   @id @default(uuid())
-  blockerId   String   // ID người chặn
-  blockedId   String   // ID chủ nhân của pet bị chặn
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid())
+  blockerId String // ID người chặn
+  blockedId String // ID chủ nhân của pet bị chặn
+  createdAt DateTime @default(now())
 
   @@unique([blockerId, blockedId])
   @@index([blockerId])
@@ -173,26 +176,27 @@ model UserBlock {
 
 // Bảng lưu trữ lý do report
 model ContentReport {
-  id          String   @id @default(uuid())
-  reporterId  String   
-  targetPetId String?   // Pet bị report
-  reason      String   // Lý do (Spam, Inappropriate, etc.)
-  details     String?  // Ghi chú thêm
-  status      String   @default("PENDING") // PENDING, REVIEWED, RESOLVED
-  createdAt   DateTime @default(now())
-  targetPet         Pet?      @relation(fields: [targetPetId], references: [id])
+  id                String     @id @default(uuid())
+  reporterId        String
+  targetPetId       String? // Pet bị report
+  reason            String // Lý do (Spam, Inappropriate, etc.)
+  details           String? // Ghi chú thêm
+  status            String     @default("PENDING") // PENDING, REVIEWED, RESOLVED
+  createdAt         DateTime   @default(now())
+  targetPet         Pet?       @relation(fields: [targetPetId], references: [id])
   targetTagReportId String?
-  targetTagReport    TagReport? @relation(fields: [targetTagReportId], references: [id])
+  targetTagReport   TagReport? @relation(fields: [targetTagReportId], references: [id])
 
   @@index([reporterId])
   @@index([targetPetId])
 }
+
 model Shelter {
   id          String @id @default(uuid())
   name        String
   address     String
   contactInfo String
-  
+
   emailAddress String?
   shelterType  String?   @default("Animal Shelter & Rescue")
   bio          String?   @db.Text
@@ -200,29 +204,30 @@ model Shelter {
   createdAt    DateTime  @default(now())
   verifiedAt   DateTime?
 
-  description String?   @db.Text // Giới thiệu về trạm
-  policy      String?   @db.Text
+  description String? @db.Text // Giới thiệu về trạm
+  policy      String? @db.Text
   avatarUrl   String?
-  coverUrl    String?   // Ảnh bìa
+  coverUrl    String? // Ảnh bìa
   latitude    Float?
   longitude   Float?
 
   // Liên kết
-  followers   FollowedShelter[]
-  users User[] // Danh sách tài khoản quản lý Shelter này
-  pets  Pet[]
-  blockedByUsers  UserBlockedShelter[]
+  followers      FollowedShelter[]
+  users          User[] // Danh sách tài khoản quản lý Shelter này
+  pets           Pet[]
+  blockedByUsers UserBlockedShelter[]
 }
+
 model EventReport {
   id        String   @id @default(cuid())
   eventId   String
   userId    String
-  reason    String   // Lý do report
-  details   String?  // Chi tiết thêm (nếu có)
+  reason    String // Lý do report
+  details   String? // Chi tiết thêm (nếu có)
   createdAt DateTime @default(now())
 
-  event     Event    @relation(fields: [eventId], references: [id])
-  user      User     @relation(fields: [userId], references: [id]) // Giả sử bạn có bảng User
+  event Event @relation(fields: [eventId], references: [id])
+  user  User  @relation(fields: [userId], references: [id]) // Giả sử bạn có bảng User
 }
 
 model UserHiddenEvent {
@@ -231,44 +236,46 @@ model UserHiddenEvent {
   eventId   String
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
-  event     Event    @relation(fields: [eventId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+  event Event @relation(fields: [eventId], references: [id])
 
   // Đảm bảo 1 user không thể ẩn 1 event 2 lần gây rác DB
-  @@unique([userId, eventId]) 
+  @@unique([userId, eventId])
 }
+
 model UserBlockedShelter {
   userId    String
   shelterId String
   createdAt DateTime @default(now())
 
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  shelter   Shelter @relation(fields: [shelterId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shelter Shelter @relation(fields: [shelterId], references: [id], onDelete: Cascade)
 
   @@id([userId, shelterId]) // Tránh duplicate
   @@index([userId]) // Index để query danh sách block cực nhanh
 }
+
 model Report {
   id        String   @id @default(uuid())
   userId    String
-  targetId  String   // ID của shelter hoặc đối tượng bị report
+  targetId  String // ID của shelter hoặc đối tượng bị report
   reason    String
   detail    String?
-  type      String   // 'shelter', 'pet', 'user'
+  type      String // 'shelter', 'pet', 'user'
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
 
 model FollowedShelter {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   shelterId String
-  shelter   Shelter  @relation(fields: [shelterId], references: [id], onDelete: Cascade)
+  shelter   Shelter @relation(fields: [shelterId], references: [id], onDelete: Cascade)
 
   @@unique([userId, shelterId])
 }
@@ -282,171 +289,174 @@ enum VerificationStatus {
 
 model PetTrait {
   id    String @id @default(uuid())
-  name  Json   // Đổi từ String sang Json
+  name  Json // Đổi từ String sang Json
   petId String
   pet   Pet    @relation(fields: [petId], references: [id], onDelete: Cascade)
 }
+
 model MedicalRecord {
-  id               String   @id @default(uuid())
-  type             String   // VD: "vaccination", "deworming"...
-  recordName       Json     // Đổi từ String sang Json
-  recordDate       DateTime
-  images           Json?    
-  
-  hasNextDueDate   Boolean  @default(false)
-  nextDueDate      DateTime?
-  nextDueName      Json?    // Đổi từ String? sang Json?
+  id         String   @id @default(uuid())
+  type       String // VD: "vaccination", "deworming"...
+  recordName Json // Đổi từ String sang Json
+  recordDate DateTime
+  images     Json?
+
+  hasNextDueDate Boolean   @default(false)
+  nextDueDate    DateTime?
+  nextDueName    Json? // Đổi từ String? sang Json?
 
   verificationStatus VerificationStatus @default(PENDING)
 
-  petId            String
-  pet              Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  petId String
+  pet   Pet    @relation(fields: [petId], references: [id], onDelete: Cascade)
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model AdoptionRequirement {
   id        String   @id @default(uuid())
   key       String   @unique // 'house_with_yard', 'no_cat'... dùng để lookup icon ở FE
-  label     Json     // { "vi": "Có sân vườn", "en": "House with yard" }
-  iconKey   String   // map sang asset local ở FE, KHÔNG lưu icon path
+  label     Json // { "vi": "Có sân vườn", "en": "House with yard" }
+  iconKey   String // map sang asset local ở FE, KHÔNG lưu icon path
   isActive  Boolean  @default(true)
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
 
-  pets      PetAdoptionRequirement[]
+  pets PetAdoptionRequirement[]
 }
 
 // Bảng nối N-N giữa Pet và AdoptionRequirement
 model PetAdoptionRequirement {
-  id            String   @id @default(uuid())
+  id            String              @id @default(uuid())
   petId         String
-  pet           Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  pet           Pet                 @relation(fields: [petId], references: [id], onDelete: Cascade)
   requirementId String
   requirement   AdoptionRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
-  createdAt     DateTime @default(now())
+  createdAt     DateTime            @default(now())
 
   @@unique([petId, requirementId])
   @@index([petId])
 }
+
 model UserHiddenPet {
   userId    String
   petId     String
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  pet       Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pet  Pet  @relation(fields: [petId], references: [id], onDelete: Cascade)
 
   @@id([userId, petId])
   @@index([userId])
 }
+
 model Pet {
-  id                    String   @id @default(uuid())
-  name                  String
-  
+  id   String @id @default(uuid())
+  name String
+
   // --- Các trường đã được nâng cấp lên chuẩn Song ngữ (JSON) ---
-  species               Json     // Thay vì String
-  breed                 Json?    // Thay vì String?
-  description           Json?    // Đã xoá @db.Text
-  color                 Json?    // Thay vì String?
-  traits                Json?    // Đã xoá @db.Text
-  idealHome             Json?    // Đã xoá @db.Text
-  lostDetails           Json?    // Thay vì String?
-  
+  species     Json // Thay vì String
+  breed       Json? // Thay vì String?
+  description Json? // Đã xoá @db.Text
+  color       Json? // Thay vì String?
+  traits      Json? // Đã xoá @db.Text
+  idealHome   Json? // Đã xoá @db.Text
+  lostDetails Json? // Thay vì String?
+
   // -------------------------------------------------------------
-  
-  dob                   DateTime?
-  microchipNumber       String?
-  images                PetImage[] 
-  status                PetStatus @default(AVAILABLE)
-  gender                PetGender?
-  size                  PetSize?
-  weight                Float?    
-  lostPhotos            String?  @db.Text
-  isVaccinated          Boolean  @default(false)
-  isSpayedNeutered      Boolean  @default(false)
+
+  dob              DateTime?
+  microchipNumber  String?
+  images           PetImage[]
+  status           PetStatus  @default(AVAILABLE)
+  gender           PetGender?
+  size             PetSize?
+  weight           Float?
+  lostPhotos       String?    @db.Text
+  isVaccinated     Boolean    @default(false)
+  isSpayedNeutered Boolean    @default(false)
 
   contactName           String?
   contactPhone          String?
   contactAddress        String?
   traitsList            PetTrait[]
   personalityTags       Json?
-  goodWith              Json?    
-  badWith               Json?    
+  goodWith              Json?
+  badWith               Json?
   medicalRecords        MedicalRecord[]
   vetVerificationStatus VerificationStatus @default(PENDING)
   qrCodeUrl             String?
   qrVerificationStatus  VerificationStatus @default(PENDING)
-  
-  idSetByShelter        String? @unique
-  
-  interactions          PetInteraction[]
-  favoritedBy           FavoritePet[]    @relation("PetFavoritedBy")
-  transferRequests      TransferRequest[]
 
-  ownerId               String?
-  owner                 User?   @relation("UserPets", fields: [ownerId], references: [id])
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @default(now()) @updatedAt
-  shelterId             String?
-  shelter               Shelter? @relation(fields: [shelterId], references: [id])
+  idSetByShelter String? @unique
 
-  tags                  Tag[]
-  adoptionRequests      AdoptionRequest[]
-  adoptionApplications  AdoptionApplication[]
+  interactions     PetInteraction[]
+  favoritedBy      FavoritePet[]     @relation("PetFavoritedBy")
+  transferRequests TransferRequest[]
 
-  lostLatitude          Float?    
-  lostLongitude         Float?    
-  lostRadius            Float?
-  lostDate              DateTime? 
-  
-  lostContactName       String?  
-  lostContactPhone      String?  
-  lostContactAddress    String?  
-  lostLocation          String?  
-  lostDateTime          String?  
-  needsQrReplacement    Boolean @default(false)
-  nameLastUpdatedAt     DateTime? 
-  adoptedAt             DateTime?
-  contentReports ContentReport[]
+  ownerId   String?
+  owner     User?    @relation("UserPets", fields: [ownerId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+  shelterId String?
+  shelter   Shelter? @relation(fields: [shelterId], references: [id])
+
+  tags                 Tag[]
+  adoptionRequests     AdoptionRequest[]
+  adoptionApplications AdoptionApplication[]
+
+  lostLatitude  Float?
+  lostLongitude Float?
+  lostRadius    Float?
+  lostDate      DateTime?
+
+  lostContactName      String?
+  lostContactPhone     String?
+  lostContactAddress   String?
+  lostLocation         String?
+  lostDateTime         String?
+  needsQrReplacement   Boolean                  @default(false)
+  nameLastUpdatedAt    DateTime?
+  adoptedAt            DateTime?
+  contentReports       ContentReport[]
   adoptionRequirements PetAdoptionRequirement[]
-  hiddenByUsers UserHiddenPet[]
+  hiddenByUsers        UserHiddenPet[]
 }
 
 model AdoptionApplication {
-  id               String            @id @default(uuid())
-  userId           String
-  user             User              @relation(fields: [userId], references: [id])
-  petId            String
-  pet              Pet               @relation(fields: [petId], references: [id], onDelete: Cascade)
-  status           ApplicationStatus @default(SUBMITTED)
-  
+  id     String            @id @default(uuid())
+  userId String
+  user   User              @relation(fields: [userId], references: [id])
+  petId  String
+  pet    Pet               @relation(fields: [petId], references: [id], onDelete: Cascade)
+  status ApplicationStatus @default(SUBMITTED)
+
   // --- Section A: Contact Information ---
-  fullName         String
-  phone            String            // Đổi từ phoneNumber sang phone cho khớp UI
-  zalo             String
-  adoptFor         String            // Myself / Someone else
-  
+  fullName String
+  phone    String // Đổi từ phoneNumber sang phone cho khớp UI
+  zalo     String
+  adoptFor String // Myself / Someone else
+
   // --- Section B: Living Conditions ---
-  location         String            // Đổi từ address sang location
-  housing          String            // Loại nhà ở (Apartment, House...)
-  children         String            // Có trẻ em không (Yes/No)
-  cage             String            // Nhốt chuồng không (Yes/No/Sometimes)
-  
+  location String // Đổi từ address sang location
+  housing  String // Loại nhà ở (Apartment, House...)
+  children String // Có trẻ em không (Yes/No)
+  cage     String // Nhốt chuồng không (Yes/No/Sometimes)
+
   // --- Section C & D: Experience & Employment ---
-  petExperience    String            // Yes/No/Still living...
-  prevPetHistory   String            @db.Text // @db.Text cho phép lưu chuỗi dài (tuỳ chọn tuỳ DB bạn dùng, hoặc để String)
+  petExperience    String // Yes/No/Still living...
+  prevPetHistory   String @db.Text // @db.Text cho phép lưu chuỗi dài (tuỳ chọn tuỳ DB bạn dùng, hoặc để String)
   employmentStatus String
-  
+
   // --- Section E: Adoption Commitment ---
-  adoptionReason   String
-  commitments      Json              // Lưu các giá trị (vaccine, medical, expenses, updateStatus, homeVisit, provideID)
+  adoptionReason String
+  commitments    Json // Lưu các giá trị (vaccine, medical, expenses, updateStatus, homeVisit, provideID)
 
   verificationPhotos Json?
 
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([userId, petId])
 }
@@ -463,7 +473,7 @@ enum ApplicationStatus {
 
 model PetImage {
   id        String   @id @default(uuid())
-  url       String   // URL từ Cloudflare R2
+  url       String // URL từ Cloudflare R2
   petId     String
   pet       Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
@@ -487,43 +497,44 @@ model Tag {
   id     String    @id @default(uuid()) // UUID khớp với mã QR/NFC
   status TagStatus @default(INACTIVE)
 
-  linkCount Int       @default(0)
+  linkCount Int @default(0)
 
-  petId String?
-  pet   Pet?    @relation(fields: [petId], references: [id], onDelete: SetNull)
+  petId     String?
+  pet       Pet?        @relation(fields: [petId], references: [id], onDelete: SetNull)
   linkedAt  DateTime?
-  reports TagReport[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @default(now()) @updatedAt
+  reports   TagReport[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @default(now()) @updatedAt
 }
 
 // ==========================================
 // CÁC MODEL BỔ SUNG CHO TÍNH NĂNG DỰ ÁN
 // ==========================================
 enum TagReportStatus {
-  PENDING   // Đang chờ xử lý / Vừa quét
-  RESOLVED  // Đã tìm thấy / Đã giải quyết
-  ARCHIVED  // Lưu trữ (nếu cần)
+  PENDING // Đang chờ xử lý / Vừa quét
+  RESOLVED // Đã tìm thấy / Đã giải quyết
+  ARCHIVED // Lưu trữ (nếu cần)
 }
+
 // 1. Quét vòng cổ thông minh & Báo lạc
 model TagReport {
-  id          String   @id @default(uuid())
-  tagId       String
-  tag         Tag      @relation(fields: [tagId], references: [id])
-  userId      String?  
-  user        User?    @relation(fields: [userId], references: [id])
-  scannedBy   String? // Tên hoặc email người quét (nếu họ nhập)
-  phoneNumber String? // Số điện thoại người quét để liên hệ lại
-  latitude    Float? // Tọa độ GPS
-  longitude   Float?
-  radius      Float?
-  message     String? // Lời nhắn từ người quét
-  images      Json?
-  status      TagReportStatus @default(PENDING)
-  scannedAt   DateTime @default(now())
-  isHidden   Boolean  @default(false)
-  hiddenAt   DateTime?
-  contentReports ContentReport[] 
+  id             String          @id @default(uuid())
+  tagId          String
+  tag            Tag             @relation(fields: [tagId], references: [id])
+  userId         String?
+  user           User?           @relation(fields: [userId], references: [id])
+  scannedBy      String? // Tên hoặc email người quét (nếu họ nhập)
+  phoneNumber    String? // Số điện thoại người quét để liên hệ lại
+  latitude       Float? // Tọa độ GPS
+  longitude      Float?
+  radius         Float?
+  message        String? // Lời nhắn từ người quét
+  images         Json?
+  status         TagReportStatus @default(PENDING)
+  scannedAt      DateTime        @default(now())
+  isHidden       Boolean         @default(false)
+  hiddenAt       DateTime?
+  contentReports ContentReport[]
 }
 
 // 2. Hệ thống Nhắn tin (Chat Gateway)
@@ -578,6 +589,7 @@ model Blog {
   categoryId String
   category   BlogCategory @relation(fields: [categoryId], references: [id])
 }
+
 enum NotificationType {
   TAG
   SECURITY
@@ -587,6 +599,7 @@ enum NotificationType {
   EVENT
   TAG_SCANNED
 }
+
 // 4. Thông báo (Notifications)
 model Notification {
   id          String           @id @default(uuid())
@@ -599,70 +612,70 @@ model Notification {
   metadata    Json?
   createdAt   DateTime         @default(now())
 
-  userId      String
-  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Thêm index riêng cho userId để MySQL quản lý Foreign Key mà không phàn nàn
-  @@index([userId]) 
+  @@index([userId])
   // Index ghép để tối ưu hóa truy vấn sắp xếp theo thời gian mới nhất
-  @@index([userId, createdAt(sort: Desc)]) 
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 model Organizer {
-  id          String   @id @default(uuid())
-  name        String
-  handle      String?  @unique // VD: @pawlife_org
-  about       Json? 
-  avatarUrl   String?
-  coverUrl    String?
-  followers   Int      @default(0) 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid())
+  name      String
+  handle    String?  @unique // VD: @pawlife_org
+  about     Json?
+  avatarUrl String?
+  coverUrl  String?
+  followers Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  events      Event[]  // Mối quan hệ: 1 Organizer có nhiều Event
+  events Event[] // Mối quan hệ: 1 Organizer có nhiều Event
 }
 
 model Event {
-  id              String   @id @default(uuid())
-  title           Json   // VD: "Dog art therapy & painting class"
-  category        Json?  // VD: "Art", "Music", "Adoption" (Tag nhỏ dưới title)
-  description     Json?  // Nội dung cho phần "About Event"
-  bannerUrl       String?  // Ảnh nền Header (Hero Image)
-  
+  id          String  @id @default(uuid())
+  title       Json // VD: "Dog art therapy & painting class"
+  category    Json? // VD: "Art", "Music", "Adoption" (Tag nhỏ dưới title)
+  description Json? // Nội dung cho phần "About Event"
+  bannerUrl   String? // Ảnh nền Header (Hero Image)
+
   // Thời gian
-  startDate       DateTime // Lưu ngày và giờ bắt đầu (VD: 2026-03-21 18:00)
-  endDate         DateTime? // Giờ kết thúc (VD: 2026-03-21 23:00)
-  
+  startDate DateTime // Lưu ngày và giờ bắt đầu (VD: 2026-03-21 18:00)
+  endDate   DateTime? // Giờ kết thúc (VD: 2026-03-21 23:00)
+
   // Địa điểm
-  locationName    Json   // Tên địa điểm (VD: "Paw & Canvas Studio")
-  address         String?  // Địa chỉ chi tiết (VD: "Brooklyn, NY, United States")
-  latitude        Float?   // Dành cho Map Location Marker
-  longitude       Float?
+  locationName Json // Tên địa điểm (VD: "Paw & Canvas Studio")
+  address      String? // Địa chỉ chi tiết (VD: "Brooklyn, NY, United States")
+  latitude     Float? // Dành cho Map Location Marker
+  longitude    Float?
 
   // Thống kê
-  interestedCount Int      @default(0) // Số người quan tâm "250+ Interested"
+  interestedCount Int @default(0) // Số người quan tâm "250+ Interested"
 
   // Đơn vị tổ chức (Organizer)
-  organizerId     String?
-  organizer       Organizer? @relation(fields: [organizerId], references: [id], onDelete: SetNull)
+  organizerId String?
+  organizer   Organizer? @relation(fields: [organizerId], references: [id], onDelete: SetNull)
 
   // Quan hệ
-  images          EventImage[]     // Danh sách ảnh cho "Gallery (Pre-Event)"
-  interestedUsers EventInterest[]  // Lưu danh sách người dùng đã bấm nút "Interesting"
-  reports       EventReport[]
-  hiddenByUsers UserHiddenEvent[]
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  images          EventImage[] // Danh sách ảnh cho "Gallery (Pre-Event)"
+  interestedUsers EventInterest[] // Lưu danh sách người dùng đã bấm nút "Interesting"
+  reports         EventReport[]
+  hiddenByUsers   UserHiddenEvent[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 }
 
 // Bảng lưu danh sách ảnh của sự kiện (Gallery)
 model EventImage {
   id        String   @id @default(uuid())
-  url       String   // Link ảnh từ R2/S3
+  url       String // Link ảnh từ R2/S3
   createdAt DateTime @default(now())
 
-  eventId   String
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
 }
 
 // Bảng lưu thao tác bấm "Interesting" ở dưới cùng màn hình (Sticky Footer)
@@ -670,11 +683,11 @@ model EventInterest {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  eventId   String
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@unique([userId, eventId]) // Đảm bảo 1 user chỉ quan tâm 1 event 1 lần
 }
@@ -683,22 +696,22 @@ model PawcarePlaylist {
   id        String   @id @default(uuid())
   title     String
   thumbnail String
-  category  String   // "Training", "Nutrition", "Health", "Beauty"
+  category  String // "Training", "Nutrition", "Health", "Beauty"
   createdAt DateTime @default(now())
 
-  videos    PawcareVideo[]
+  videos PawcareVideo[]
 }
 
 model PawcareVideo {
-  id         String   @id @default(uuid())
-  title      String
-  views      String   // VD: "1.2M"
-  time       String   // VD: "2 days ago"
-  duration   String   // VD: "12:30"
-  thumbnail  String
-  url        String?  // Link youtube/S3
-  category   String   // "Training", "Nutrition", "Health", "Beauty"
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  title     String
+  views     String // VD: "1.2M"
+  time      String // VD: "2 days ago"
+  duration  String // VD: "12:30"
+  thumbnail String
+  url       String? // Link youtube/S3
+  category  String // "Training", "Nutrition", "Health", "Beauty"
+  createdAt DateTime @default(now())
 
   playlistId String?
   playlist   PawcarePlaylist? @relation(fields: [playlistId], references: [id])
