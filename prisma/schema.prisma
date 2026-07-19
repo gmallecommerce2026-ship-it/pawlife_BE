@@ -621,7 +621,14 @@ model Organizer {
 
   events      Event[]  // Mối quan hệ: 1 Organizer có nhiều Event
 }
-
+model Ingredient {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
 model Event {
   id              String   @id @default(uuid())
   title           Json   // VD: "Dog art therapy & painting class"

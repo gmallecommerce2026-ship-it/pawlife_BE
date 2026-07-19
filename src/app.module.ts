@@ -24,6 +24,7 @@ import { Redis } from 'ioredis';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TranslateModule } from './translate/translate.module';
+import { IngredientsModule } from './modules/ingredients/ingredients.module';
 
 @Module({
   imports: [
@@ -97,6 +98,7 @@ import { TranslateModule } from './translate/translate.module';
 
     // 5. App Modules
     DatabaseModule,
+    IngredientsModule,
     RedisModule,
     AuthModule,
     StorageModule,
