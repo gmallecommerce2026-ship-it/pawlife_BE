@@ -1,5 +1,7 @@
+// src/modules/ingredients/ingredients.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class IngredientsService {
@@ -7,15 +9,17 @@ export class IngredientsService {
 
   async findAll() {
     return this.prisma.ingredient.findMany({
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' } // Sắp xếp hiển thị mới nhất lên đầu
     });
   }
 
-  async create(data: { name: string; description?: string; imageUrl?: string }) {
+  // Sử dụng Prisma.IngredientCreateInput để tự động khớp với schema hiện tại
+  async create(data: Prisma.IngredientCreateInput | any) {
     return this.prisma.ingredient.create({ data });
   }
 
-  async update(id: string, data: { name?: string; description?: string; imageUrl?: string }) {
+  // Sử dụng Prisma.IngredientUpdateInput cho update
+  async update(id: string, data: Prisma.IngredientUpdateInput | any) {
     const exists = await this.prisma.ingredient.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException('Ingredient không tồn tại');
 
