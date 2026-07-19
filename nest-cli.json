@@ -7,7 +7,12 @@
     "assets": [
       {
         "include": "modules/wallet/templates/**/*",
-        "outDir": "dist/src/modules/wallet/templates",
+        "outDir": "dist",
+        "watchAssets": true
+      },
+      {
+        "include": "modules/wallet/templates/**/*",
+        "outDir": "dist/src",
         "watchAssets": true
       }
     ]
