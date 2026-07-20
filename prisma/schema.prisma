@@ -642,6 +642,7 @@ model Ingredient {
   riskLabel    Json
   shortContent Json
   pets         Json
+  actionGuide  Json?
   
   details      Json?
   benefits     Json?
