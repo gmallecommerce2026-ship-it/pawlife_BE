@@ -701,7 +701,6 @@ export class PetsService {
   }
 
   async confirmTransfer(transferId: string, receiverId: string) {
-    // SỬA Ở ĐÂY: Thêm include { receiver: true, sender: true } để lấy tên hiển thị
     const transferReq = await this.prisma.transferRequest.findUnique({
       where: { id: transferId },
       include: { receiver: true, sender: true }
@@ -711,9 +710,14 @@ export class PetsService {
       throw new BadRequestException({ message: 'Invalid or already processed request', i18n: { key: 'error.invalid_transfer_request' } });
     }
 
+    // 🔧 SỬA: include owner + images ngay trong lần update này
     const pet = await this.prisma.pet.update({
       where: { id: transferReq.petId },
       data: { ownerId: receiverId, adoptedAt: new Date() },
+      include: {
+        owner: ownerSelectQuery, // đã có sẵn const này trong file, tái dùng luôn
+        images: { orderBy: { createdAt: 'asc' }, take: 1 },
+      },
     });
     await this.redisService.del(`pet:detail:${transferReq.petId}`);
 
@@ -723,15 +727,19 @@ export class PetsService {
     });
     await this.prisma.transferRequest.update({ where: { id: transferId }, data: { status: 'COMPLETED' } });
 
-    // ==========================================
-    // SỬA Ở ĐÂY: Tách biệt Payload cho Sender và Receiver
-    // ==========================================
+    // 🔧 SỬA: format pet để FE dùng thẳng (avatarUrl từ images[0])
+    const formattedPet = {
+      ...pet,
+      avatarUrl: pet.images?.[0]?.url ?? null,
+    };
+
     const senderPayload = {
       petId: transferReq.petId,
       transferId,
       status: 'COMPLETED',
       role: 'sender',
-      targetName: transferReq.receiver?.name || 'Người dùng mới' // Lấy tên người nhận cho Sender
+      targetName: transferReq.receiver?.name || 'Người dùng mới',
+      pet: formattedPet, // 🔧 THÊM
     };
 
     const receiverPayload = {
@@ -739,13 +747,13 @@ export class PetsService {
       transferId,
       status: 'COMPLETED',
       role: 'receiver',
-      targetName: transferReq.sender?.name || 'Chủ cũ' // Lấy tên người gửi cho Receiver
+      targetName: transferReq.sender?.name || 'Chủ cũ',
+      pet: formattedPet, // 🔧 THÊM
     };
 
     await this.notificationsGateway.notifyUserSmartly(transferReq.senderId, 'transfer_completed', senderPayload);
     await this.notificationsGateway.notifyUserSmartly(receiverId, 'transfer_completed', receiverPayload);
 
-    // ✅ Tạo notification cho cả 2 bên, đánh dấu uiAction để notification screen biết chỉ show popup
     for (const uid of [transferReq.senderId, receiverId]) {
       await this.notificationsService.createAndSendNotification({
         userId: uid,
@@ -755,13 +763,19 @@ export class PetsService {
         referenceId: transferReq.petId,
         metadata: {
           transferId,
-          uiAction: 'show_success_popup', // 👈 KHÁC với 'navigate_transfer'
+          uiAction: 'show_success_popup',
           i18n: { titleKey: 'notification.transfer_completed_title', bodyKey: 'notification.transfer_completed_body' }
         }
       });
     }
 
-    return { success: true, message: 'Transfer successful', i18n: { key: 'success.transfer_completed' } };
+    // 🔧 SỬA: trả pet kèm owner mới trong REST response
+    return {
+      success: true,
+      message: 'Transfer successful',
+      i18n: { key: 'success.transfer_completed' },
+      pet: formattedPet,
+    };
   }
 
   async removeFavorite(userId: string, petId: string) {
