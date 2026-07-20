@@ -515,7 +515,8 @@ export class PetsService {
           lostContactName: isLost ? ownerName : null, lostContactPhone: isLost ? ownerPhone : null,
           lostContactAddress: isLost ? ownerAddress : null, lostLocation: isLost ? location : null,
           lostDateTime: isLost ? dateTime : null,
-          lostDetails: isLost && note ? ({ vi: note.trim(), en: note.trim() } as any) : null,
+          // ✅ SỬA: dùng `details` (mô tả nhận dạng) thay vì `note` (ghi chú ngắn)
+          lostDetails: isLost && details ? ({ vi: details.trim(), en: details.trim() } as any) : null,
           lostPhotos: isLost ? JSON.stringify(photos || []) : null, lostLatitude: isLost && latitude ? latitude : null,
           lostLongitude: isLost && longitude ? longitude : null, lostRadius: isLost && radius ? radius : null,
           lostDate: isLost && lostDate ? new Date(lostDate) : null,
@@ -525,6 +526,7 @@ export class PetsService {
         this.prisma.tagReport.create({
           data: {
             tagId: activeTag.id, userId: userId, latitude: latitude || null, longitude: longitude || null,
+            // ✅ giữ nguyên: note vẫn dùng làm message ngắn của TagReport gốc
             message: note ? `${note}` : 'The owner has reported the pet missing', scannedBy: ownerName || 'Owner', status: 'PENDING',
           }
         })
