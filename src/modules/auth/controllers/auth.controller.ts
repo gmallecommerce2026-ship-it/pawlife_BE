@@ -1,6 +1,6 @@
 // src/modules/auth/controllers/auth.controller.ts
 import { Controller, Post, Body, HttpCode, HttpStatus, Delete, UseGuards, Headers, Ip, Param, Get, Req, Patch, Res } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { AuthService } from '../auth.service';
 import { RegisterDto, LoginDto, SocialLoginDto, SendOtpDto, ResetPasswordDto, ChangePasswordDto, UpdateProfileDto, RegisterShelterDirectDto } from '../dto/auth.dto';
 import { User } from 'src/common/decorators/user.decorator';

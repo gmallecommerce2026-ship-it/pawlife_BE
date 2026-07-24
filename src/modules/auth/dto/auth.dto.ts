@@ -146,6 +146,27 @@ export class UpdateProfileDto {
   avatarUrl?: string;
 }
 
+export class RegisterShelterDto {
+  @IsEmail({}, { message: 'Email không hợp lệ' })
+  @IsNotEmpty()
+  email!: string; // Thêm dấu !
+
+  @IsString()
+  @IsNotEmpty({ message: 'Vui lòng nhập tên trạm cứu hộ' })
+  shelterName!: string; // Thêm dấu !
+
+  @IsString()
+  @IsNotEmpty({ message: 'Vui lòng nhập địa chỉ' })
+  address!: string; // Thêm dấu !
+
+  @IsString()
+  @IsNotEmpty({ message: 'Vui lòng nhập số điện thoại' })
+  phone!: string; // Thêm dấu !
+
+  @IsString()
+  @MinLength(6, { message: 'Mật khẩu ít nhất 6 ký tự' })
+  password!: string; // Thêm dấu !
+}
 export class RegisterShelterDirectDto {
   @IsEmail()
   email!: string;
@@ -155,7 +176,7 @@ export class RegisterShelterDirectDto {
   password!: string;
 
   @IsString()
-  name!: string; // Tên trạm cứu hộ
+  name!: string;
 
   @IsString()
   phone!: string;
