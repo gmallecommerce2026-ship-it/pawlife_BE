@@ -2,7 +2,7 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, Delete, UseGuards, Headers, Ip, Param, Get, Req, Patch, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { AuthService } from '../auth.service';
-import { RegisterDto, LoginDto, SocialLoginDto, SendOtpDto, ResetPasswordDto, ChangePasswordDto, UpdateProfileDto, RegisterShelterDto, RegisterShelterDirectDto } from '../dto/auth.dto';
+import { RegisterDto, LoginDto, SocialLoginDto, SendOtpDto, ResetPasswordDto, ChangePasswordDto, UpdateProfileDto, RegisterShelterDirectDto } from '../dto/auth.dto';
 import { User } from 'src/common/decorators/user.decorator';
 import { JwtAuthGuard } from '../guards/jwt.guard';
 import { Throttle } from '@nestjs/throttler'; // BỔ SUNG IMPORT

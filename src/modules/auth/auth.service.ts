@@ -2,7 +2,7 @@
 import { Injectable, BadRequestException, UnauthorizedException, InternalServerErrorException, ConflictException, HttpException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../database/prisma/prisma.service';
-import { RegisterDto, LoginDto, SocialLoginDto, SendOtpDto, OtpType, ResetPasswordDto, ChangePasswordDto, RegisterShelterDto } from './dto/auth.dto';
+import { RegisterDto, LoginDto, SocialLoginDto, SendOtpDto, OtpType, ResetPasswordDto, ChangePasswordDto, RegisterShelterDirectDto } from './dto/auth.dto';
 import * as bcrypt from 'bcrypt';
 import { OAuth2Client } from 'google-auth-library';
 import axios from 'axios';
@@ -396,38 +396,7 @@ export class AuthService {
       user: updatedUser
     };
   }
-  async registerShelter(dto: RegisterShelterDto) {
-    const { email, password, shelterName, phone, address } = dto;
-    const existingUser = await this.prisma.user.findUnique({ where: { email } });
-    if (existingUser) throw new ConflictException('Email này đã được sử dụng!');
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Dùng Transaction để tạo đồng thời Shelter và User
-    const newUser = await this.prisma.$transaction(async (tx) => {
-      const shelter = await tx.shelter.create({
-        data: {
-          name: shelterName,
-          address: address,
-          contactInfo: phone,
-          isVerified: false, // Bắt buộc false để chờ duyệt
-        }
-      });
-
-      return await tx.user.create({
-        data: {
-          email,
-          password: hashedPassword,
-          name: shelterName,
-          phone,
-          role: 'SHELTER', // Gắn quyền Shelter
-          shelterId: shelter.id
-        },
-      });
-    });
-
-    return { message: 'Đăng ký thành công. Đơn của bạn đang chờ xét duyệt.', success: true };
-  }
+  
   async loginWith2fa(tempToken: string, code: string, userAgent: string, ip: string, deviceNameHeader?: string, deviceOsHeader?: string) {
     let decoded;
     try { decoded = this.jwtService.verify(tempToken); } catch (error) { throw new UnauthorizedException('The 2FA session has expired. Please log in again.'); }
