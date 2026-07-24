@@ -1,5 +1,6 @@
 // src/modules/auth/controllers/auth.controller.ts
-import { Controller, Post, Body, HttpCode, HttpStatus, Delete, UseGuards, Headers, Ip, Param, Get, Req, Patch } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, Delete, UseGuards, Headers, Ip, Param, Get, Req, Patch, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { AuthService } from '../auth.service';
 import { RegisterDto, LoginDto, SocialLoginDto, SendOtpDto, ResetPasswordDto, ChangePasswordDto, UpdateProfileDto } from '../dto/auth.dto';
 import { User } from 'src/common/decorators/user.decorator';
@@ -10,6 +11,17 @@ import { SkipProfileCheck } from 'src/common/decorators/skip-profile-check.decor
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) { }
+
+  private setWebCookie(res: Response, token: string, rememberMe?: boolean) {
+    const maxAge = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+    res.cookie('accessToken', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: maxAge,
+      path: '/',
+    });
+  }
 
   @Throttle({ default: { limit: 3, ttl: 60000 } }) // BỔ SUNG: Tối đa 3 lần / 1 phút
   @Post('send-otp')
@@ -47,7 +59,7 @@ export class AuthController {
     return this.authService.changePassword(userId, changePasswordDto);
   }
 
-  @Throttle({ default: { limit: 5, ttl: 60000 } }) // Chống Brute-force Login
+@Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -55,13 +67,27 @@ export class AuthController {
     @Headers('user-agent') userAgent: string,
     @Headers('x-device-name') deviceNameHeader: string,
     @Headers('x-device-os') deviceOsHeader: string,
-    @Headers('x-device-id') deviceIdHeader: string, // <-- 1. BỔ SUNG LẤY HEADER NÀY TỪ APP
+    @Headers('x-device-id') deviceIdHeader: string,
+    @Headers('x-client-type') clientType: string, 
     @Headers('x-forwarded-for') forwardedIp: string,
     @Ip() ip: string,
+    @Res({ passthrough: true }) res: Response 
   ) {
     const realIp = forwardedIp ? forwardedIp.split(',')[0] : ip;
-    // <-- 2. TRUYỀN THÊM BIẾN deviceIdHeader VÀO CUỐI HÀM
-    return this.authService.login(loginDto, userAgent, realIp, deviceNameHeader, deviceOsHeader, deviceIdHeader);
+    const result = await this.authService.login(loginDto, userAgent, realIp, deviceNameHeader, deviceOsHeader, deviceIdHeader);
+
+    // SỬ DỤNG TYPE GUARD: Kiểm tra xem accessToken có nằm trong object result không
+    if ('accessToken' in result) {
+      if (clientType === 'web') {
+        this.setWebCookie(res, result.accessToken, loginDto.rememberMe);
+        
+        // TypeScript lúc này đã biết chắc chắn result có accessToken
+        const { accessToken, ...responseData } = result; 
+        return responseData;
+      }
+    }
+
+    return result;
   }
 
   @Post('2fa/generate')
@@ -108,7 +134,7 @@ export class AuthController {
     return this.authService.updateProfile(userId, updateData);
   }
 
-  @Throttle({ default: { limit: 5, ttl: 60000 } }) // BỔ SUNG
+@Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('social-login')
   @HttpCode(HttpStatus.OK)
   async socialLogin(
@@ -117,12 +143,37 @@ export class AuthController {
     @Headers('x-device-name') deviceNameHeader: string,
     @Headers('x-device-os') deviceOsHeader: string,
     @Headers('x-forwarded-for') forwardedIp: string,
+    @Headers('x-client-type') clientType: string, 
     @Ip() ip: string,
+    @Res({ passthrough: true }) res: Response 
   ) {
     const realIp = forwardedIp ? forwardedIp.split(',')[0] : ip;
-    console.log("social login start debugging!");
-    return this.authService.socialLogin(socialLoginDto, userAgent, realIp, deviceNameHeader, deviceOsHeader);
+    const result = await this.authService.socialLogin(socialLoginDto, userAgent, realIp, deviceNameHeader, deviceOsHeader);
+
+    // SỬ DỤNG TYPE GUARD tương tự cho Social Login
+    if ('accessToken' in result) {
+      if (clientType === 'web') {
+        this.setWebCookie(res, result.accessToken, true); 
+        
+        const { accessToken, ...responseData } = result;
+        return responseData;
+      }
+    }
+
+    return result;
   }
+
+  @Post('logout/web')
+  @HttpCode(HttpStatus.OK)
+  async logoutWeb(@Res({ passthrough: true }) res: Response) {
+    res.cookie('accessToken', '', {
+      httpOnly: true,
+      expires: new Date(0),
+      path: '/',
+    });
+    return { success: true, message: 'Đã xóa phiên đăng nhập trên Web.' };
+  }
+
   @Post('block/:userId')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
