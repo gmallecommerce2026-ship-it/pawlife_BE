@@ -469,7 +469,8 @@ enum ApplicationStatus {
   INTERVIEW_SCHEDULED
   APPROVED
   ADOPTION_COMPLETED
-  CLOSED
+  CLOSED,
+  REJECTED
 }
 
 model PetImage {

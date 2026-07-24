@@ -4,6 +4,11 @@ import { Roles } from 'src/common/decorators/roles.decorator';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { ShelterGuard } from 'src/common/guards/shelter.guard';
 import { User } from 'src/common/decorators/user.decorator';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt.guard';
+import { ShelterDashboardService } from './shelter-dashboard.service';
+import { UpdateShelterProfileDto } from './dto/update-shelter-profile.dto';
+import { CreateShelterPetDto, UpdateShelterPetDto } from './dto/create-shelter-pet.dto';
 
 @Controller('shelter-dashboard')
 @UseGuards(JwtAuthGuard, RolesGuard, ShelterGuard)
