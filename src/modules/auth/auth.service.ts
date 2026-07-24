@@ -319,7 +319,7 @@ export class AuthService {
     await this.redisService.set('shelters:cache_version:global', currentGlobalVersion + 1, 0);
     // =============================================================
 
-    await this.notificationsService.createAndSendNotification({ ...}); // giữ nguyên
+    // await this.notificationsService.createAndSendNotification({ ...}); // giữ nguyên
 
     return this.generateAuthResponse(newUser, userAgent, ip);
   }
