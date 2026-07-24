@@ -210,7 +210,7 @@ model Shelter {
   coverUrl    String? // Ảnh bìa
   latitude    Float?
   longitude   Float?
-
+  openingHours Json? 
   // Liên kết
   followers      FollowedShelter[]
   users          User[] // Danh sách tài khoản quản lý Shelter này
