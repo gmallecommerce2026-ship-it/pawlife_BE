@@ -3,7 +3,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException 
 import { PrismaService } from 'src/database/prisma/prisma.service';
 import { RedisService } from 'src/database/redis/redis.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { NotificationType, ApplicationStatus } from '@prisma/client';
+import { NotificationType, ApplicationStatus, Prisma } from '@prisma/client';
 import { UpdateShelterProfileDto } from './dto/update-shelter-profile.dto';
 
 function toBilingual(v: any): { vi: string; en: string } {
@@ -43,7 +43,9 @@ export class ShelterDashboardService {
                 ...(phone !== undefined && { contactInfo: phone }),
                 ...(logoUrl && { avatarUrl: logoUrl }),
                 ...(coverUrl && { coverUrl }),
-                ...(openingHours && { openingHours }), // cần cột Json? mới, xem mục 4
+                ...(openingHours && {
+                    openingHours: openingHours as unknown as Prisma.InputJsonValue,
+                }),
             },
         });
         await this.redisService.del(`shelter:profile:${shelterId}`);
