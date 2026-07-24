@@ -4,6 +4,7 @@ import { PrismaService } from 'src/database/prisma/prisma.service';
 import { RedisService } from 'src/database/redis/redis.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType, ApplicationStatus } from '@prisma/client';
+import { UpdateShelterProfileDto } from './dto/update-shelter-profile.dto';
 
 function toBilingual(v: any): { vi: string; en: string } {
     if (!v) return { vi: '', en: '' };
@@ -205,7 +206,7 @@ export class ShelterDashboardService {
         if (!application) throw new NotFoundException('Không tìm thấy đơn.');
         if (application.pet.shelterId !== shelterId) throw new ForbiddenException('Bạn không có quyền với đơn này.');
 
-        if (status === 'REJECTED' && !reviewNote?.trim()) {
+        if (status === 'CLOSED' && !reviewNote?.trim()) {
             throw new BadRequestException('Vui lòng nhập lý do từ chối.');
         }
 
