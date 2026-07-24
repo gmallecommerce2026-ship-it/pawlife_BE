@@ -1,17 +1,23 @@
 // database/scripts/seed-delete-pawpawpaw.ts
 import { PrismaClient } from '@prisma/client';
+import { Redis } from 'ioredis';
 
 const prisma = new PrismaClient();
 
-// Có thể truyền tên khác qua CLI khi chạy:
-//   npx ts-node database/scripts/seed-delete-pawpawpaw.ts "TenKhac"
-// Nếu không truyền gì, mặc định xoá theo tên "Pawpawpaw"
+// ⚠️ Script này chạy độc lập (không phải qua NestJS DI) nên KHÔNG dùng được
+// RedisService của app — phải tự kết nối ioredis trực tiếp ở đây.
+// Dùng đúng các biến env giống main.ts (REDIS_HOST/REDIS_PORT/REDIS_PASSWORD).
+const redis = new Redis({
+  host: process.env.REDIS_HOST || 'localhost',
+  port: Number(process.env.REDIS_PORT) || 6379,
+  password: process.env.REDIS_PASSWORD || undefined,
+});
+
 const targetName = process.argv[2] || 'Pawpawpaw';
 
 async function main() {
   console.log(`Đang tìm kiếm tài khoản có tên: "${targetName}"...`);
 
-  // 1. Tìm TẤT CẢ user trùng tên (name không phải trường unique nên có thể trùng nhiều account test)
   const users = await prisma.user.findMany({
     where: { name: targetName },
     include: { shelter: true },
@@ -30,7 +36,26 @@ async function main() {
   }
 
   for (const user of users) {
-    await deleteUserAndShelter(user.id, user.email, user.shelterId, user.shelter?.name, user.shelter?.isVerified);
+    // 1. Lấy trước danh sách deviceSession (để biết sessionId cần xoá khỏi Redis)
+    //    — phải lấy TRƯỚC khi transaction xoá deviceSession khỏi Postgres.
+    const sessions = await prisma.deviceSession.findMany({
+      where: { userId: user.id },
+      select: { id: true },
+    });
+
+    await deleteUserAndShelter(
+      user.id,
+      user.email,
+      user.shelterId,
+      user.shelter?.name,
+      user.shelter?.isVerified,
+    );
+
+    await cleanupRedis({
+      userId: user.id,
+      shelterId: user.shelterId,
+      sessionIds: sessions.map((s) => s.id),
+    });
   }
 
   console.log('\n✅ Hoàn tất.');
@@ -46,8 +71,6 @@ async function deleteUserAndShelter(
   console.log(`\n--- Đang xử lý user email="${email}" (id=${userId}) ---`);
 
   await prisma.$transaction(async (tx) => {
-    // 1. Xoá các bản ghi PHỤ THUỘC vào User trước, tránh lỗi FK constraint khi xoá User.
-    //    ⚠️ Điều chỉnh danh sách model bên dưới nếu schema thực tế của bạn khác.
     await tx.deviceSession.deleteMany({ where: { userId } });
     await tx.userBlock.deleteMany({
       where: { OR: [{ blockerId: userId }, { blockedId: userId }] },
@@ -56,14 +79,11 @@ async function deleteUserAndShelter(
     await tx.followedShelter.deleteMany({ where: { userId } });
     await tx.userBlockedShelter.deleteMany({ where: { userId } });
 
-    // 2. Xoá User (phải xoá trước Shelter vì User đang giữ khoá shelterId)
     await tx.user.delete({ where: { id: userId } });
     console.log(`   🗑️  Đã xoá User: ${email}`);
 
     if (!shelterId) return;
 
-    // 3. Nếu Shelter đã có pet thật (không phải test rỗng) thì KHÔNG tự xoá,
-    //    để tránh mất dữ liệu ngoài ý muốn — chỉ cảnh báo để bạn tự kiểm tra.
     const petCount = await tx.pet.count({ where: { shelterId } });
     if (petCount > 0) {
       console.log(
@@ -73,7 +93,6 @@ async function deleteUserAndShelter(
       return;
     }
 
-    // 4. Xoá các bản ghi phụ thuộc Shelter rồi xoá Shelter
     await tx.followedShelter.deleteMany({ where: { shelterId } });
     await tx.userBlockedShelter.deleteMany({ where: { shelterId } });
     await tx.shelter.delete({ where: { id: shelterId } });
@@ -84,6 +103,62 @@ async function deleteUserAndShelter(
   });
 }
 
+async function cleanupRedis(params: {
+  userId: string;
+  shelterId: string | null;
+  sessionIds: string[];
+}) {
+  const { userId, shelterId, sessionIds } = params;
+  console.log('   🧹 Đang dọn Redis cache liên quan...');
+
+  // 1. Xoá session cache — nếu không xoá, JWT cũ của tài khoản này vẫn có thể
+  //    được coi là "active" bởi JwtAuthGuard cho tới khi Redis TTL tự hết hạn.
+  for (const sessionId of sessionIds) {
+    await redis.del(`auth:session:${sessionId}`);
+  }
+  if (sessionIds.length > 0) {
+    console.log(`      - Đã xoá ${sessionIds.length} key auth:session:*`);
+  }
+
+  // 2. Xoá cache profile (nếu có nơi nào đó cache theo key này)
+  await redis.del(`auth:user_profile:${userId}`);
+
+  if (shelterId) {
+    // 3. Xoá khỏi Geo Set "shelters:locations" — nếu không xoá, ID rác sẽ tồn tại
+    //    vĩnh viễn trong Geo Index (mobile "tìm gần đây" có thể trả về ID không
+    //    còn tồn tại trong Postgres, gây lãng phí 1 slot trong kết quả limit).
+    const removed = await redis.zrem('shelters:locations', shelterId);
+    if (removed > 0) {
+      console.log(`      - Đã xoá shelter khỏi Geo Set shelters:locations`);
+    }
+  }
+
+  // 4. QUAN TRỌNG NHẤT: xoá toàn bộ cache danh sách/tìm-gần-đây, vì các cache này
+  //    lưu nguyên JSON đã format sẵn (bao gồm cả data của shelter vừa xoá) với TTL
+  //    tới 1 tiếng (findAll) / 10 phút (nearby) — không có version nào được bump
+  //    khi xoá thủ công qua script, nên phải xoá thẳng theo pattern.
+  const listKeysRemoved = await clearKeysByPattern('shelters:all:*');
+  const nearbyKeysRemoved = await clearKeysByPattern('shelters:nearby:*');
+  console.log(
+    `      - Đã xoá ${listKeysRemoved} key shelters:all:*, ${nearbyKeysRemoved} key shelters:nearby:*`,
+  );
+}
+
+// Dùng SCAN thay vì KEYS để không block Redis nếu dataset lớn.
+async function clearKeysByPattern(pattern: string): Promise<number> {
+  let cursor = '0';
+  let count = 0;
+  do {
+    const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+    cursor = nextCursor;
+    if (keys.length > 0) {
+      await redis.del(...keys);
+      count += keys.length;
+    }
+  } while (cursor !== '0');
+  return count;
+}
+
 main()
   .catch((e) => {
     console.error('❌ Lỗi trong quá trình chạy Seed:', e);
@@ -91,4 +166,5 @@ main()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    redis.disconnect();
   });
