@@ -294,7 +294,52 @@ export class AuthService {
     await this.prisma.user.update({ where: { id: userId }, data: { isTwoFactorEnabled: false, twoFactorSecret: null }, });
     return { message: 'Two-factor authentication disabled.' };
   }
+  async registerShelterDirect(
+    dto: RegisterShelterDirectDto,
+    userAgent: string,
+    ip: string,
+  ) {
+    const { email, password, name, phone, address, lat, lng } = dto;
 
+    const existingUser = await this.prisma.user.findUnique({ where: { email } });
+    if (existingUser) throw new ConflictException('Email này đã được sử dụng!');
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = await this.prisma.$transaction(async (tx) => {
+      const shelter = await tx.shelter.create({
+        data: {
+          name,
+          address,
+          contactInfo: phone,
+          latitude: lat,
+          longitude: lng,
+          isVerified: false, // vẫn chờ Admin duyệt, giống registerShelter cũ
+        },
+      });
+
+      return tx.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          name,
+          phone,
+          role: 'SHELTER',
+          shelterId: shelter.id,
+        },
+      });
+    });
+
+    await this.notificationsService.createAndSendNotification({
+      userId: newUser.id,
+      title: '🎉 Chào mừng đến với PawLife',
+      body: 'Hồ sơ trạm cứu hộ đã được tạo và đang chờ Admin xét duyệt.',
+      type: NotificationType.SECURITY,
+    });
+
+    // Đăng nhập luôn (bỏ qua OTP) để FE có accessToken tiếp tục cập nhật logo/ảnh bìa/mô tả
+    return this.generateAuthResponse(newUser, userAgent, ip);
+  }
   async login(
     dto: LoginDto,
     userAgent: string,
@@ -314,7 +359,7 @@ export class AuthService {
       const tempToken = this.jwtService.sign({ userId: user.id, is2FAPending: true }, { expiresIn: '5m' });
       return { requires2FA: true, tempToken, message: 'Please enter the Authenticator code to continue.', };
     }
-    
+
     if (user.role === 'SHELTER' && user.shelter && !user.shelter.isVerified) {
       throw new UnauthorizedException('Tài khoản trạm cứu hộ của bạn đang chờ Admin xét duyệt. Vui lòng thử lại sau.');
     }

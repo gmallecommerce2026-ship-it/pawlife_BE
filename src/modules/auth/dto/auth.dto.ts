@@ -1,5 +1,5 @@
 // src/auth/dto/auth.dto.ts
-import { IsEmail, IsNotEmpty, IsString, MinLength, Length, IsOptional, IsEnum, IsIn, IsBoolean } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MinLength, Length, IsOptional, IsEnum, IsIn, IsBoolean, IsNumber } from 'class-validator';
 
 export enum OtpType {
   SIGNUP = 'SIGNUP',
@@ -146,24 +146,28 @@ export class UpdateProfileDto {
   avatarUrl?: string;
 }
 
-export class RegisterShelterDto {
-  @IsEmail({}, { message: 'Email không hợp lệ' })
-  @IsNotEmpty()
-  email!: string; // Thêm dấu !
+export class RegisterShelterDirectDto {
+  @IsEmail()
+  email!: string;
 
   @IsString()
-  @IsNotEmpty({ message: 'Vui lòng nhập tên trạm cứu hộ' })
-  shelterName!: string; // Thêm dấu !
+  @MinLength(6)
+  password!: string;
 
   @IsString()
-  @IsNotEmpty({ message: 'Vui lòng nhập địa chỉ' })
-  address!: string; // Thêm dấu !
+  name!: string; // Tên trạm cứu hộ
 
   @IsString()
-  @IsNotEmpty({ message: 'Vui lòng nhập số điện thoại' })
-  phone!: string; // Thêm dấu !
+  phone!: string;
 
   @IsString()
-  @MinLength(6, { message: 'Mật khẩu ít nhất 6 ký tự' })
-  password!: string; // Thêm dấu !
+  address!: string;
+
+  @IsOptional()
+  @IsNumber()
+  lat?: number;
+
+  @IsOptional()
+  @IsNumber()
+  lng?: number;
 }

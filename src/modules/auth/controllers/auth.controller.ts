@@ -2,7 +2,7 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, Delete, UseGuards, Headers, Ip, Param, Get, Req, Patch, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { AuthService } from '../auth.service';
-import { RegisterDto, LoginDto, SocialLoginDto, SendOtpDto, ResetPasswordDto, ChangePasswordDto, UpdateProfileDto, RegisterShelterDto } from '../dto/auth.dto';
+import { RegisterDto, LoginDto, SocialLoginDto, SendOtpDto, ResetPasswordDto, ChangePasswordDto, UpdateProfileDto, RegisterShelterDto, RegisterShelterDirectDto } from '../dto/auth.dto';
 import { User } from 'src/common/decorators/user.decorator';
 import { JwtAuthGuard } from '../guards/jwt.guard';
 import { Throttle } from '@nestjs/throttler'; // BỔ SUNG IMPORT
@@ -163,10 +163,16 @@ export class AuthController {
     return result;
   }
   @Throttle({ default: { limit: 5, ttl: 60000 } })
-  @Post('register-shelter')
-  async registerShelter(@Body() dto: RegisterShelterDto) {
-    return this.authService.registerShelter(dto);
+  @Post('register-shelter-direct')
+  async registerShelterDirect(
+    @Body() dto: RegisterShelterDirectDto,
+    @Req() req: Request,
+  ) {
+    const userAgent = (req.headers['user-agent'] as string) || '';
+    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '';
+    return this.authService.registerShelterDirect(dto, userAgent, ip);
   }
+ 
   @Post('logout/web')
   @HttpCode(HttpStatus.OK)
   async logoutWeb(@Res({ passthrough: true }) res: Response) {
