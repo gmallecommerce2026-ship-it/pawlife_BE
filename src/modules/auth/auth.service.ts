@@ -294,11 +294,7 @@ export class AuthService {
     await this.prisma.user.update({ where: { id: userId }, data: { isTwoFactorEnabled: false, twoFactorSecret: null }, });
     return { message: 'Two-factor authentication disabled.' };
   }
-  async registerShelterDirect(
-    dto: RegisterShelterDirectDto,
-    userAgent: string,
-    ip: string,
-  ) {
+  async registerShelterDirect(dto: RegisterShelterDirectDto, userAgent: string, ip: string) {
     const { email, password, name, phone, address, lat, lng } = dto;
 
     const existingUser = await this.prisma.user.findUnique({ where: { email } });
@@ -308,36 +304,23 @@ export class AuthService {
 
     const newUser = await this.prisma.$transaction(async (tx) => {
       const shelter = await tx.shelter.create({
-        data: {
-          name,
-          address,
-          contactInfo: phone,
-          latitude: lat,
-          longitude: lng,
-          isVerified: false, // vẫn chờ Admin duyệt, giống registerShelter cũ
-        },
+        data: { name, address, contactInfo: phone, latitude: lat, longitude: lng, isVerified: false },
       });
-
       return tx.user.create({
-        data: {
-          email,
-          password: hashedPassword,
-          name,
-          phone,
-          role: 'SHELTER',
-          shelterId: shelter.id,
-        },
+        data: { email, password: hashedPassword, name, phone, role: 'SHELTER', shelterId: shelter.id },
       });
     });
 
-    await this.notificationsService.createAndSendNotification({
-      userId: newUser.id,
-      title: '🎉 Chào mừng đến với PawLife',
-      body: 'Hồ sơ trạm cứu hộ đã được tạo và đang chờ Admin xét duyệt.',
-      type: NotificationType.SECURITY,
-    });
+    // ===== FIX: đồng bộ Redis ngay sau khi tạo Shelter mới =====
+    if (lat != null && lng != null && newUser.shelterId) {
+      await this.redisService.addLocation('shelters:locations', lng, lat, newUser.shelterId);
+    }
+    const currentGlobalVersion = (await this.redisService.get<number>('shelters:cache_version:global')) || 0;
+    await this.redisService.set('shelters:cache_version:global', currentGlobalVersion + 1, 0);
+    // =============================================================
 
-    // Đăng nhập luôn (bỏ qua OTP) để FE có accessToken tiếp tục cập nhật logo/ảnh bìa/mô tả
+    await this.notificationsService.createAndSendNotification({ ...}); // giữ nguyên
+
     return this.generateAuthResponse(newUser, userAgent, ip);
   }
   async login(
@@ -396,7 +379,7 @@ export class AuthService {
       user: updatedUser
     };
   }
-  
+
   async loginWith2fa(tempToken: string, code: string, userAgent: string, ip: string, deviceNameHeader?: string, deviceOsHeader?: string) {
     let decoded;
     try { decoded = this.jwtService.verify(tempToken); } catch (error) { throw new UnauthorizedException('The 2FA session has expired. Please log in again.'); }

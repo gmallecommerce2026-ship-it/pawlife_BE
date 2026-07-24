@@ -62,7 +62,15 @@ export class SheltersService {
     const current = await this.getCacheVersion(userId);
     await this.redisService.set(versionKey, current + 1, 0); // 0 = không hết hạn
   }
+  private async getGlobalCacheVersion(): Promise<number> {
+    const v = await this.redisService.get<number>('shelters:cache_version:global');
+    return v || 0;
+  }
 
+  async bumpGlobalCacheVersion() {
+    const current = await this.getGlobalCacheVersion();
+    await this.redisService.set('shelters:cache_version:global', current + 1, 0);
+  }
   // =====================================================================
   // THE REMAINING FUNCTIONS ARE KEPT COMPLETELY UNCHANGED
   // =====================================================================
@@ -78,8 +86,11 @@ export class SheltersService {
       blockedIds = blocked.map(b => b.shelterId);
     }
 
-    const version = await this.getCacheVersion(userId);
-    const cacheKey = `shelters:all:page_${page}:limit_${limit}:search_${search || 'none'}:u_${userId || 'guest'}:v_${version}`;
+    const [version, globalVersion] = await Promise.all([
+      this.getCacheVersion(userId),
+      this.getGlobalCacheVersion(),
+    ]);
+    const cacheKey = `shelters:all:page_${page}:limit_${limit}:search_${search || 'none'}:u_${userId || 'guest'}:v_${version}:gv_${globalVersion}`;
 
     const cachedData = await this.redisService.get<any>(cacheKey);
     if (cachedData) return cachedData;
@@ -367,8 +378,11 @@ export class SheltersService {
     const roundedLat = lat.toFixed(2);
     const roundedLng = lng.toFixed(2);
 
-    const version = await this.getCacheVersion(userId);
-    const cacheKey = `shelters:nearby:lat_${roundedLat}:lng_${roundedLng}:limit_${limit}:u_${userId || 'guest'}:v_${version}`;
+    const [version, globalVersion] = await Promise.all([
+      this.getCacheVersion(userId),
+      this.getGlobalCacheVersion(),
+    ]);
+    const cacheKey = `shelters:nearby:lat_${roundedLat}:lng_${roundedLng}:limit_${limit}:u_${userId || 'guest'}:v_${version}:gv_${globalVersion}`;
 
     const cachedData = await this.redisService.get<any>(cacheKey);
     if (cachedData) return cachedData;
