@@ -2,7 +2,7 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, Delete, UseGuards, Headers, Ip, Param, Get, Req, Patch, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { AuthService } from '../auth.service';
-import { RegisterDto, LoginDto, SocialLoginDto, SendOtpDto, ResetPasswordDto, ChangePasswordDto, UpdateProfileDto } from '../dto/auth.dto';
+import { RegisterDto, LoginDto, SocialLoginDto, SendOtpDto, ResetPasswordDto, ChangePasswordDto, UpdateProfileDto, RegisterShelterDto } from '../dto/auth.dto';
 import { User } from 'src/common/decorators/user.decorator';
 import { JwtAuthGuard } from '../guards/jwt.guard';
 import { Throttle } from '@nestjs/throttler'; // BỔ SUNG IMPORT
@@ -59,7 +59,7 @@ export class AuthController {
     return this.authService.changePassword(userId, changePasswordDto);
   }
 
-@Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -68,10 +68,10 @@ export class AuthController {
     @Headers('x-device-name') deviceNameHeader: string,
     @Headers('x-device-os') deviceOsHeader: string,
     @Headers('x-device-id') deviceIdHeader: string,
-    @Headers('x-client-type') clientType: string, 
+    @Headers('x-client-type') clientType: string,
     @Headers('x-forwarded-for') forwardedIp: string,
     @Ip() ip: string,
-    @Res({ passthrough: true }) res: Response 
+    @Res({ passthrough: true }) res: Response
   ) {
     const realIp = forwardedIp ? forwardedIp.split(',')[0] : ip;
     const result = await this.authService.login(loginDto, userAgent, realIp, deviceNameHeader, deviceOsHeader, deviceIdHeader);
@@ -80,9 +80,9 @@ export class AuthController {
     if ('accessToken' in result) {
       if (clientType === 'web') {
         this.setWebCookie(res, result.accessToken, loginDto.rememberMe);
-        
+
         // TypeScript lúc này đã biết chắc chắn result có accessToken
-        const { accessToken, ...responseData } = result; 
+        const { accessToken, ...responseData } = result;
         return responseData;
       }
     }
@@ -134,7 +134,7 @@ export class AuthController {
     return this.authService.updateProfile(userId, updateData);
   }
 
-@Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('social-login')
   @HttpCode(HttpStatus.OK)
   async socialLogin(
@@ -143,9 +143,9 @@ export class AuthController {
     @Headers('x-device-name') deviceNameHeader: string,
     @Headers('x-device-os') deviceOsHeader: string,
     @Headers('x-forwarded-for') forwardedIp: string,
-    @Headers('x-client-type') clientType: string, 
+    @Headers('x-client-type') clientType: string,
     @Ip() ip: string,
-    @Res({ passthrough: true }) res: Response 
+    @Res({ passthrough: true }) res: Response
   ) {
     const realIp = forwardedIp ? forwardedIp.split(',')[0] : ip;
     const result = await this.authService.socialLogin(socialLoginDto, userAgent, realIp, deviceNameHeader, deviceOsHeader);
@@ -153,8 +153,8 @@ export class AuthController {
     // SỬ DỤNG TYPE GUARD tương tự cho Social Login
     if ('accessToken' in result) {
       if (clientType === 'web') {
-        this.setWebCookie(res, result.accessToken, true); 
-        
+        this.setWebCookie(res, result.accessToken, true);
+
         const { accessToken, ...responseData } = result;
         return responseData;
       }
@@ -162,7 +162,11 @@ export class AuthController {
 
     return result;
   }
-
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('register-shelter')
+  async registerShelter(@Body() dto: RegisterShelterDto) {
+    return this.authService.registerShelter(dto);
+  }
   @Post('logout/web')
   @HttpCode(HttpStatus.OK)
   async logoutWeb(@Res({ passthrough: true }) res: Response) {
