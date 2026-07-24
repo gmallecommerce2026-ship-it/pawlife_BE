@@ -163,14 +163,26 @@ export class AuthController {
     return result;
   }
   @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('register-shelter-direct')
+  @HttpCode(HttpStatus.OK)
   async registerShelterDirect(
     @Body() dto: RegisterShelterDirectDto,
     @Req() req: Request,
+    @Headers('x-client-type') clientType: string,
+    @Res({ passthrough: true }) res: Response,
   ) {
     const userAgent = (req.headers['user-agent'] as string) || '';
     const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
-    return this.authService.registerShelterDirect(dto, userAgent, ip);
+    const result = await this.authService.registerShelterDirect(dto, userAgent, ip);
+
+    if (clientType === 'web') {
+      this.setWebCookie(res, result.accessToken);
+      const { accessToken, ...responseData } = result;
+      return responseData;
+    }
+
+    return result;
   }
 
   @Post('logout/web')
