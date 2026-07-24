@@ -169,10 +169,10 @@ export class AuthController {
     @Req() req: Request,
   ) {
     const userAgent = (req.headers['user-agent'] as string) || '';
-    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '';
+    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
     return this.authService.registerShelterDirect(dto, userAgent, ip);
   }
- 
+
   @Post('logout/web')
   @HttpCode(HttpStatus.OK)
   async logoutWeb(@Res({ passthrough: true }) res: Response) {
