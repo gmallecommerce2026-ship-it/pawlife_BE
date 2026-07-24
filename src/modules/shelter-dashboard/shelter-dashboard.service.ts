@@ -215,7 +215,7 @@ export class ShelterDashboardService {
         });
 
         // Nếu approved -> đồng bộ Pet.status = PENDING (đang chờ bàn giao)
-        if (status === 'APPROVED') {
+        if (status === 'CLOSED') {
             await this.prisma.pet.update({ where: { id: application.petId }, data: { status: 'PENDING' } });
         }
         if (status === 'ADOPTION_COMPLETED') {
@@ -224,7 +224,7 @@ export class ShelterDashboardService {
                 data: { status: 'ADOPTED', ownerId: application.userId, adoptedAt: new Date() },
             });
         }
-        if (status === 'REJECTED') {
+        if (status === 'CLOSED') {
             // trả pet về AVAILABLE nếu trước đó bị giữ PENDING vì đơn này
             await this.prisma.pet.updateMany({
                 where: { id: application.petId, status: 'PENDING' },
@@ -234,9 +234,9 @@ export class ShelterDashboardService {
 
         await this.notificationsService.createAndSendNotification({
             userId: application.userId,
-            title: status === 'REJECTED' ? '😔 Đơn nhận nuôi chưa được duyệt' : '📬 Cập nhật đơn nhận nuôi',
+            title: status === 'CLOSED' ? '😔 Đơn nhận nuôi chưa được duyệt' : '📬 Cập nhật đơn nhận nuôi',
             body:
-                status === 'REJECTED'
+                status === 'CLOSED'
                     ? `Lý do: ${reviewNote}`
                     : `Đơn nhận nuôi cho ${application.pet.name} đã chuyển sang trạng thái mới.`,
             type: NotificationType.SYSTEM,
