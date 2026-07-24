@@ -454,6 +454,7 @@ model AdoptionApplication {
   commitments    Json // Lưu các giá trị (vaccine, medical, expenses, updateStatus, homeVisit, provideID)
 
   verificationPhotos Json?
+  reviewNote String? @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
