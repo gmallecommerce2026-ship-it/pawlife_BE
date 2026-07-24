@@ -576,7 +576,7 @@ export class AuthService {
     const redisTtlSeconds = rememberMe ? (30 * 24 * 60 * 60) : (24 * 60 * 60);
     await this.redisService.set(`auth:session:${session.id}`, "active", redisTtlSeconds); // TTL equals JWT lifespan
 
-    const payload = { userId: user.id, sessionId: session.id, email: user.email, role: user.role };
+    const payload = { userId: user.id, sessionId: session.id, email: user.email, role: user.role, shelterId: user.shelterId ?? undefined, };
     const accessToken = this.jwtService.sign(payload, { expiresIn });
 
     const isProfileComplete = !!(
