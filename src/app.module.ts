@@ -18,6 +18,7 @@ import { PawcareModule } from './modules/pawcare/pawcare.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ApplicationsModule } from './modules/applications/applications.module';
 import { WalletModule } from './modules/wallet/wallet.module';
+import { StoriesModule } from './modules/stories/stories.module';
 import { ShelterDashboardModule } from './modules/shelter-dashboard/shelter-dashboard.module'
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { Redis } from 'ioredis';
@@ -101,6 +102,7 @@ import { IngredientsModule } from './modules/ingredients/ingredients.module';
     ShelterDashboardModule,
     RedisModule,
     AuthModule,
+    StoriesModule,
     IngredientsModule,
     StorageModule,
     PetsModule,

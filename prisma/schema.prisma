@@ -635,6 +635,23 @@ model Organizer {
 
   events Event[] // Mối quan hệ: 1 Organizer có nhiều Event
 }
+model Story {
+  id     String  @id // id do FE tự sinh (slug_timestamp), giống pattern Ingredient
+  avatar String?
+
+  title      Json // { vi: string, en: string }
+  subtitle   Json // { vi: string, en: string }
+  content    Json // { vi: string, en: string } — nội dung rút gọn hiện trên thẻ
+  fullContent Json // { vi: string[], en: string[] } — nội dung đầy đủ khi mở rộng
+  quote      Json // { vi: string, en: string }
+  afterQuote Json // { vi: string, en: string }
+
+  date   DateTime // Ngày của câu chuyện (không phải ngày tạo record)
+  images Json // string[] — images[0] = ảnh thẻ, phần dư hiện "+N"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
 model Ingredient {
   id           String   @id
   icon         String
