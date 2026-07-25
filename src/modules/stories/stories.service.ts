@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { CreateStoryDto } from './dto/story.dto';
 import { UpdateStoryDto } from './dto/update-story.dto';
 
@@ -8,9 +9,6 @@ export class StoriesService {
   constructor(private prisma: PrismaService) {}
 
   async findAll() {
-    // Sắp xếp theo ngày của câu chuyện (tăng dần) để carousel hiển thị
-    // đúng thứ tự "hành trình" — đổi thành createdAt/desc nếu bạn muốn
-    // hiển thị theo thứ tự thêm mới thay vì theo ngày.
     return this.prisma.story.findMany({
       orderBy: { date: 'asc' },
     });
@@ -21,14 +19,14 @@ export class StoriesService {
       data: {
         id: dto.id,
         avatar: dto.avatar ?? '',
-        title: dto.title,
-        subtitle: dto.subtitle,
-        content: dto.content,
-        fullContent: dto.fullContent,
-        quote: dto.quote,
-        afterQuote: dto.afterQuote,
+        title: dto.title as unknown as Prisma.InputJsonValue,
+        subtitle: dto.subtitle as unknown as Prisma.InputJsonValue,
+        content: dto.content as unknown as Prisma.InputJsonValue,
+        fullContent: dto.fullContent as unknown as Prisma.InputJsonValue,
+        quote: dto.quote as unknown as Prisma.InputJsonValue,
+        afterQuote: dto.afterQuote as unknown as Prisma.InputJsonValue,
         date: new Date(dto.date),
-        images: dto.images,
+        images: dto.images as unknown as Prisma.InputJsonValue,
       },
     });
   }
@@ -41,14 +39,28 @@ export class StoriesService {
       where: { id },
       data: {
         ...(dto.avatar !== undefined && { avatar: dto.avatar }),
-        ...(dto.title !== undefined && { title: dto.title }),
-        ...(dto.subtitle !== undefined && { subtitle: dto.subtitle }),
-        ...(dto.content !== undefined && { content: dto.content }),
-        ...(dto.fullContent !== undefined && { fullContent: dto.fullContent }),
-        ...(dto.quote !== undefined && { quote: dto.quote }),
-        ...(dto.afterQuote !== undefined && { afterQuote: dto.afterQuote }),
+        ...(dto.title !== undefined && {
+          title: dto.title as unknown as Prisma.InputJsonValue,
+        }),
+        ...(dto.subtitle !== undefined && {
+          subtitle: dto.subtitle as unknown as Prisma.InputJsonValue,
+        }),
+        ...(dto.content !== undefined && {
+          content: dto.content as unknown as Prisma.InputJsonValue,
+        }),
+        ...(dto.fullContent !== undefined && {
+          fullContent: dto.fullContent as unknown as Prisma.InputJsonValue,
+        }),
+        ...(dto.quote !== undefined && {
+          quote: dto.quote as unknown as Prisma.InputJsonValue,
+        }),
+        ...(dto.afterQuote !== undefined && {
+          afterQuote: dto.afterQuote as unknown as Prisma.InputJsonValue,
+        }),
         ...(dto.date !== undefined && { date: new Date(dto.date) }),
-        ...(dto.images !== undefined && { images: dto.images }),
+        ...(dto.images !== undefined && {
+          images: dto.images as unknown as Prisma.InputJsonValue,
+        }),
       },
     });
   }
