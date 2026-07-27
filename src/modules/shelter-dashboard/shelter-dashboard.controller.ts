@@ -26,6 +26,14 @@ export class ShelterDashboardController {
     return this.service.updateMyProfile(shelterId, dto);
   }
 
+  @Get('pets/:id')
+  getPetById(
+    @User('shelterId') shelterId: string, 
+    @Param('id') id: string
+  ) {
+    return this.service.getPetById(shelterId, id);
+  }
+
   @Get('pets')
   getPets(@User('shelterId') shelterId: string, @Query() q: any) {
     return this.service.getMyPets(shelterId, q);

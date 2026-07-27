@@ -51,7 +51,31 @@ export class ShelterDashboardService {
         await this.redisService.del(`shelter:profile:${shelterId}`);
         return { ...updated, email: updated.emailAddress, phone: updated.contactInfo, logoUrl: updated.avatarUrl };
     }
+    async getPetById(shelterId: string, petId: string) {
+        // 1. Kiểm tra quyền sở hữu (hàm có sẵn của bạn)
+        await this.assertOwnsPet(shelterId, petId);
 
+        // 2. Query thông tin chi tiết pet
+        const pet = await this.prisma.pet.findUnique({
+            where: { id: petId },
+            include: {
+                images: { orderBy: { createdAt: 'asc' } },
+                medicalRecords: true,
+                traitsList: true,
+                adoptionRequirements: {
+                    include: { requirement: true }
+                }
+            },
+        });
+
+        if (!pet) throw new NotFoundException('Không tìm thấy thú cưng.');
+
+        // 3. Format lại images thành mảng string để đồng bộ Type với Frontend
+        return {
+            ...pet,
+            images: pet.images.map(img => img.url)
+        };
+    }
     // ---------------- PETS ----------------
     async getMyPets(shelterId: string, query: { search?: string; species?: string; status?: string; page?: any; pageSize?: any }) {
         const { search, species, status, page = 1, pageSize = 12 } = query;
