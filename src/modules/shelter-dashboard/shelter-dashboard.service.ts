@@ -74,7 +74,7 @@ export class ShelterDashboardService {
     }
 
     async createPet(shelterId: string, dto: any) {
-        const { images, medicalRecords, adoptionRequirementKeys, traits, goodWith, badWith, ...rest } = dto;
+        const { images, medicalRecords, adoptionRequirementKeys, traits, goodWith, badWith, healthStatus, ...rest } = dto;
 
         let requirementRelations;
         if (adoptionRequirementKeys?.length) {
@@ -120,7 +120,7 @@ export class ShelterDashboardService {
 
     async updatePet(shelterId: string, petId: string, dto: any) {
         await this.assertOwnsPet(shelterId, petId);
-        const { images, medicalRecords, adoptionRequirementKeys, traits, goodWith, badWith, ...rest } = dto;
+        const { images, medicalRecords, adoptionRequirementKeys, traits, goodWith, badWith, healthStatus, ...rest } = dto;
 
         if (adoptionRequirementKeys) {
             const requirements = await this.prisma.adoptionRequirement.findMany({
@@ -185,9 +185,19 @@ export class ShelterDashboardService {
     }
 
     // ---------------- ADOPTION APPLICATIONS ----------------
-    async getMyApplications(shelterId: string, query: { status?: string; petId?: string }) {
+    async getMyApplications(shelterId: string, query: { status?: string; statuses?: string; petId?: string }) {
         const where: any = { pet: { shelterId } };
-        if (query.status && query.status !== 'ALL') where.status = query.status;
+
+        // Hỗ trợ truy vấn 1 trạng thái (App)
+        if (query.status && query.status !== 'ALL') {
+            where.status = query.status;
+        }
+
+        // Hỗ trợ truy vấn nhiều trạng thái (Web Kanban)
+        if (query.statuses) {
+            where.status = { in: query.statuses.split(',') };
+        }
+
         if (query.petId) where.petId = query.petId;
 
         return this.prisma.adoptionApplication.findMany({
