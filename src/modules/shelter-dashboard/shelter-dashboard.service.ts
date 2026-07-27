@@ -53,11 +53,22 @@ export class ShelterDashboardService {
     }
 
     // ---------------- PETS ----------------
-    async getMyPets(shelterId: string, query: { search?: string; species?: string; status?: string; page?: number; pageSize?: number }) {
+    async getMyPets(shelterId: string, query: { search?: string; species?: string; status?: string; page?: any; pageSize?: any }) {
         const { search, species, status, page = 1, pageSize = 12 } = query;
+
+        // 1. Ép kiểu bắt buộc sang Number để tránh lỗi PrismaClientValidationError
+        const pageNum = Number(page) || 1;
+        const pageSizeNum = Number(pageSize) || 12;
+
         const where: any = { shelterId };
         if (status && status !== 'ALL') where.status = status;
-        if (species && species !== 'ALL') where.species = { path: ['en'], equals: species };
+
+        // Đồng bộ bộ lọc theo hoa/thường để khớp với dữ liệu tạo từ Mobile (Dog/Cat thay vì DOG/CAT)
+        if (species && species !== 'ALL') {
+            const normalizedSpecies = species.charAt(0).toUpperCase() + species.slice(1).toLowerCase();
+            where.species = { path: ['en'], equals: normalizedSpecies };
+        }
+
         if (search) where.name = { contains: search };
 
         const [items, total] = await Promise.all([
@@ -65,12 +76,24 @@ export class ShelterDashboardService {
                 where,
                 include: { images: { orderBy: { createdAt: 'asc' } } },
                 orderBy: { createdAt: 'desc' },
-                skip: (page - 1) * pageSize,
-                take: pageSize,
+                skip: (pageNum - 1) * pageSizeNum,
+                take: pageSizeNum, // Prisma sẽ nhận đúng định dạng số
             }),
             this.prisma.pet.count({ where }),
         ]);
-        return { items, total, page, pageSize };
+
+        // 2. Bóc tách mảng Object thành mảng String để khớp với Type của Frontend (ngăn crash <Image />)
+        const formattedItems = items.map(pet => ({
+            ...pet,
+            images: pet.images.map(img => img.url) // Chuyển [{ url: "https..." }] thành ["https..."]
+        }));
+
+        return {
+            items: formattedItems,
+            total,
+            page: pageNum,
+            pageSize: pageSizeNum
+        };
     }
 
     async createPet(shelterId: string, dto: any) {
