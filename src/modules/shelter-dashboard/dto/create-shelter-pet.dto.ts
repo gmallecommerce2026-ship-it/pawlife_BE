@@ -30,9 +30,23 @@ export class CreateShelterPetDto {
   @IsOptional() @IsBoolean() isVaccinated?: boolean;
   @IsOptional() @IsBoolean() isSpayedNeutered?: boolean;
   @IsOptional() @IsArray() healthStatus?: string[];
-  @IsOptional() @IsArray() traits?: { vi: string; en: string }[];
-  @IsOptional() @IsArray() goodWith?: { vi: string; en: string }[];
-  @IsOptional() @IsArray() badWith?: { vi: string; en: string }[];
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BilingualDto)
+  traits?: BilingualDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BilingualDto)
+  goodWith?: BilingualDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BilingualDto)
+  badWith?: BilingualDto[];
   @IsOptional() @IsArray() adoptionRequirementKeys?: string[]; // key trong bảng AdoptionRequirement
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => MedicalRecordInputDto)
   medicalRecords?: MedicalRecordInputDto[];
@@ -40,4 +54,4 @@ export class CreateShelterPetDto {
   @IsOptional() @IsEnum(PetStatus) status?: PetStatus; // shelter được set AVAILABLE/PENDING/ADOPTED
 }
 
-export class UpdateShelterPetDto extends CreateShelterPetDto {}
+export class UpdateShelterPetDto extends CreateShelterPetDto { }
