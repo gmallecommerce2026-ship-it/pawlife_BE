@@ -18,7 +18,10 @@ class MedicalRecordInputDto {
 
 export class CreateShelterPetDto {
   @IsString() name: string;
-  species: any;                 // 'Dog' | 'Cat' | Bilingual — service tự chuẩn hoá
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BilingualDto)
+  species?: BilingualDto;              // 'Dog' | 'Cat' | Bilingual — service tự chuẩn hoá
   @IsOptional() breed?: any;
   @IsOptional() color?: any;
   @IsOptional() @IsEnum(PetGender) gender?: PetGender;
@@ -30,6 +33,7 @@ export class CreateShelterPetDto {
   @IsOptional() @IsBoolean() isVaccinated?: boolean;
   @IsOptional() @IsBoolean() isSpayedNeutered?: boolean;
   @IsOptional() @IsArray() healthStatus?: string[];
+  
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -47,6 +51,7 @@ export class CreateShelterPetDto {
   @ValidateNested({ each: true })
   @Type(() => BilingualDto)
   badWith?: BilingualDto[];
+
   @IsOptional() @IsArray() adoptionRequirementKeys?: string[]; // key trong bảng AdoptionRequirement
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => MedicalRecordInputDto)
   medicalRecords?: MedicalRecordInputDto[];
