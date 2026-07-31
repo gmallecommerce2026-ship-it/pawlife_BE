@@ -199,8 +199,11 @@ export class ShelterDashboardService {
                 ...(rest.description && { description: toBilingual(rest.description) }),
                 ...(rest.color && { color: toBilingual(rest.color) }),
                 ...(rest.dob && { dob: new Date(rest.dob) }),
-                ...(goodWith && { goodWith }),
-                ...(badWith && { badWith }),
+
+                // Sửa 2 dòng này:
+                ...(goodWith !== undefined && { goodWith }),
+                ...(badWith !== undefined && { badWith }),
+
                 ...(images && { images: { deleteMany: {}, create: images.map((url: string) => ({ url })) } }),
             },
             include: { images: true },
