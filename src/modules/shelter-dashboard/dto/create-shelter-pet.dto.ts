@@ -19,9 +19,7 @@ class MedicalRecordInputDto {
 export class CreateShelterPetDto {
   @IsString() name: string;
   @IsOptional()
-  @ValidateNested()
-  @Type(() => BilingualDto)
-  species?: BilingualDto;              // 'Dog' | 'Cat' | Bilingual — service tự chuẩn hoá
+  species?: any;           // 'Dog' | 'Cat' | Bilingual — service tự chuẩn hoá
   @IsOptional() breed?: any;
   @IsOptional() color?: any;
   @IsOptional() @IsEnum(PetGender) gender?: PetGender;
