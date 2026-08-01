@@ -187,7 +187,7 @@ export class ShelterDashboardService {
 
     async updatePet(shelterId: string, petId: string, dto: any) {
         await this.assertOwnsPet(shelterId, petId);
-        const { images, medicalRecords, adoptionRequirementKeys, traits, goodWith, badWith, healthStatus, ...rest } = dto;
+        const { images, medicalRecords, adoptionRequirementKeys, traits, goodWith, badWith, healthStatus, tagId, ...rest } = dto;
 
         if (adoptionRequirementKeys) {
             const requirements = await this.prisma.adoptionRequirement.findMany({
