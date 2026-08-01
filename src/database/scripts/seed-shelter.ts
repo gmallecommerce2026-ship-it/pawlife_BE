@@ -28,7 +28,7 @@ async function clearKeysByPattern(redisClient: Redis, pattern: string): Promise<
 
 async function main() {
   const email = 'sannhanhieucho@gmail.com';
-  const password = 'Password123!';
+  const password = 'PawLife@2026';
   const shelterName = 'Sân Nhà Nhiều Chó Shelter';
   const lat = 21.0285;
   const lng = 105.8542;
