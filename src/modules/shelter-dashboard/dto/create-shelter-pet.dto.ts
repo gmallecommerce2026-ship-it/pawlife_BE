@@ -33,7 +33,7 @@ export class CreateShelterPetDto {
   @IsOptional() @IsBoolean() isVaccinated?: boolean;
   @IsOptional() @IsBoolean() isSpayedNeutered?: boolean;
   @IsOptional() @IsArray() healthStatus?: string[];
-  
+
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -57,6 +57,10 @@ export class CreateShelterPetDto {
   medicalRecords?: MedicalRecordInputDto[];
   @IsOptional() @IsArray() images?: string[];
   @IsOptional() @IsEnum(PetStatus) status?: PetStatus; // shelter được set AVAILABLE/PENDING/ADOPTED
+
+  @IsOptional() 
+  @IsString() 
+  tagId?: string;
 }
 
 export class UpdateShelterPetDto extends CreateShelterPetDto { }

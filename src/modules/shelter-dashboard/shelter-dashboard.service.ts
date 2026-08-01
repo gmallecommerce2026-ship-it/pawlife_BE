@@ -64,7 +64,8 @@ export class ShelterDashboardService {
                 traitsList: true,
                 adoptionRequirements: {
                     include: { requirement: true }
-                }
+                },
+                tags: true,
             },
         });
 
