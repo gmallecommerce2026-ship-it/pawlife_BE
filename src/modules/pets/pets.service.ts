@@ -120,7 +120,21 @@ export class PetsService {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
+  private async hasPermission(userId: string, pet: any): Promise<boolean> {
+    // 1. Nếu là Chủ nhân (User bình thường) -> Hợp lệ
+    if (pet.ownerId === userId) return true;
 
+    // 2. Nếu là Trạm cứu hộ -> Phải lấy shelterId của user ra để so sánh với pet.shelterId
+    if (pet.shelterId) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { shelterId: true }
+      });
+      if (user?.shelterId === pet.shelterId) return true;
+    }
+
+    return false;
+  }
   private diffInDays(date1: Date, date2: Date): number {
     const diffTime = Math.abs(date2.getTime() - date1.getTime());
     return Math.floor(diffTime / (1000 * 60 * 60 * 24));
@@ -197,7 +211,7 @@ export class PetsService {
     const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
     if (!pet) throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
 
-    if (pet.ownerId !== userId && pet.shelterId !== userId) {
+    if (!(await this.hasPermission(userId, pet))) {
       throw new ConflictException({ message: 'You do not have permission to perform actions on this pet!', i18n: { key: 'error.pet_unauthorized' } });
     }
 
@@ -467,7 +481,7 @@ export class PetsService {
 
     if (!pet) throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
 
-    if (pet.ownerId !== userId && pet.shelterId !== userId) {
+    if (!(await this.hasPermission(userId, pet))) {
       throw new ConflictException({ message: 'You do not have permission to delete this pet!', i18n: { key: 'error.pet_unauthorized' } });
     }
 
@@ -500,7 +514,7 @@ export class PetsService {
     const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
 
     if (!pet) throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
-    if (pet.ownerId !== userId && pet.shelterId !== userId) {
+    if (!(await this.hasPermission(userId, pet))) {
       throw new ConflictException({ message: 'You do not have permission to change the status!', i18n: { key: 'error.pet_unauthorized' } });
     }
 
@@ -875,7 +889,7 @@ export class PetsService {
     if (!pet) {
       throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
     }
-    if (pet.ownerId !== userId && pet.shelterId !== userId) {
+    if (!(await this.hasPermission(userId, pet))) {
       throw new ConflictException({
         message: "You do not have permission to edit this pet's information!",
         i18n: { key: 'error.pet_unauthorized' },
@@ -951,7 +965,7 @@ export class PetsService {
     if (!pet) {
       throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
     }
-    if (pet.ownerId !== userId && pet.shelterId !== userId) {
+    if (!(await this.hasPermission(userId, pet))) {
       throw new ConflictException({
         message: "You do not have permission to edit this pet's information!",
         i18n: { key: 'error.pet_unauthorized' },
@@ -984,7 +998,7 @@ export class PetsService {
     if (!pet) {
       throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
     }
-    if (pet.ownerId !== userId && pet.shelterId !== userId) {
+    if (!(await this.hasPermission(userId, pet))) {
       throw new ConflictException({
         message: "You do not have permission to report this pet's medical record!",
         i18n: { key: 'error.pet_unauthorized' },
@@ -1581,7 +1595,7 @@ export class PetsService {
     });
 
     if (!pet) throw new NotFoundException({ message: 'Pet not found.', i18n: { key: 'error.pet_not_found' } });
-    if (pet.ownerId !== userId && pet.shelterId !== userId) {
+    if (!(await this.hasPermission(userId, pet))) {
       throw new ForbiddenException({ message: 'You do not have permission to perform actions on this pet.', i18n: { key: 'error.pet_unauthorized' } });
     }
 
@@ -1703,7 +1717,7 @@ export class PetsService {
     const pet = await this.prisma.pet.findUnique({ where: { id: petId } });
 
     if (!pet) throw new NotFoundException({ message: 'Pet not found!', i18n: { key: 'error.pet_not_found' } });
-    if (pet.ownerId !== userId && pet.shelterId !== userId) {
+    if (!(await this.hasPermission(userId, pet))) {
       throw new ConflictException({ message: 'You do not have permission to edit this pet\'s information!', i18n: { key: 'error.pet_unauthorized' } });
     }
 
