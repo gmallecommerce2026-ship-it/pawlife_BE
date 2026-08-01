@@ -122,7 +122,7 @@ export class ShelterDashboardService {
     }
 
     async createPet(shelterId: string, dto: any) {
-        const { images, medicalRecords, adoptionRequirementKeys, traits, goodWith, badWith, healthStatus, ...rest } = dto;
+        const { images, medicalRecords, adoptionRequirementKeys, traits, goodWith, badWith, healthStatus, tagId, ...rest } = dto;
 
         let requirementRelations;
         if (adoptionRequirementKeys?.length) {
@@ -163,6 +163,25 @@ export class ShelterDashboardService {
             },
             include: { images: true },
         });
+        if (tagId) {
+            await this.prisma.tag.update({
+                where: { id: tagId },
+                data: {
+                    petId: pet.id,
+                    status: 'ACTIVE',
+                    linkedAt: new Date(),
+                    linkCount: { increment: 1 }
+                }
+            });
+            await this.prisma.pet.update({
+                where: { id: pet.id },
+                data: {
+                    qrVerificationStatus: 'VERIFIED',
+                    qrCodeUrl: `https://pawcare.app/tag/${tagId}`
+                }
+            });
+        }
+
         return pet;
     }
 

@@ -1581,7 +1581,9 @@ export class PetsService {
     });
 
     if (!pet) throw new NotFoundException({ message: 'Pet not found.', i18n: { key: 'error.pet_not_found' } });
-    if (pet.ownerId !== userId) throw new ForbiddenException({ message: 'You do not have permission to perform actions on this pet.', i18n: { key: 'error.pet_unauthorized' } });
+    if (pet.ownerId !== userId && pet.shelterId !== userId) {
+      throw new ForbiddenException({ message: 'You do not have permission to perform actions on this pet.', i18n: { key: 'error.pet_unauthorized' } });
+    }
 
     const newTag = await this.prisma.tag.findUnique({ where: { id: newTagId } });
 
