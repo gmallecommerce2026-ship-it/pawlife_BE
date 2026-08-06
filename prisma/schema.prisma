@@ -350,7 +350,49 @@ model UserHiddenPet {
   @@id([userId, petId])
   @@index([userId])
 }
+enum AppointmentStatus {
+  PENDING       // Chờ Shelter xác nhận
+  CONFIRMED     // Shelter đã xác nhận lịch
+  RESCHEDULED   // Đang yêu cầu đổi lịch
+  CANCELLED     // Đã hủy lịch
+  COMPLETED     // Đã hoàn thành phỏng vấn/gặp mặt
+  REJECTED      // Shelter từ chối lịch hẹn
+}
 
+enum AppointmentType {
+  IN_PERSON     // Gặp trực tiếp tại trạm
+  ONLINE        // Phỏng vấn online
+}
+
+model Appointment {
+  id                   String              @id @default(cuid())
+  applicationId        String              @unique
+  application          AdoptionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  
+  userId               String
+  user                 User                @relation("UserAppointments", fields: [userId], references: [id])
+  
+  shelterId            String
+  shelter              Shelter             @relation("ShelterAppointments", fields: [shelterId], references: [id])
+  
+  petId                String
+  pet                  Pet                 @relation("PetAppointments", fields: [petId], references: [id])
+
+  appointmentDate      DateTime            // Ngày hẹn (VD: 2026-08-10)
+  startTime            String              // Giờ bắt đầu (VD: "09:00")
+  endTime              String              // Giờ kết thúc (VD: "10:00")
+  type                 AppointmentType     @default(IN_PERSON)
+  status               AppointmentStatus   @default(PENDING)
+  location             String?             // Địa chỉ trạm hoặc link meeting online
+  notes                String?             // Ghi chú của người dùng khi đặt
+  cancellationReason   String?             // Lý do hủy (nếu có)
+
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@index([shelterId, appointmentDate])
+  @@index([userId])
+}
 model Pet {
   id   String @id @default(uuid())
   name String
