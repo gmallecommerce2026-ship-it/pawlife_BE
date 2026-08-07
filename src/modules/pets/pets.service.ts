@@ -136,6 +136,14 @@ export class PetsService {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
+  private async resolveRequirementIds(keys?: string[]): Promise<string[]> {
+    if (!keys || keys.length === 0) return [];
+    const found = await this.prisma.adoptionRequirement.findMany({
+      where: { key: { in: keys } },
+      select: { id: true },
+    });
+    return found.map((r) => r.id);
+  }
   private async hasPermission(userId: string, pet: any): Promise<boolean> {
     // 1. Nếu là Chủ nhân (User bình thường) -> Hợp lệ
     if (pet.ownerId === userId) return true;
@@ -1117,7 +1125,6 @@ export class PetsService {
     return { data: pets, meta: { page, pageSize, total } };
   }
   async createPet(userId: string, createPetDto: CreatePetDto) {
-    const { images, tagId, medicalRecords, adoptionRequirementKeys, traits, goodWith, badWith, ...petData } = createPetDto;
     const publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN');
     const idSetByShelter = await this.generateUniqueShelterCode();
 
@@ -1126,7 +1133,10 @@ export class PetsService {
       where: { id: userId },
       select: { shelterId: true },
     });
-
+    const { images, tagId, medicalRecords, adoptionRequirementKeys, traits, goodWith, badWith, ...petData } = createPetDto;
+    const requirementIds = adoptionRequirementKeys && adoptionRequirementKeys.length > 0
+      ? await this.resolveRequirementIds(adoptionRequirementKeys)
+      : [];
     const medicalRecordsData = medicalRecords && medicalRecords.length > 0 ? {
       create: medicalRecords.map(record => ({
         type: record.type, recordName: getBilingualText(record.recordName) as any, recordDate: new Date(record.recordDate),
@@ -1135,21 +1145,24 @@ export class PetsService {
         nextDueName: record.nextDueName ? (getBilingualText(record.nextDueName) as any) : null,
       }))
     } : undefined;
-
     try {
       if (tagId) {
         // ... giữ nguyên phần kiểm tra tag
         const result = await this.prisma.$transaction(async (prisma) => {
-          const newPet = await prisma.pet.create({
+          const newPet = await this.prisma.pet.create({
             data: {
-              ...(petData as any),
-              ownerId: userId,
-              shelterId: currentUser?.shelterId ?? null,           // 👈 thêm
-              status: (createPetDto as any).status || (currentUser?.shelterId ? 'AVAILABLE' : 'ADOPTED'), // 👈 tôn trọng status FE gửi, fallback theo ngữ cảnh
-              adoptedAt: currentUser?.shelterId ? null : new Date(), // 👈 chỉ set adoptedAt khi là cá nhân tự đăng ký
+              ...(petData as any), ownerId: userId,
+              shelterId: currentUser?.shelterId ?? null,
+              status: petData.status || (currentUser?.shelterId ? 'AVAILABLE' : 'ADOPTED'),
+              adoptedAt: currentUser?.shelterId ? null : new Date(),
               dob: petData.dob ? new Date(petData.dob) : undefined,
-              qrVerificationStatus: 'VERIFIED',
-              qrCodeUrl: `${publicDomain}/qr-codes/${tagId}.svg`, idSetByShelter,
+              idSetByShelter,
+              ...(traits !== undefined && { traits: normalizeTraitsList(traits) }),
+              ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }),
+              ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),
+              ...(requirementIds.length > 0 && {                                          // 🆕 thêm khối này
+                adoptionRequirements: { create: requirementIds.map((requirementId) => ({ requirementId })) },
+              }),
               ...(images && images.length > 0 && { images: { create: images.map(url => ({ url })) } }),
               ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
             },
@@ -1163,13 +1176,18 @@ export class PetsService {
 
       const newPet = await this.prisma.pet.create({
         data: {
-          ...(petData as any),
-          ownerId: userId,
-          shelterId: currentUser?.shelterId ?? null,               // 👈 thêm
-          status: (createPetDto as any).status || (currentUser?.shelterId ? 'AVAILABLE' : 'ADOPTED'), // 👈 tôn trọng status FE gửi
-          adoptedAt: currentUser?.shelterId ? null : new Date(),    // 👈 chỉ set khi cá nhân đăng ký
+          ...(petData as any), ownerId: userId,
+          shelterId: currentUser?.shelterId ?? null,
+          status: petData.status || (currentUser?.shelterId ? 'AVAILABLE' : 'ADOPTED'),
+          adoptedAt: currentUser?.shelterId ? null : new Date(),
           dob: petData.dob ? new Date(petData.dob) : undefined,
           idSetByShelter,
+          ...(traits !== undefined && { traits: normalizeTraitsList(traits) }),
+          ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }),
+          ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),
+          ...(requirementIds.length > 0 && {                                          // 🆕 thêm khối này
+            adoptionRequirements: { create: requirementIds.map((requirementId) => ({ requirementId })) },
+          }),
           ...(images && images.length > 0 && { images: { create: images.map(url => ({ url })) } }),
           ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
         },
@@ -1834,7 +1852,9 @@ export class PetsService {
     }
 
     const { images, medicalRecords, nameLastUpdatedAt, adoptionRequirementKeys, traits, goodWith, badWith, ...petInfo } = updateData;
-
+    const requirementIds = adoptionRequirementKeys !== undefined
+      ? await this.resolveRequirementIds(adoptionRequirementKeys)
+      : undefined; // 🆕 — undefined nghĩa là FE không gửi field này, giữ nguyên dữ liệu cũ
     try {
       // ── Xử lý medicalRecords KHÔNG xoá hết — giữ nguyên verificationStatus của record cũ ──
       if (medicalRecords) {
@@ -1904,9 +1924,15 @@ export class PetsService {
           ...petInfo,
           dob: petInfo.dob ? new Date(petInfo.dob) : undefined,
           ...(nameLastUpdatedAt && { nameLastUpdatedAt }),
-          ...(traits !== undefined && { traits: normalizeTraitsList(traits) }),        // 🔧 đổi hàm cho traits
-          ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }), // giữ nguyên
-          ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),    // giữ nguyên
+          ...(traits !== undefined && { traits: normalizeTraitsList(traits) }),
+          ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }),
+          ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),
+          ...(requirementIds !== undefined && {                                        // 🆕 thêm khối này
+            adoptionRequirements: {
+              deleteMany: {},
+              create: requirementIds.map((requirementId) => ({ requirementId })),
+            },
+          }),
           ...(images && images.length > 0 && { images: { deleteMany: {}, create: images.map((url: string) => ({ url })) } }),
         },
         include: { images: true, medicalRecords: true },
