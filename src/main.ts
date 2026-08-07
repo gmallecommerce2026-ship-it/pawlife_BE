@@ -45,27 +45,27 @@ export class RedisIoAdapter extends IoAdapter {
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+
   app.use(cookieParser());
 
   app.enableCors({
-    origin: true, 
+    origin: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
-    allowedHeaders: 'Content-Type, Accept, Authorization, x-device-id, user-agent, Cache-Control, Pragma, Expires',
+    allowedHeaders: 'Content-Type, Accept, Authorization, x-device-id, x-client-type, user-agent, Cache-Control, Pragma, Expires',
     preflightContinue: false,
     optionsSuccessStatus: 204,
   });
 
   app.use(compression());
-  app.useGlobalPipes(new ValidationPipe({ 
-    whitelist: true, 
-    transform: true, 
-    transformOptions: { enableImplicitConversion: true } 
+  app.useGlobalPipes(new ValidationPipe({
+    whitelist: true,
+    transform: true,
+    transformOptions: { enableImplicitConversion: true }
   }));
-  
+
   // SỬA Ở ĐÂY: Giới hạn payload 2MB để bảo vệ RAM
-  app.use(json({ limit: '2mb' })); 
+  app.use(json({ limit: '2mb' }));
   app.use(urlencoded({ extended: true, limit: '2mb' }));
 
   const redisIoAdapter = new RedisIoAdapter(app);
@@ -73,8 +73,8 @@ async function bootstrap() {
   app.useWebSocketAdapter(redisIoAdapter);
 
   const port = process.env.PORT ?? 3001;
-  await app.listen(port, '0.0.0.0'); 
-  
+  await app.listen(port, '0.0.0.0');
+
   console.log(`✅ Server is listening on all network interfaces (0.0.0.0:${port})`);
 }
 bootstrap();

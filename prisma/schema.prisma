@@ -135,6 +135,8 @@ model User {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
+  petNotes PetNote[]
+
   // Liên kết
   shelterId String? // Nếu User này là chủ một Shelter
   shelter   Shelter?  @relation(fields: [shelterId], references: [id])
@@ -363,7 +365,17 @@ enum AppointmentType {
   IN_PERSON     // Gặp trực tiếp tại trạm
   ONLINE        // Phỏng vấn online
 }
+model PetNote {
+  id        String   @id @default(cuid())
+  petId     String
+  pet       Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
 
+  @@index([petId])
+}
 model Appointment {
   id                   String              @id @default(cuid())
   applicationId        String              @unique
@@ -436,6 +448,7 @@ model Pet {
   interactions     PetInteraction[]
   favoritedBy      FavoritePet[]     @relation("PetFavoritedBy")
   transferRequests TransferRequest[]
+  notes PetNote[]
 
   ownerId   String?
   owner     User?    @relation("UserPets", fields: [ownerId], references: [id])
