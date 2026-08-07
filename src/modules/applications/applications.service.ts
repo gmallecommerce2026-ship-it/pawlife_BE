@@ -2,10 +2,15 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
+import { RedisService } from 'src/database/redis/redis.service';
 
 @Injectable()
 export class ApplicationsService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redisService: RedisService,
+  ) { }
+
 
   async createApplication(userId: string, data: CreateApplicationDto) {
     const activeApplicationsCount = await this.prisma.adoptionApplication.count({
@@ -45,23 +50,28 @@ export class ApplicationsService {
       }
 
       // Nếu có đơn nhưng đã bị CLOSED -> Tái sử dụng (Update) bản ghi cũ để không vi phạm luật Unique P2002
-      return await this.prisma.adoptionApplication.update({
+      const updated = await this.prisma.adoptionApplication.update({
         where: { id: existingApp.id },
         data: {
           ...data,
           status: 'SUBMITTED',
         },
       });
+      await this.redisService.del(`pet:detail:${data.petId}`);
+      return updated;
     }
 
     // Nếu chưa từng có đơn nào -> Tạo mới bình thường
-    return await this.prisma.adoptionApplication.create({
+    const created = await this.prisma.adoptionApplication.create({
       data: {
         userId,
         ...data,
         status: 'SUBMITTED',
       },
     });
+    await this.redisService.del(`pet:detail:${data.petId}`);
+    return created;
+
   }
 
   async getMyApplications(userId: string) {
@@ -147,13 +157,15 @@ export class ApplicationsService {
     }
 
     // 3. Cập nhật ảnh và chuyển trạng thái về PENDING
-    return await this.prisma.adoptionApplication.update({
+    const updated = await this.prisma.adoptionApplication.update({
       where: { id: applicationId },
       data: {
         verificationPhotos: photos,
         status: 'PENDING', // Đổi trạng thái để Shelter duyệt tiếp
       },
     });
+    await this.redisService.del(`pet:detail:${application.petId}`);
+    return updated;
   }
 
   async withdrawApplication(userId: string, applicationId: string) {
@@ -183,9 +195,11 @@ export class ApplicationsService {
     }
 
     // Cập nhật trạng thái thành CLOSED
-    return await this.prisma.adoptionApplication.update({
+    const updated = await this.prisma.adoptionApplication.update({
       where: { id: applicationId },
       data: { status: 'CLOSED' },
     });
+    await this.redisService.del(`pet:detail:${application.petId}`);
+    return updated;
   }
 }

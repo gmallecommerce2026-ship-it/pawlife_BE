@@ -3,7 +3,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException 
 import { PrismaService } from 'src/database/prisma/prisma.service';
 import { RedisService } from 'src/database/redis/redis.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { NotificationType, ApplicationStatus, Prisma } from '@prisma/client';
+import { NotificationType, ApplicationStatus, Prisma, ApplicationStatus as PrismaApplicationStatus } from '@prisma/client';
 import { UpdateShelterProfileDto } from './dto/update-shelter-profile.dto';
 
 function toBilingual(v: any): { vi: string; en: string } {
@@ -66,15 +66,32 @@ export class ShelterDashboardService {
                     include: { requirement: true }
                 },
                 tags: true,
+                adoptionApplications: {
+                    orderBy: { createdAt: 'desc' },
+                    include: {
+                        user: { select: { id: true, name: true, email: true, avatarUrl: true } },
+                    },
+                },
+
             },
         });
 
         if (!pet) throw new NotFoundException('Không tìm thấy thú cưng.');
+        const applications = (pet.adoptionApplications ?? []).map((app) => ({
+            id: app.id,
+            applicantName: app.fullName || app.user?.name || 'Ẩn danh',
+            applicantAvatar: app.user?.avatarUrl ?? null,
+            applicantPhone: app.phone ?? null,
+            applicantEmail: app.user?.email ?? null,
+            status: app.status,
+            submittedAt: app.createdAt,
+        }));
 
         // 3. Format lại images thành mảng string để đồng bộ Type với Frontend
         return {
             ...pet,
-            images: pet.images.map(img => img.url)
+            images: pet.images.map(img => img.url),
+            applications,
         };
     }
     // ---------------- PETS ----------------
@@ -288,7 +305,7 @@ export class ShelterDashboardService {
         if (!application) throw new NotFoundException('Không tìm thấy đơn.');
         if (application.pet.shelterId !== shelterId) throw new ForbiddenException('Bạn không có quyền với đơn này.');
 
-        if (status === 'CLOSED' && !reviewNote?.trim()) {
+        if (status === ApplicationStatus.CLOSED && !reviewNote?.trim()) {
             throw new BadRequestException('Vui lòng nhập lý do từ chối.');
         }
 
@@ -298,16 +315,16 @@ export class ShelterDashboardService {
         });
 
         // Nếu approved -> đồng bộ Pet.status = PENDING (đang chờ bàn giao)
-        if (status === 'CLOSED') {
+        if (status === ApplicationStatus.APPROVED) {
             await this.prisma.pet.update({ where: { id: application.petId }, data: { status: 'PENDING' } });
         }
-        if (status === 'ADOPTION_COMPLETED') {
+        if (status === ApplicationStatus.ADOPTION_COMPLETED) {
             await this.prisma.pet.update({
                 where: { id: application.petId },
                 data: { status: 'ADOPTED', ownerId: application.userId, adoptedAt: new Date() },
             });
         }
-        if (status === 'CLOSED') {
+        if (status === ApplicationStatus.CLOSED) {
             // trả pet về AVAILABLE nếu trước đó bị giữ PENDING vì đơn này
             await this.prisma.pet.updateMany({
                 where: { id: application.petId, status: 'PENDING' },
