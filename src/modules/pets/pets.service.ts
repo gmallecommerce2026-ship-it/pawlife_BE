@@ -1086,6 +1086,7 @@ export class PetsService {
             data: {
               ...(petData as any), ownerId: userId, status: 'ADOPTED', adoptedAt: new Date(), qrVerificationStatus: 'VERIFIED',
               qrCodeUrl: `${publicDomain}/qr-codes/${tagId}.svg`, idSetByShelter,
+              dob: petData.dob ? new Date(petData.dob) : undefined, // 👈 thêm dòng này
               ...(images && images.length > 0 && { images: { create: images.map(url => ({ url })) } }),
               ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
             },
@@ -1100,6 +1101,7 @@ export class PetsService {
       const newPet = await this.prisma.pet.create({
         data: {
           ...(petData as any), ownerId: userId, status: 'ADOPTED', adoptedAt: new Date(), idSetByShelter,
+          dob: petData.dob ? new Date(petData.dob) : undefined, // 👈 thêm dòng này
           ...(images && images.length > 0 && { images: { create: images.map(url => ({ url })) } }),
           ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
         },
@@ -1832,6 +1834,7 @@ export class PetsService {
         where: { id: petId },
         data: {
           ...petInfo,
+          dob: petInfo.dob ? new Date(petInfo.dob) : undefined, // 👈 thêm dòng này
           ...(nameLastUpdatedAt && { nameLastUpdatedAt }),
           ...(images && images.length > 0 && { images: { deleteMany: {}, create: images.map((url: string) => ({ url })) } }),
         },
