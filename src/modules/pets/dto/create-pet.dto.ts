@@ -38,6 +38,10 @@ export class MedicalRecordDto {
   @IsOptional()
   hasNextDueDate?: boolean;
 
+  @IsOptional()
+  @IsBoolean()
+  isPublic?: boolean;
+
   @IsDateString()
   @IsOptional()
   nextDueDate?: string;

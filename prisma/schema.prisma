@@ -311,6 +311,7 @@ model MedicalRecord {
 
   petId String
   pet   Pet    @relation(fields: [petId], references: [id], onDelete: Cascade)
+  isPublic Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

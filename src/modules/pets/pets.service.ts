@@ -906,6 +906,7 @@ export class PetsService {
       hasNextDueDate?: boolean;
       nextDueDate?: string | null;
       nextDueName?: any;
+      isPublic?: boolean;
     },
   ) {
     // 1. Kiểm tra quyền sở hữu pet
@@ -939,7 +940,6 @@ export class PetsService {
     // }
 
     const dataToUpdate: Prisma.MedicalRecordUpdateInput = {};
-
     if (updateData.type !== undefined) dataToUpdate.type = updateData.type;
     if (updateData.recordName !== undefined) {
       dataToUpdate.recordName = getBilingualText(updateData.recordName) as any;
@@ -961,6 +961,7 @@ export class PetsService {
         ? (getBilingualText(updateData.nextDueName) as any)
         : null;
     }
+    if (updateData.isPublic !== undefined) dataToUpdate.isPublic = updateData.isPublic;
 
     // Sau khi sửa nội dung, đưa record về lại PENDING để admin xác minh lại
     // (vì nội dung đã thay đổi, verification cũ không còn áp dụng)
@@ -1148,6 +1149,7 @@ export class PetsService {
         images: record.images || [], hasNextDueDate: record.hasNextDueDate || false,
         nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null,
         nextDueName: record.nextDueName ? (getBilingualText(record.nextDueName) as any) : null,
+        isPublic: record.isPublic ?? true,
       }))
     } : undefined;
     try {
@@ -1357,6 +1359,12 @@ export class PetsService {
               sender: { select: { id: true, name: true } },
             },
           },
+          adoptionApplications: {
+            orderBy: { createdAt: 'desc' },
+            include: {
+              user: { select: { id: true, name: true, email: true, avatarUrl: true } },
+            },
+          },
           tags: {
             include: {
               reports: {
@@ -1407,19 +1415,14 @@ export class PetsService {
 
       const completedTransfers =
         pet.transferRequests?.filter((tr) => tr.status === 'COMPLETED') ?? [];
-      const APPLICATION_STATUS_MAP: Record<string, 'PENDING' | 'APPROVED' | 'REJECTED'> = {
-        PENDING: 'PENDING',
-        COMPLETED: 'APPROVED',
-        CANCELED: 'REJECTED',
-      };
-      const applications = (pet.transferRequests ?? []).map((tr) => ({
-        id: tr.id,
-        applicantName: tr.receiver?.name ?? 'Ẩn danh',
-        applicantAvatar: tr.receiver?.avatarUrl ?? null,
-        applicantPhone: tr.receiver?.phone ?? null,
-        applicantEmail: tr.receiver?.email ?? null,
-        status: APPLICATION_STATUS_MAP[tr.status] ?? 'PENDING',
-        submittedAt: tr.createdAt,
+      const applications = (pet.adoptionApplications ?? []).map((app) => ({
+        id: app.id,
+        applicantName: app.fullName || app.user?.name || 'Ẩn danh',
+        applicantAvatar: app.user?.avatarUrl ?? null,
+        applicantPhone: app.phone ?? null,
+        applicantEmail: app.user?.email ?? null,
+        status: app.status, // SUBMITTED/PENDING/NEED_MORE_INFO/INTERVIEW_SCHEDULED/APPROVED/ADOPTION_COMPLETED/CLOSED
+        submittedAt: app.createdAt,
       }));
       // ── Helper: phân loại medical record ───────────────────────────────────
       const classifyMedicalRecord = (
@@ -1910,12 +1913,10 @@ export class PetsService {
                 hasNextDueDate: record.hasNextDueDate || false,
                 nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null,
                 nextDueName: record.nextDueName ? (getBilingualText(record.nextDueName) as any) : null,
-                // Không set verificationStatus ở đây -> giữ nguyên giá trị cũ trong DB
+                isPublic: record.isPublic ?? true,
               },
             })
           ),
-
-          // Tạo mới các record chưa từng tồn tại — mặc định PENDING (theo behavior cũ)
           ...(incomingNew.length > 0
             ? [
               this.prisma.medicalRecord.createMany({
@@ -1928,7 +1929,7 @@ export class PetsService {
                   hasNextDueDate: record.hasNextDueDate || false,
                   nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null,
                   nextDueName: record.nextDueName ? (getBilingualText(record.nextDueName) as any) : null,
-                  // verificationStatus dùng default PENDING từ schema, không cần set tay
+                  isPublic: record.isPublic ?? true,
                 })),
               }),
             ]
