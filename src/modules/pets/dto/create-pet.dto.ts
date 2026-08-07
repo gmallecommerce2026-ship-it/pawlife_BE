@@ -15,6 +15,10 @@ export class LocalizedStringDto {
 
 export class MedicalRecordDto {
   @IsString()
+  @IsOptional()
+  id?: string;
+  
+  @IsString()
   @IsNotEmpty()
   type: string = "";
 
