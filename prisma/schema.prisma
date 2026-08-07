@@ -136,7 +136,7 @@ model User {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
   petNotes PetNote[]
-
+  appointments Appointment[] @relation("UserAppointments")
   // Liên kết
   shelterId String? // Nếu User này là chủ một Shelter
   shelter   Shelter?  @relation(fields: [shelterId], references: [id])
@@ -205,7 +205,7 @@ model Shelter {
   isVerified   Boolean   @default(false)
   createdAt    DateTime  @default(now())
   verifiedAt   DateTime?
-
+  appointments Appointment[] @relation("ShelterAppointments")
   description String? @db.Text // Giới thiệu về trạm
   policy      String? @db.Text
   avatarUrl   String?
@@ -417,7 +417,7 @@ model Pet {
   traits      Json? // Đã xoá @db.Text
   idealHome   Json? // Đã xoá @db.Text
   lostDetails Json? // Thay vì String?
-
+  appointments Appointment[] @relation("PetAppointments")
   // -------------------------------------------------------------
 
   dob              DateTime?
@@ -510,7 +510,7 @@ model AdoptionApplication {
 
   verificationPhotos Json?
   reviewNote String? @db.Text
-
+  appointment Appointment?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
