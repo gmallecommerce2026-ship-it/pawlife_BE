@@ -1182,7 +1182,7 @@ export class PetsService {
           adoptedAt: currentUser?.shelterId ? null : new Date(),
           dob: petData.dob ? new Date(petData.dob) : undefined,
           idSetByShelter,
-          ...(traits !== undefined && { traits: normalizeTraitsList(traits) }),
+          ...(personalityTags !== undefined && { traits: normalizeTraitsList(personalityTags) }),
           ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }),
           ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),
           ...(requirementIds.length > 0 && {                                          // 🆕 thêm khối này
@@ -1851,7 +1851,7 @@ export class PetsService {
       }
     }
 
-    const { images, medicalRecords, nameLastUpdatedAt, adoptionRequirementKeys, traits, goodWith, badWith, ...petInfo } = updateData;
+    const { images, medicalRecords, nameLastUpdatedAt, adoptionRequirementKeys, personalityTags, goodWith, badWith, ...petInfo } = updateData;
     const requirementIds = adoptionRequirementKeys !== undefined
       ? await this.resolveRequirementIds(adoptionRequirementKeys)
       : undefined; // 🆕 — undefined nghĩa là FE không gửi field này, giữ nguyên dữ liệu cũ
@@ -1924,7 +1924,7 @@ export class PetsService {
           ...petInfo,
           dob: petInfo.dob ? new Date(petInfo.dob) : undefined,
           ...(nameLastUpdatedAt && { nameLastUpdatedAt }),
-          ...(traits !== undefined && { traits: normalizeTraitsList(traits) }),
+          ...(personalityTags !== undefined && { traits: normalizeTraitsList(personalityTags) }),
           ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }),
           ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),
           ...(requirementIds !== undefined && {                                        // 🆕 thêm khối này
