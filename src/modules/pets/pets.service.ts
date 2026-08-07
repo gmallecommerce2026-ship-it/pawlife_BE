@@ -1122,7 +1122,12 @@ export class PetsService {
       this.prisma.pet.count({ where: whereCondition }),
     ]);
 
-    return { data: pets, meta: { page, pageSize, total } };
+    const formattedPets = pets.map((pet) => ({
+      ...pet,
+      avatarUrl: pet.images?.length > 0 ? pet.images[0].url : null,
+    }));
+
+    return { data: formattedPets, meta: { page, pageSize, total } };
   }
   async createPet(userId: string, createPetDto: CreatePetDto) {
     const publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN');
@@ -1402,7 +1407,20 @@ export class PetsService {
 
       const completedTransfers =
         pet.transferRequests?.filter((tr) => tr.status === 'COMPLETED') ?? [];
-
+      const APPLICATION_STATUS_MAP: Record<string, 'PENDING' | 'APPROVED' | 'REJECTED'> = {
+        PENDING: 'PENDING',
+        COMPLETED: 'APPROVED',
+        CANCELED: 'REJECTED',
+      };
+      const applications = (pet.transferRequests ?? []).map((tr) => ({
+        id: tr.id,
+        applicantName: tr.receiver?.name ?? 'Ẩn danh',
+        applicantAvatar: tr.receiver?.avatarUrl ?? null,
+        applicantPhone: tr.receiver?.phone ?? null,
+        applicantEmail: tr.receiver?.email ?? null,
+        status: APPLICATION_STATUS_MAP[tr.status] ?? 'PENDING',
+        submittedAt: tr.createdAt,
+      }));
       // ── Helper: phân loại medical record ───────────────────────────────────
       const classifyMedicalRecord = (
         record: (typeof pet.medicalRecords)[number],
@@ -1648,6 +1666,7 @@ export class PetsService {
         shelter: formattedShelter,
         owner: formattedOwner,
         pawHistory,
+        applications,
         avatarUrl: pet.images?.[0]?.url ?? null,
         latestReportId,
         transferStatus: pendingTransfer?.status ?? null,
