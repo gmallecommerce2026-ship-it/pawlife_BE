@@ -1129,7 +1129,7 @@ export class PetsService {
               ...(petData as any),
               ownerId: userId,
               shelterId: currentUser?.shelterId ?? null,           // 👈 thêm
-              status: petData.status || (currentUser?.shelterId ? 'AVAILABLE' : 'ADOPTED'), // 👈 tôn trọng status FE gửi, fallback theo ngữ cảnh
+              status: (createPetDto as any).status || (currentUser?.shelterId ? 'AVAILABLE' : 'ADOPTED'), // 👈 tôn trọng status FE gửi, fallback theo ngữ cảnh
               adoptedAt: currentUser?.shelterId ? null : new Date(), // 👈 chỉ set adoptedAt khi là cá nhân tự đăng ký
               dob: petData.dob ? new Date(petData.dob) : undefined,
               qrVerificationStatus: 'VERIFIED',
@@ -1150,7 +1150,7 @@ export class PetsService {
           ...(petData as any),
           ownerId: userId,
           shelterId: currentUser?.shelterId ?? null,               // 👈 thêm
-          status: petData.status || (currentUser?.shelterId ? 'AVAILABLE' : 'ADOPTED'), // 👈 tôn trọng status FE gửi
+          status: (createPetDto as any).status || (currentUser?.shelterId ? 'AVAILABLE' : 'ADOPTED'), // 👈 tôn trọng status FE gửi
           adoptedAt: currentUser?.shelterId ? null : new Date(),    // 👈 chỉ set khi cá nhân đăng ký
           dob: petData.dob ? new Date(petData.dob) : undefined,
           idSetByShelter,
