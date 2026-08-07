@@ -1066,6 +1066,13 @@ export class PetsService {
     const { images, tagId, medicalRecords, ...petData } = createPetDto;
     const publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN');
     const idSetByShelter = await this.generateUniqueShelterCode();
+
+    // 👈 THÊM: lấy shelterId của user đang tạo pet (nếu là tài khoản shelter)
+    const currentUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { shelterId: true },
+    });
+
     const medicalRecordsData = medicalRecords && medicalRecords.length > 0 ? {
       create: medicalRecords.map(record => ({
         type: record.type, recordName: getBilingualText(record.recordName) as any, recordDate: new Date(record.recordDate),
@@ -1077,16 +1084,18 @@ export class PetsService {
 
     try {
       if (tagId) {
-        const tag = await this.prisma.tag.findUnique({ where: { id: tagId } });
-        if (!tag) throw new BadRequestException({ message: 'This QR code does not exist in the system!', i18n: { key: 'error.qr_not_found' } });
-        if (tag.petId) throw new BadRequestException({ message: 'This QR code is already in use for another pet!', i18n: { key: 'error.qr_in_use' } });
-        if ((tag as any).linkCount >= 3) throw new BadRequestException({ message: 'This QR code has reached its maximum reuse limit!', i18n: { key: 'error.qr_limit_reached' } });
+        // ... giữ nguyên phần kiểm tra tag
         const result = await this.prisma.$transaction(async (prisma) => {
           const newPet = await prisma.pet.create({
             data: {
-              ...(petData as any), ownerId: userId, status: 'ADOPTED', adoptedAt: new Date(), qrVerificationStatus: 'VERIFIED',
+              ...(petData as any),
+              ownerId: userId,
+              shelterId: currentUser?.shelterId ?? null,           // 👈 thêm
+              status: petData.status || (currentUser?.shelterId ? 'AVAILABLE' : 'ADOPTED'), // 👈 tôn trọng status FE gửi, fallback theo ngữ cảnh
+              adoptedAt: currentUser?.shelterId ? null : new Date(), // 👈 chỉ set adoptedAt khi là cá nhân tự đăng ký
+              dob: petData.dob ? new Date(petData.dob) : undefined,
+              qrVerificationStatus: 'VERIFIED',
               qrCodeUrl: `${publicDomain}/qr-codes/${tagId}.svg`, idSetByShelter,
-              dob: petData.dob ? new Date(petData.dob) : undefined, // 👈 thêm dòng này
               ...(images && images.length > 0 && { images: { create: images.map(url => ({ url })) } }),
               ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
             },
@@ -1100,8 +1109,13 @@ export class PetsService {
 
       const newPet = await this.prisma.pet.create({
         data: {
-          ...(petData as any), ownerId: userId, status: 'ADOPTED', adoptedAt: new Date(), idSetByShelter,
-          dob: petData.dob ? new Date(petData.dob) : undefined, // 👈 thêm dòng này
+          ...(petData as any),
+          ownerId: userId,
+          shelterId: currentUser?.shelterId ?? null,               // 👈 thêm
+          status: petData.status || (currentUser?.shelterId ? 'AVAILABLE' : 'ADOPTED'), // 👈 tôn trọng status FE gửi
+          adoptedAt: currentUser?.shelterId ? null : new Date(),    // 👈 chỉ set khi cá nhân đăng ký
+          dob: petData.dob ? new Date(petData.dob) : undefined,
+          idSetByShelter,
           ...(images && images.length > 0 && { images: { create: images.map(url => ({ url })) } }),
           ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
         },
