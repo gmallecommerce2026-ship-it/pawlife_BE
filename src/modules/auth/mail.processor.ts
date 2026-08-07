@@ -40,6 +40,35 @@ export class MailProcessor extends WorkerHost {
         this.logger.error(`❌ Error sending email to ${email}:`, error);
         throw error; // Throw error so BullMQ can automatically retry
       }
+    } else if (job.name === 'send-contact-message') {
+      // ✅ THÊM MỚI: xử lý tin nhắn liên hệ gửi Admin/Developer
+      const { toEmail, name, email, subject, message, target } = job.data;
+      this.logger.log(`Sending contact message (${target}) from ${email} to ${toEmail}`);
+
+      try {
+        await this.mailerService.sendMail({
+          to: toEmail,
+          replyTo: email, // để Admin/Dev bấm Reply là trả lời thẳng cho người gửi
+          subject: `[Liên hệ - ${target === 'ADMIN' ? 'Admin' : 'Developer'}] ${subject}`,
+          text: `Người gửi: ${name} (${email})\nTiêu đề: ${subject}\n\n${message}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+              <h2 style="color: #f97316;">Tin nhắn liên hệ mới (${target === 'ADMIN' ? 'Admin' : 'Developer'})</h2>
+              <p><b>Họ tên:</b> ${name}</p>
+              <p><b>Email:</b> ${email}</p>
+              <p><b>Tiêu đề:</b> ${subject}</p>
+              <div style="margin-top: 16px; padding: 14px 18px; background: #f9fafb; border-radius: 10px; border: 1px solid #e5e7eb;">
+                <p style="white-space: pre-wrap; margin: 0; line-height: 1.6;">${message}</p>
+              </div>
+              <p style="color: #9ca3af; font-size: 12px; margin-top: 20px;">* Bấm "Reply" để trả lời trực tiếp cho người gửi.</p>
+            </div>
+          `,
+        });
+        this.logger.log(`✅ Successfully sent contact message to: ${toEmail}`);
+      } catch (error) {
+        this.logger.error(`❌ Error sending contact message to ${toEmail}:`, error);
+        throw error; // Throw error để BullMQ tự động retry
+      }
     }
   }
 }
