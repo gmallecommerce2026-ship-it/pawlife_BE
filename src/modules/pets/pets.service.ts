@@ -92,6 +92,19 @@ function normalizeBilingualList(list: unknown): { vi: string; en: string }[] {
   if (!Array.isArray(list)) return [];
   return list.map((item) => getBilingualText(item)).filter((t) => t.vi || t.en);
 }
+function normalizeTraitsList(list: unknown): { name: { vi: string; en: string } }[] {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((item) => {
+      // Chấp nhận cả 3 dạng đầu vào: string thuần, {vi,en} phẳng, hoặc {name:{vi,en}} sẵn có
+      const source = item && typeof item === 'object' && 'name' in (item as any)
+        ? (item as any).name
+        : item;
+      const bi = getBilingualText(source);
+      return bi.vi || bi.en ? { name: bi } : null;
+    })
+    .filter((x): x is { name: { vi: string; en: string } } => x !== null);
+}
 const ownerSelectQuery = {
   select: {
     id: true,
@@ -1891,9 +1904,9 @@ export class PetsService {
           ...petInfo,
           dob: petInfo.dob ? new Date(petInfo.dob) : undefined,
           ...(nameLastUpdatedAt && { nameLastUpdatedAt }),
-          ...(traits !== undefined && { traits: normalizeBilingualList(traits) }),        // 🆕 THÊM
-          ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }),  // 🆕 THÊM
-          ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),     // 🆕 THÊM
+          ...(traits !== undefined && { traits: normalizeTraitsList(traits) }),        // 🔧 đổi hàm cho traits
+          ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }), // giữ nguyên
+          ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),    // giữ nguyên
           ...(images && images.length > 0 && { images: { deleteMany: {}, create: images.map((url: string) => ({ url })) } }),
         },
         include: { images: true, medicalRecords: true },
