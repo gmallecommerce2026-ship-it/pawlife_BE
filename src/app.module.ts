@@ -27,6 +27,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { TranslateModule } from './translate/translate.module';
 import { IngredientsModule } from './modules/ingredients/ingredients.module';
 import { AppointmentModule } from './modules/appointments/appointment.module';
+import { SupportModule } from './modules/support/support.module';
 
 @Module({
   imports: [
@@ -113,6 +114,7 @@ import { AppointmentModule } from './modules/appointments/appointment.module';
     EventsModule,
     TagsModule,
     PawcareModule,
+    SupportModule,
     NotificationsModule,
     ApplicationsModule,
     WalletModule,
