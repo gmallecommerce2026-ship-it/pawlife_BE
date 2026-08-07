@@ -1133,7 +1133,7 @@ export class PetsService {
       where: { id: userId },
       select: { shelterId: true },
     });
-    const { images, tagId, medicalRecords, adoptionRequirementKeys, traits, goodWith, badWith, ...petData } = createPetDto;
+    const { images, tagId, medicalRecords, adoptionRequirementKeys, personalityTags, goodWith, badWith, ...petData } = createPetDto;
     const requirementIds = adoptionRequirementKeys && adoptionRequirementKeys.length > 0
       ? await this.resolveRequirementIds(adoptionRequirementKeys)
       : [];
@@ -1157,7 +1157,7 @@ export class PetsService {
               adoptedAt: currentUser?.shelterId ? null : new Date(),
               dob: petData.dob ? new Date(petData.dob) : undefined,
               idSetByShelter,
-              ...(traits !== undefined && { traits: normalizeTraitsList(traits) }),
+              ...(personalityTags !== undefined && { traits: normalizeTraitsList(personalityTags) }),
               ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }),
               ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),
               ...(requirementIds.length > 0 && {                                          // 🆕 thêm khối này
