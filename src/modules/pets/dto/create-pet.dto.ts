@@ -17,7 +17,7 @@ export class MedicalRecordDto {
   @IsString()
   @IsOptional()
   id?: string;
-  
+
   @IsString()
   @IsNotEmpty()
   type: string = "";
@@ -90,7 +90,7 @@ export class CreatePetDto {
   @ValidateNested()
   @Type(() => LocalizedStringDto)
   @IsOptional()
-  description?: LocalizedStringDto; 
+  description?: LocalizedStringDto;
 
   @IsArray()
   @IsString({ each: true })
@@ -99,20 +99,20 @@ export class CreatePetDto {
 
   @IsEnum(PetGender)
   @IsOptional()
-  gender?: PetGender; 
+  gender?: PetGender;
 
   @IsEnum(PetSize)
   @IsOptional()
-  size?: PetSize; 
+  size?: PetSize;
 
   @IsNumber()
   @IsOptional()
-  weight?: number; 
+  weight?: number;
 
   @ValidateNested()
   @Type(() => LocalizedStringDto)
   @IsOptional()
-  color?: LocalizedStringDto; 
+  color?: LocalizedStringDto;
 
   @IsBoolean()
   @IsOptional()
@@ -132,10 +132,9 @@ export class CreatePetDto {
   @IsOptional()
   qrCodeUrl?: string;
 
-  @ValidateNested()
-  @Type(() => LocalizedStringDto)
+  @IsArray()
   @IsOptional()
-  traits?: LocalizedStringDto;
+  traits?: (string | LocalizedStringDto)[];
 
   @ValidateNested()
   @Type(() => LocalizedStringDto)
@@ -146,6 +145,20 @@ export class CreatePetDto {
   @IsArray()
   @IsString({ each: true })
   personalityTags?: string[];
+
+  // 🔧 SỬA — lý do y hệt traits ở trên
+  @IsArray()
+  @IsOptional()
+  goodWith?: (string | LocalizedStringDto)[];
+
+  @IsArray()
+  @IsOptional()
+  badWith?: (string | LocalizedStringDto)[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  adoptionRequirementKeys?: string[];
 
   @IsString()
   @IsOptional()

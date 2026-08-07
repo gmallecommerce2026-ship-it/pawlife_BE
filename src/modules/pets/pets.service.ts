@@ -88,7 +88,10 @@ function getBilingualText(field: unknown): { vi: string; en: string } {
   return { vi: String(field), en: String(field) };
 }
 // ----------------------------------------------------------------------
-
+function normalizeBilingualList(list: unknown): { vi: string; en: string }[] {
+  if (!Array.isArray(list)) return [];
+  return list.map((item) => getBilingualText(item)).filter((t) => t.vi || t.en);
+}
 const ownerSelectQuery = {
   select: {
     id: true,
@@ -1101,7 +1104,7 @@ export class PetsService {
     return { data: pets, meta: { page, pageSize, total } };
   }
   async createPet(userId: string, createPetDto: CreatePetDto) {
-    const { images, tagId, medicalRecords, ...petData } = createPetDto;
+    const { images, tagId, medicalRecords, adoptionRequirementKeys, traits, goodWith, badWith, ...petData } = createPetDto;
     const publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN');
     const idSetByShelter = await this.generateUniqueShelterCode();
 
@@ -1817,7 +1820,7 @@ export class PetsService {
       }
     }
 
-    const { images, medicalRecords, nameLastUpdatedAt, ...petInfo } = updateData;
+    const { images, medicalRecords, nameLastUpdatedAt, adoptionRequirementKeys, traits, goodWith, badWith, ...petInfo } = updateData;
 
     try {
       // ── Xử lý medicalRecords KHÔNG xoá hết — giữ nguyên verificationStatus của record cũ ──
@@ -1886,8 +1889,11 @@ export class PetsService {
         where: { id: petId },
         data: {
           ...petInfo,
-          dob: petInfo.dob ? new Date(petInfo.dob) : undefined, // 👈 thêm dòng này
+          dob: petInfo.dob ? new Date(petInfo.dob) : undefined,
           ...(nameLastUpdatedAt && { nameLastUpdatedAt }),
+          ...(traits !== undefined && { traits: normalizeBilingualList(traits) }),        // 🆕 THÊM
+          ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }),  // 🆕 THÊM
+          ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),     // 🆕 THÊM
           ...(images && images.length > 0 && { images: { deleteMany: {}, create: images.map((url: string) => ({ url })) } }),
         },
         include: { images: true, medicalRecords: true },
