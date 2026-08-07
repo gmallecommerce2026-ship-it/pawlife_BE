@@ -1061,7 +1061,45 @@ export class PetsService {
   }
 
 
+  async getShelterPets(userId: string, params: { search?: string; type?: string; status?: string; page?: number; pageSize?: number }) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { shelterId: true },
+    });
+    if (!user?.shelterId) {
+      return { data: [], meta: { page: 1, pageSize: 0, total: 0 } };
+    }
 
+    const { search, type, status, page = 1, pageSize = 20 } = params;
+    const whereCondition: Prisma.PetWhereInput = { shelterId: user.shelterId };
+
+    if (status) whereCondition.status = status as any;
+    if (search) {
+      whereCondition.OR = [
+        { name: { contains: search } },
+        { breed: { path: ['vi'], string_contains: search } as any },
+        { breed: { path: ['en'], string_contains: search } as any },
+      ];
+    }
+    if (type) {
+      whereCondition.species = { path: ['en'], equals: type.toUpperCase() } as any;
+    }
+
+    const [pets, total] = await Promise.all([
+      this.prisma.pet.findMany({
+        where: whereCondition,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          images: { orderBy: { createdAt: 'asc' } },
+        },
+      }),
+      this.prisma.pet.count({ where: whereCondition }),
+    ]);
+
+    return { data: pets, meta: { page, pageSize, total } };
+  }
   async createPet(userId: string, createPetDto: CreatePetDto) {
     const { images, tagId, medicalRecords, ...petData } = createPetDto;
     const publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN');

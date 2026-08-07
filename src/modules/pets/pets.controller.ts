@@ -48,7 +48,18 @@ export class PetsController {
   async confirmTransfer(@Param('transferId') transferId: string, @Req() req: any) {
     return this.petsService.confirmTransfer(transferId, req.user.id);
   }
-
+  @Get('shelter/manage')
+  @UseGuards(JwtAuthGuard)
+  async getShelterPets(
+    @User('id') userId: string,
+    @Query('search') search?: string,
+    @Query('type') type?: string,
+    @Query('status') status?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('pageSize', new DefaultValuePipe(20), ParseIntPipe) pageSize?: number,
+  ) {
+    return this.petsService.getShelterPets(userId, { search, type, status, page, pageSize });
+  }
   @Throttle({ default: { limit: 120, ttl: 60000 } }) // ADDED: Allow feed scrolling 120 times/minute (prevent DB DDoS)
   @Get('feed')
   async getFeed(
