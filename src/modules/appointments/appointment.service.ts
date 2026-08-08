@@ -1,262 +1,187 @@
-import {
-  Injectable,
-  BadRequestException,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+// appointments.service.ts
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
-import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType, AppointmentStatus, AppointmentType } from '@prisma/client';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
-import { UpdateAppointmentStatusDto, RescheduleAppointmentDto } from './dto/update-appointment.dto';
-import { AppointmentStatus, NotificationType } from '@prisma/client';
+import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
+import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto';
+import { DelegateBookingDto } from './dto/delegate-booking.dto';
+
+type ActorRole = 'SHELTER' | 'USER';
 
 @Injectable()
-export class AppointmentService {
+export class AppointmentsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationsService: NotificationsService,
-    private readonly notificationsGateway: NotificationsGateway,
+    private readonly gateway: NotificationsGateway,
+    private readonly notifications: NotificationsService,
   ) {}
 
-  // Trạm không có "ownerId" — người quản lý là các User có shelterId trỏ tới trạm này
-  private async getShelterUserIds(shelterId: string): Promise<string[]> {
-    const users = await this.prisma.user.findMany({
-      where: { shelterId },
-      select: { id: true },
+  private async getApplicationWithGuard(applicationId: string) {
+    const app = await this.prisma.adoptionApplication.findUnique({
+      where: { id: applicationId },
+      include: { pet: true },
     });
-    return users.map((u) => u.id);
+    if (!app) throw new NotFoundException('Không tìm thấy đơn nhận nuôi.');
+    return app;
   }
 
-  private async notifyUsers(
-    userIds: string[],
-    title: string,
-    body: string,
-    event: string,
-    payload: Record<string, any>,
-  ) {
-    for (const uid of userIds) {
-      const notification = await this.notificationsService.createAndSendNotification({
-        userId: uid,
-        title,
-        body,
-        type: NotificationType.SYSTEM,
-        referenceId: payload.appointmentId,
-        metadata: payload,
-      } as any);
+  private assertOwnership(appt: { shelterId: string; userId: string }, actorId: string, role: ActorRole) {
+    if (role === 'SHELTER' && appt.shelterId !== actorId) throw new ForbiddenException();
+    if (role === 'USER' && appt.userId !== actorId) throw new ForbiddenException();
+  }
 
-      if (this.notificationsGateway.server) {
-        this.notificationsGateway.server.to(`user_${uid}`).emit(event, {
-          notification,
-          ...payload,
-        });
+  private async pushRealtime(appointment: any, event: string) {
+    await this.gateway.notifyUserSmartly(appointment.userId, event, appointment);
+    this.gateway.server.to(`shelter_${appointment.shelterId}`).emit(event, appointment);
+  }
+
+  async createOrUpsert(actorId: string, actorRole: ActorRole, dto: CreateAppointmentDto) {
+    const app = await this.getApplicationWithGuard(dto.applicationId);
+
+    if (actorRole === 'SHELTER' && app.pet.shelterId !== actorId) throw new ForbiddenException();
+
+    const existing = await this.prisma.appointment.findUnique({ where: { applicationId: dto.applicationId } });
+
+    if (actorRole === 'USER') {
+      if (app.userId !== actorId) throw new ForbiddenException();
+      if (existing && !existing.bookingDelegated) {
+        throw new ForbiddenException('Bạn chưa được cấp quyền đặt lịch cho đơn này.');
       }
     }
-  }
 
-  // 1. Đặt lịch hẹn mới
-  async create(userId: string, dto: CreateAppointmentDto) {
-    const application = await this.prisma.adoptionApplication.findUnique({
-      where: { id: dto.applicationId },
-      include: { pet: { include: { shelter: true } }, appointment: true },
-    });
-
-    if (!application) throw new NotFoundException('Không tìm thấy đơn nhận nuôi');
-    if (application.userId !== userId) throw new ForbiddenException('Bạn không có quyền đặt lịch cho đơn này');
-    if (application.appointment) throw new BadRequestException('Đơn nhận nuôi này đã có lịch hẹn');
-
-    const shelterId = application.pet?.shelterId;
-    if (!shelterId) throw new BadRequestException('Pet này chưa thuộc trạm cứu hộ nào, không thể đặt lịch');
-
-    const appointmentDate = new Date(dto.appointmentDate);
-
-    const existingSlot = await this.prisma.appointment.findFirst({
-      where: {
-        shelterId,
-        appointmentDate,
-        startTime: dto.startTime,
-        status: { in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED] },
-      },
-    });
-    if (existingSlot) {
-      throw new BadRequestException('Khung giờ này đã được đặt, vui lòng chọn giờ khác');
-    }
-
-    const appointment = await this.prisma.appointment.create({
-      data: {
+    const appointment = await this.prisma.appointment.upsert({
+      where: { applicationId: dto.applicationId },
+      create: {
         applicationId: dto.applicationId,
-        userId,
-        shelterId,
-        petId: application.petId,
-        appointmentDate,
+        userId: app.userId,
+        petId: app.petId,
+        shelterId: app.pet.shelterId!,
+        appointmentDate: new Date(dto.appointmentDate),
         startTime: dto.startTime,
         endTime: dto.endTime,
-        type: dto.type || 'IN_PERSON',
+        type: dto.type ?? AppointmentType.IN_PERSON,
+        location: dto.location,
         notes: dto.notes,
-        location: application.pet?.shelter?.address || application.pet?.contactAddress || 'Tại trạm cứu hộ',
         status: AppointmentStatus.PENDING,
+        createdBy: actorId,
       },
-      include: {
-        pet: { select: { name: true } },
-        user: { select: { name: true } },
-      },
-    });
-
-    const shelterUserIds = await this.getShelterUserIds(shelterId);
-    await this.notifyUsers(
-      shelterUserIds,
-      'Yêu cầu lịch hẹn mới',
-      `${appointment.user?.name ?? 'Người dùng'} vừa đặt lịch hẹn phỏng vấn cho bé ${appointment.pet?.name ?? ''}`,
-      'notification',
-      { appointmentId: appointment.id, applicationId: appointment.applicationId },
-    );
-
-    return appointment;
-  }
-
-  // 2. Cập nhật trạng thái lịch hẹn
-  async updateStatus(id: string, dto: UpdateAppointmentStatusDto) {
-    const appointment = await this.prisma.appointment.findUnique({
-      where: { id },
-      include: {
-        pet: { select: { name: true } },
-        shelter: { select: { name: true } },
-        user: { select: { id: true, name: true } },
-      },
-    });
-
-    if (!appointment) throw new NotFoundException('Không tìm thấy lịch hẹn');
-
-    const updated = await this.prisma.appointment.update({
-      where: { id },
-      data: {
-        status: dto.status,
-        cancellationReason: dto.cancellationReason,
-        location: dto.location || appointment.location,
-        notes: dto.notes || appointment.notes,
-      },
-    });
-
-    const statusTextMap: Record<string, string> = {
-      CONFIRMED: 'đã được Trạm cứu hộ XÁC NHẬN',
-      REJECTED: 'đã bị TRẠM CỨU HỘ TỪ CHỐI',
-      CANCELLED: 'đã BỊ HỦY',
-      COMPLETED: 'đã HOÀN THÀNH',
-    };
-
-    await this.notifyUsers(
-      [updated.userId],
-      'Cập nhật lịch hẹn phỏng vấn',
-      `Lịch hẹn phỏng vấn bé ${appointment.pet?.name ?? ''} ${statusTextMap[dto.status] || 'được cập nhật'}`,
-      'appointment_status_changed',
-      { appointmentId: updated.id, applicationId: updated.applicationId, status: updated.status },
-    );
-
-    return updated;
-  }
-
-  // 3. Đổi lịch hẹn
-  async reschedule(id: string, dto: RescheduleAppointmentDto) {
-    const appointment = await this.prisma.appointment.findUnique({ where: { id } });
-    if (!appointment) throw new NotFoundException('Không tìm thấy lịch hẹn');
-
-    const appointmentDate = new Date(dto.appointmentDate);
-
-    const existingSlot = await this.prisma.appointment.findFirst({
-      where: {
-        id: { not: id },
-        shelterId: appointment.shelterId,
-        appointmentDate,
-        startTime: dto.startTime,
-        status: { in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED] },
-      },
-    });
-    if (existingSlot) {
-      throw new BadRequestException('Khung giờ này đã được đặt, vui lòng chọn giờ khác');
-    }
-
-    const updated = await this.prisma.appointment.update({
-      where: { id },
-      data: {
-        appointmentDate,
+      update: {
+        appointmentDate: new Date(dto.appointmentDate),
         startTime: dto.startTime,
         endTime: dto.endTime,
-        type: dto.type || appointment.type,
-        notes: dto.notes || appointment.notes,
+        type: dto.type ?? AppointmentType.IN_PERSON,
+        location: dto.location,
+        notes: dto.notes,
         status: AppointmentStatus.RESCHEDULED,
       },
     });
 
-    const shelterUserIds = await this.getShelterUserIds(updated.shelterId);
-    await this.notifyUsers(
-      [...shelterUserIds, updated.userId],
-      'Lịch hẹn đã được đổi giờ',
-      'Một lịch hẹn phỏng vấn vừa được đổi sang thời gian mới.',
-      'appointment_rescheduled',
-      { appointmentId: updated.id, applicationId: updated.applicationId },
-    );
+    await this.prisma.adoptionApplication.update({
+      where: { id: dto.applicationId },
+      data: { status: 'INTERVIEW_SCHEDULED' },
+    });
 
+    await this.pushRealtime(appointment, actorRole === 'SHELTER' ? 'appointment_created' : 'appointment_booked_by_user');
+    return appointment;
+  }
+
+  async reschedule(actorId: string, actorRole: ActorRole, appointmentId: string, dto: RescheduleAppointmentDto) {
+    const existing = await this.prisma.appointment.findUnique({ where: { id: appointmentId } });
+    if (!existing) throw new NotFoundException();
+    this.assertOwnership(existing, actorId, actorRole);
+
+    const updated = await this.prisma.appointment.update({
+      where: { id: appointmentId },
+      data: {
+        ...(dto.appointmentDate && { appointmentDate: new Date(dto.appointmentDate) }),
+        ...(dto.startTime && { startTime: dto.startTime }),
+        ...(dto.endTime && { endTime: dto.endTime }),
+        ...(dto.type && { type: dto.type }),
+        ...(dto.location !== undefined && { location: dto.location }),
+        ...(dto.notes !== undefined && { notes: dto.notes }),
+        status: AppointmentStatus.RESCHEDULED,
+      },
+    });
+
+    await this.pushRealtime(updated, 'appointment_updated');
     return updated;
   }
 
-  // 4. Xem chi tiết lịch hẹn theo đơn nhận nuôi
-  async findByApplicationId(applicationId: string) {
-    return this.prisma.appointment.findUnique({
+  async updateStatus(actorId: string, actorRole: ActorRole, appointmentId: string, dto: UpdateAppointmentStatusDto) {
+    const existing = await this.prisma.appointment.findUnique({ where: { id: appointmentId } });
+    if (!existing) throw new NotFoundException();
+    this.assertOwnership(existing, actorId, actorRole);
+
+    const updated = await this.prisma.appointment.update({
+      where: { id: appointmentId },
+      data: { status: dto.status, notes: dto.cancellationReason ?? existing.notes },
+    });
+
+    await this.pushRealtime(updated, dto.status === AppointmentStatus.CANCELLED ? 'appointment_cancelled' : 'appointment_updated');
+    return updated;
+  }
+
+  async delegateBooking(shelterId: string, applicationId: string, dto: DelegateBookingDto) {
+    const app = await this.getApplicationWithGuard(applicationId);
+    if (app.pet.shelterId !== shelterId) throw new ForbiddenException();
+
+    const appointment = await this.prisma.appointment.upsert({
       where: { applicationId },
-      include: {
-        pet: { select: { id: true, name: true } },
-        shelter: { select: { id: true, name: true, address: true } },
-        user: { select: { id: true, name: true, avatarUrl: true } },
+      create: {
+        applicationId,
+        userId: app.userId,
+        petId: app.petId,
+        shelterId,
+        appointmentDate: new Date(),
+        startTime: '00:00',
+        endTime: '00:00',
+        type: AppointmentType.IN_PERSON,
+        status: AppointmentStatus.PENDING,
+        bookingDelegated: dto.delegated,
+        createdBy: shelterId,
       },
+      update: { bookingDelegated: dto.delegated },
     });
+
+    await this.notifications.createAndSendNotification({
+      userId: app.userId,
+      title: '📅 Bạn có thể tự chọn lịch phỏng vấn',
+      body: `Trạm cứu hộ đã cho phép bạn tự đặt lịch phỏng vấn cho ${app.pet.name}.`,
+      type: NotificationType.SYSTEM,
+      referenceId: applicationId,
+      metadata: { uiAction: 'open_booking_modal', applicationId },
+    });
+
+    await this.gateway.notifyUserSmartly(app.userId, 'booking_delegated', { applicationId, delegated: dto.delegated });
+    return appointment;
   }
 
-  // 5. Danh sách lịch hẹn của 1 user (adopter)
-  async findByUser(userId: string) {
-    return this.prisma.appointment.findMany({
-      where: { userId },
-      orderBy: { appointmentDate: 'desc' },
-      include: {
-        pet: { select: { id: true, name: true } },
-        shelter: { select: { id: true, name: true, address: true } },
-      },
-    });
+  async getByApplication(applicationId: string) {
+    return this.prisma.appointment.findUnique({ where: { applicationId } });
   }
 
-  // 6. Danh sách lịch hẹn của 1 shelter
-  async findByShelter(shelterId: string, status?: AppointmentStatus) {
-    return this.prisma.appointment.findMany({
-      where: { shelterId, ...(status ? { status } : {}) },
-      orderBy: { appointmentDate: 'asc' },
-      include: {
-        pet: { select: { id: true, name: true } },
-        user: { select: { id: true, name: true, phone: true, avatarUrl: true } },
-      },
-    });
-  }
-
-  // 7. Khung giờ còn trống trong ngày
   async getAvailableSlots(shelterId: string, date: string) {
-    const dayStart = new Date(date);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(date);
-    dayEnd.setHours(23, 59, 59, 999);
+    const dayStart = new Date(`${date}T00:00:00`);
+    const dayEnd = new Date(`${date}T23:59:59`);
 
-    const bookedAppointments = await this.prisma.appointment.findMany({
+    const booked = await this.prisma.appointment.findMany({
       where: {
         shelterId,
         appointmentDate: { gte: dayStart, lte: dayEnd },
-        status: { in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED] },
+        status: { in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED, AppointmentStatus.RESCHEDULED] },
       },
       select: { startTime: true },
     });
+    const bookedSet = new Set(booked.map((b) => b.startTime));
 
-    // Khung giờ làm việc mặc định 08:00–17:00, mỗi slot 1 giờ (nghỉ trưa 12:00–13:00)
-    const allSlots = ['08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'];
-    const bookedStartTimes = new Set(bookedAppointments.map((a) => a.startTime));
-
-    return allSlots
-      .filter((slot) => !bookedStartTimes.has(slot))
-      .map((slot) => ({ startTime: slot }));
+    const slots: { time: string; available: boolean }[] = [];
+    for (let h = 9; h < 17; h++) {
+      const time = `${h.toString().padStart(2, '0')}:00`;
+      slots.push({ time, available: !bookedSet.has(time) });
+    }
+    return slots;
   }
 }

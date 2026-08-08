@@ -1,12 +1,14 @@
+// appointments.module.ts
 import { Module } from '@nestjs/common';
-import { AppointmentController } from './appointment.controller';
-import { AppointmentService } from './appointment.service';
-import { DatabaseModule } from 'src/database/database.module';
+import { DatabaseModule } from '../../database/database.module';
+import { AuthModule } from '../auth/auth.module';
+import { AppointmentsController } from './appointment.controller';
+import { AppointmentsService } from './appointment.service';
 
 @Module({
-  imports: [DatabaseModule],
-  controllers: [AppointmentController],
-  providers: [AppointmentService],
-  exports: [AppointmentService],
+  imports: [DatabaseModule, AuthModule],
+  controllers: [AppointmentsController],
+  providers: [AppointmentsService],
+  exports: [AppointmentsService],
 })
-export class AppointmentModule {}
+export class AppointmentsModule {}

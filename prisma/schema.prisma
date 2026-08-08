@@ -402,7 +402,7 @@ model Appointment {
   location             String?             // Địa chỉ trạm hoặc link meeting online
   notes                String?             // Ghi chú của người dùng khi đặt
   cancellationReason   String?             // Lý do hủy (nếu có)
-
+  bookingDelegated Boolean          @default(false)
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 

@@ -1,59 +1,45 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+// appointments.controller.ts
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
-import { UpdateAppointmentStatusDto, RescheduleAppointmentDto } from './dto/update-appointment.dto';
-import { AppointmentStatus } from '@prisma/client';
-import { AppointmentService } from './appointment.service';
+import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
+import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto';
+import { DelegateBookingDto } from './dto/delegate-booking.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
+import { User } from '../../common/decorators/user.decorator';
 
 @Controller('appointments')
 @UseGuards(JwtAuthGuard)
-export class AppointmentController {
-  constructor(private readonly appointmentService: AppointmentService) {}
+export class AppointmentsController {
+  constructor(private readonly service: AppointmentsService) {}
 
-  @Get('shelter/:shelterId/available-slots')
-  getAvailableSlots(
-    @Param('shelterId') shelterId: string,
-    @Query('date') date: string,
-  ) {
-    return this.appointmentService.getAvailableSlots(shelterId, date);
+  @Post()
+  create(@User() user: any, @Body() dto: CreateAppointmentDto) {
+    return this.service.createOrUpsert(user.shelterId ?? user.id, user.shelterId ? 'SHELTER' : 'USER', dto);
+  }
+
+  @Patch(':id/reschedule')
+  reschedule(@User() user: any, @Param('id') id: string, @Body() dto: RescheduleAppointmentDto) {
+    return this.service.reschedule(user.shelterId ?? user.id, user.shelterId ? 'SHELTER' : 'USER', id, dto);
+  }
+
+  @Patch(':id/status')
+  updateStatus(@User() user: any, @Param('id') id: string, @Body() dto: UpdateAppointmentStatusDto) {
+    return this.service.updateStatus(user.shelterId ?? user.id, user.shelterId ? 'SHELTER' : 'USER', id, dto);
+  }
+
+  @Patch('applications/:applicationId/delegate')
+  delegate(@User('shelterId') shelterId: string, @Param('applicationId') applicationId: string, @Body() dto: DelegateBookingDto) {
+    return this.service.delegateBooking(shelterId, applicationId, dto);
   }
 
   @Get('application/:applicationId')
   getByApplication(@Param('applicationId') applicationId: string) {
-    return this.appointmentService.findByApplicationId(applicationId);
+    return this.service.getByApplication(applicationId);
   }
 
-  @Get('my-appointments')
-  getMyAppointments(@Request() req) {
-    return this.appointmentService.findByUser(req.user.id);
-  }
-
-  @Get('shelter/:shelterId')
-  getShelterAppointments(
-    @Param('shelterId') shelterId: string,
-    @Query('status') status?: AppointmentStatus,
-  ) {
-    return this.appointmentService.findByShelter(shelterId, status);
-  }
-
-  @Post()
-  create(@Request() req, @Body() dto: CreateAppointmentDto) {
-    return this.appointmentService.create(req.user.id, dto);
-  }
-
-  @Patch(':id/status')
-  updateStatus(
-    @Param('id') id: string,
-    @Body() dto: UpdateAppointmentStatusDto,
-  ) {
-    return this.appointmentService.updateStatus(id, dto);
-  }
-
-  @Patch(':id/reschedule')
-  reschedule(
-    @Param('id') id: string,
-    @Body() dto: RescheduleAppointmentDto,
-  ) {
-    return this.appointmentService.reschedule(id, dto);
+  @Get('shelter/:shelterId/available-slots')
+  getSlots(@Param('shelterId') shelterId: string, @Query('date') date: string) {
+    return this.service.getAvailableSlots(shelterId, date);
   }
 }
