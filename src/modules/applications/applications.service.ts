@@ -3,7 +3,6 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
@@ -21,14 +20,14 @@ export class ApplicationsService {
   // ==========================================
 
   /**
-   * Tạo đơn nhận nuôi mới (Giới hạn tối đa 5 đơn đang xử lý)
+   * Tạo đơn nhận nuôi mới (Giới hạn tối đa 5 đơn chưa đóng)
    */
   async createApplication(userId: string, data: CreateApplicationDto) {
     const activeApplicationsCount = await this.prisma.adoptionApplication.count({
       where: {
         userId,
         status: {
-          notIn: ['CANCELLED', 'REJECTED', 'COMPLETED'],
+          notIn: ['CLOSED', 'ADOPTION_COMPLETED'],
         },
       },
     });
@@ -41,7 +40,7 @@ export class ApplicationsService {
       });
     }
 
-    // Kiểm tra đơn đã từng tạo cho pet này chưa
+    // TÌM TẤT CẢ CÁC ĐƠN BẤT KỂ TRẠNG THÁI
     const existingApp = await this.prisma.adoptionApplication.findFirst({
       where: {
         userId,
@@ -50,31 +49,35 @@ export class ApplicationsService {
     });
 
     if (existingApp) {
-      if (existingApp.status !== 'CANCELLED' && existingApp.status !== 'REJECTED') {
+      // Nếu đơn đang mở -> Chặn lại
+      if (
+        existingApp.status !== 'CLOSED' &&
+        existingApp.status !== 'ADOPTION_COMPLETED'
+      ) {
         throw new BadRequestException({
           message: 'You have already submitted an application for this pet.',
           i18n: { key: 'error.application_already_submitted' },
         });
       }
 
-      // Nếu đơn cũ đã bị Hủy/Từ chối -> Cập nhật tái sử dụng bản ghi cũ
+      // Nếu đơn cũ đã bị CLOSED / ADOPTION_COMPLETED -> Tái sử dụng (Update)
       const updated = await this.prisma.adoptionApplication.update({
         where: { id: existingApp.id },
         data: {
           ...data,
-          status: 'PENDING',
+          status: 'SUBMITTED',
         },
       });
       await this.redisService.del(`pet:detail:${data.petId}`);
       return updated;
     }
 
-    // Chưa có đơn -> Tạo mới
+    // Nếu chưa từng có đơn nào -> Tạo mới
     const created = await this.prisma.adoptionApplication.create({
       data: {
         userId,
         ...data,
-        status: 'PENDING',
+        status: 'SUBMITTED',
       },
     });
     await this.redisService.del(`pet:detail:${data.petId}`);
@@ -82,10 +85,10 @@ export class ApplicationsService {
   }
 
   /**
-   * Lấy danh sách đơn nhận nuôi của tôi
+   * Lấy danh sách đơn của tôi
    */
   async getMyApplications(userId: string) {
-    return this.prisma.adoptionApplication.findMany({
+    const applications = await this.prisma.adoptionApplication.findMany({
       where: { userId },
       include: {
         pet: {
@@ -94,7 +97,10 @@ export class ApplicationsService {
             name: true,
             breed: true,
             dob: true,
-            avatarUrl: true,
+            images: {
+              select: { url: true },
+              take: 1,
+            },
             shelter: {
               select: {
                 id: true,
@@ -104,14 +110,16 @@ export class ApplicationsService {
             },
           },
         },
-        appointments: true,
+        appointment: true,
       },
-      orderBy: { appliedAt: 'desc' },
+      orderBy: { createdAt: 'desc' },
     });
+
+    return applications;
   }
 
   /**
-   * Lấy chi tiết 1 đơn nhận nuôi theo ID
+   * Lấy chi tiết đơn ứng tuyển theo ID
    */
   async getApplicationById(userId: string, applicationId: string) {
     const application = await this.prisma.adoptionApplication.findFirst({
@@ -122,15 +130,16 @@ export class ApplicationsService {
       include: {
         pet: {
           include: {
+            images: { orderBy: { createdAt: 'asc' } },
             shelter: {
-              select: { id: true, name: true, avatarUrl: true, phone: true },
+              select: { id: true, name: true, avatarUrl: true, contactInfo: true },
             },
           },
         },
-        appointments: true,
+        appointment: true,
         notes: {
           include: {
-            author: { select: { id: true, fullName: true, avatarUrl: true } },
+            author: { select: { id: true, name: true, avatarUrl: true } },
           },
           orderBy: { createdAt: 'desc' },
         },
@@ -151,7 +160,7 @@ export class ApplicationsService {
   }
 
   /**
-   * Cập nhật ảnh bổ sung xác minh
+   * Cập nhật ảnh xác minh bổ sung
    */
   async updateVerificationPhotos(
     userId: string,
@@ -159,7 +168,10 @@ export class ApplicationsService {
     photos: string[],
   ) {
     const application = await this.prisma.adoptionApplication.findFirst({
-      where: { id: applicationId, userId },
+      where: {
+        id: applicationId,
+        userId: userId,
+      },
     });
 
     if (!application) {
@@ -169,9 +181,17 @@ export class ApplicationsService {
       });
     }
 
+    if (application.status !== 'NEED_MORE_INFO') {
+      throw new BadRequestException({
+        message: 'The application currently requires no additional information.',
+        i18n: { key: 'error.application_no_info_needed' },
+      });
+    }
+
     const updated = await this.prisma.adoptionApplication.update({
       where: { id: applicationId },
       data: {
+        verificationPhotos: photos,
         status: 'PENDING',
       },
     });
@@ -180,11 +200,14 @@ export class ApplicationsService {
   }
 
   /**
-   * Rút/Hủy đơn nhận nuôi
+   * Rút đơn nhận nuôi
    */
   async withdrawApplication(userId: string, applicationId: string) {
     const application = await this.prisma.adoptionApplication.findFirst({
-      where: { id: applicationId, userId },
+      where: {
+        id: applicationId,
+        userId: userId,
+      },
     });
 
     if (!application) {
@@ -195,9 +218,8 @@ export class ApplicationsService {
     }
 
     if (
-      application.status === 'CANCELLED' ||
-      application.status === 'COMPLETED' ||
-      application.status === 'REJECTED'
+      application.status === 'CLOSED' ||
+      application.status === 'ADOPTION_COMPLETED'
     ) {
       throw new BadRequestException({
         message: 'The application cannot be withdrawn in this status!',
@@ -207,7 +229,7 @@ export class ApplicationsService {
 
     const updated = await this.prisma.adoptionApplication.update({
       where: { id: applicationId },
-      data: { status: 'CANCELLED' },
+      data: { status: 'CLOSED' },
     });
     await this.redisService.del(`pet:detail:${application.petId}`);
     return updated;
@@ -218,7 +240,7 @@ export class ApplicationsService {
   // ==========================================
 
   /**
-   * Lấy danh sách đơn dành cho Trạm cứu hộ
+   * Lấy danh sách đơn dành cho Shelter
    */
   async getShelterApplications(shelterId: string, status?: string) {
     return this.prisma.adoptionApplication.findMany({
@@ -228,23 +250,29 @@ export class ApplicationsService {
       },
       include: {
         user: {
-          select: { id: true, fullName: true, email: true, avatarUrl: true, phone: true },
+          select: { id: true, name: true, email: true, avatarUrl: true, phone: true },
         },
         pet: {
-          select: { id: true, name: true, breed: true, avatarUrl: true, gender: true },
+          select: {
+            id: true,
+            name: true,
+            breed: true,
+            gender: true,
+            images: { select: { url: true }, take: 1 },
+          },
         },
         notes: {
           include: {
-            author: { select: { id: true, fullName: true, avatarUrl: true } },
+            author: { select: { id: true, name: true, avatarUrl: true } },
           },
           orderBy: { createdAt: 'desc' },
         },
         tags: {
           include: { tag: true },
         },
-        appointments: true,
+        appointment: true,
       },
-      orderBy: { appliedAt: 'desc' },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -259,13 +287,13 @@ export class ApplicationsService {
         content,
       },
       include: {
-        author: { select: { id: true, fullName: true, avatarUrl: true } },
+        author: { select: { id: true, name: true, avatarUrl: true } },
       },
     });
   }
 
   /**
-   * Gán Tag cho đơn nhận nuôi
+   * Gán Tag cho đơn
    */
   async addTagToApplication(applicationId: string, tagId: string) {
     return this.prisma.applicationTagOnApplication.upsert({
@@ -279,7 +307,7 @@ export class ApplicationsService {
   }
 
   /**
-   * Bỏ Tag khỏi đơn nhận nuôi
+   * Gỡ Tag khỏi đơn
    */
   async removeTagFromApplication(applicationId: string, tagId: string) {
     return this.prisma.applicationTagOnApplication.delete({
@@ -290,7 +318,7 @@ export class ApplicationsService {
   }
 
   /**
-   * Cập nhật trạng thái đơn (Phê duyệt, Từ chối, Yêu cầu bổ sung)
+   * Cập nhật trạng thái đơn
    */
   async updateApplicationStatus(
     applicationId: string,
@@ -301,7 +329,7 @@ export class ApplicationsService {
       where: { id: applicationId },
       data: {
         status,
-        ...(rejectionReason ? { rejectionReason } : {}),
+        ...(rejectionReason ? { reviewNote: rejectionReason } : {}),
       },
     });
     await this.redisService.del(`pet:detail:${updated.petId}`);
@@ -312,13 +340,26 @@ export class ApplicationsService {
    * Đặt lịch hẹn phỏng vấn
    */
   async scheduleAppointment(applicationId: string, dto: any) {
+    const app = await this.prisma.adoptionApplication.findUnique({
+      where: { id: applicationId },
+      include: { pet: true },
+    });
+
+    if (!app) {
+      throw new NotFoundException('Adoption application not found');
+    }
+
     return this.prisma.appointment.create({
       data: {
         applicationId,
-        title: dto.title,
-        type: dto.format === 'Online' ? 'ONLINE' : 'OFFLINE',
+        userId: app.userId,
+        petId: app.petId,
+        shelterId: app.pet.shelterId!,
+        appointmentDate: new Date(dto.dateSlot || dto.appointmentDate),
+        startTime: dto.startTime || '09:00',
+        endTime: dto.endTime || '10:00',
+        type: dto.format === 'Online' ? 'ONLINE' : 'IN_PERSON',
         location: dto.location || dto.link,
-        scheduledAt: new Date(dto.dateSlot),
         status: 'PENDING',
       },
     });
