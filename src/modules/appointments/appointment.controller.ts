@@ -1,12 +1,12 @@
 // appointments.controller.ts
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
-import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto';
 import { DelegateBookingDto } from './dto/delegate-booking.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { User } from '../../common/decorators/user.decorator';
+import { AppointmentsService } from './appointment.service';
+import { UpdateAppointmentStatusDto } from './dto/update-appointment.dto';
 
 @Controller('appointments')
 @UseGuards(JwtAuthGuard)

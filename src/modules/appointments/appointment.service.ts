@@ -6,8 +6,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType, AppointmentStatus, AppointmentType } from '@prisma/client';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
-import { UpdateAppointmentStatusDto } from './dto/update-appointment-status.dto';
 import { DelegateBookingDto } from './dto/delegate-booking.dto';
+import { UpdateAppointmentStatusDto } from './dto/update-appointment.dto';
 
 type ActorRole = 'SHELTER' | 'USER';
 
