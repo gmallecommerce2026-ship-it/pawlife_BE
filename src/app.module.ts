@@ -26,7 +26,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TranslateModule } from './translate/translate.module';
 import { IngredientsModule } from './modules/ingredients/ingredients.module';
-import { AppointmentModule, AppointmentsModule } from './modules/appointments/appointment.module';
+import { AppointmentsModule } from './modules/appointments/appointment.module';
 import { SupportModule } from './modules/support/support.module';
 
 @Module({
