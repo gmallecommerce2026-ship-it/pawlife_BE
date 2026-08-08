@@ -375,6 +375,7 @@ export class ApplicationsService {
         type: dto.format === 'Online' ? 'ONLINE' : 'IN_PERSON',
         location: dto.location || dto.link,
         status: 'PENDING',
+        createdBy: app.pet.shelterId!,
       },
     });
   }
