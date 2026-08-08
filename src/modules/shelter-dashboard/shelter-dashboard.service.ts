@@ -275,16 +275,12 @@ export class ShelterDashboardService {
     async getMyApplications(shelterId: string, query: { status?: string; statuses?: string; petId?: string }) {
         const where: any = { pet: { shelterId } };
 
-        // Hỗ trợ truy vấn 1 trạng thái (App)
         if (query.status && query.status !== 'ALL') {
             where.status = query.status;
         }
-
-        // Hỗ trợ truy vấn nhiều trạng thái (Web Kanban)
         if (query.statuses) {
             where.status = { in: query.statuses.split(',') };
         }
-
         if (query.petId) where.petId = query.petId;
 
         return this.prisma.adoptionApplication.findMany({
@@ -292,6 +288,15 @@ export class ShelterDashboardService {
             include: {
                 pet: { include: { images: { take: 1, orderBy: { createdAt: 'asc' } } } },
                 user: { select: { id: true, name: true, avatarUrl: true, email: true, phone: true } },
+                notes: {
+                    include: {
+                        author: { select: { id: true, name: true, avatarUrl: true } },
+                    },
+                    orderBy: { createdAt: 'desc' },
+                },
+                tags: {
+                    include: { tag: true },
+                },
             },
             orderBy: { createdAt: 'desc' },
         });

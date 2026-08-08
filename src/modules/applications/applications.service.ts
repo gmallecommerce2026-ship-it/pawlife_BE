@@ -87,34 +87,35 @@ export class ApplicationsService {
   /**
    * Lấy danh sách đơn của tôi
    */
-  async getMyApplications(shelterId: string, query: { status?: string; statuses?: string; petId?: string }) {
-    const where: any = { pet: { shelterId } };
-
-    if (query.status && query.status !== 'ALL') {
-      where.status = query.status;
-    }
-    if (query.statuses) {
-      where.status = { in: query.statuses.split(',') };
-    }
-    if (query.petId) where.petId = query.petId;
-
-    return this.prisma.adoptionApplication.findMany({
-      where,
+  async getMyApplications(userId: string) {
+    const applications = await this.prisma.adoptionApplication.findMany({
+      where: { userId },
       include: {
-        pet: { include: { images: { take: 1, orderBy: { createdAt: 'asc' } } } },
-        user: { select: { id: true, name: true, avatarUrl: true, email: true, phone: true } },
-        notes: {
-          include: {
-            author: { select: { id: true, name: true, avatarUrl: true } },
+        pet: {
+          select: {
+            id: true,
+            name: true,
+            breed: true,
+            dob: true,
+            images: {
+              select: { url: true },
+              take: 1,
+            },
+            shelter: {
+              select: {
+                id: true,
+                name: true,
+                avatarUrl: true,
+              },
+            },
           },
-          orderBy: { createdAt: 'desc' },
         },
-        tags: {
-          include: { tag: true },
-        },
+        appointment: true,
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    return applications;
   }
 
   /**
