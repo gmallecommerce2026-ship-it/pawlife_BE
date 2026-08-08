@@ -295,12 +295,26 @@ export class ApplicationsService {
   /**
    * Gán Tag cho đơn
    */
-  async addTagToApplication(applicationId: string, tagId: string) {
+  async addTagToApplication(applicationId: string, tagId?: string, name?: string) {
+    let resolvedTagId = tagId;
+
+    if (!resolvedTagId && name) {
+      let tag = await this.prisma.applicationTag.findFirst({ where: { name } });
+      if (!tag) {
+        tag = await this.prisma.applicationTag.create({ data: { name } });
+      }
+      resolvedTagId = tag.id;
+    }
+
+    if (!resolvedTagId) {
+      throw new BadRequestException('Cần cung cấp tagId hoặc name.');
+    }
+
     return this.prisma.applicationTagOnApplication.upsert({
       where: {
-        applicationId_tagId: { applicationId, tagId },
+        applicationId_tagId: { applicationId, tagId: resolvedTagId },
       },
-      create: { applicationId, tagId },
+      create: { applicationId, tagId: resolvedTagId },
       update: {},
       include: { tag: true },
     });

@@ -19,7 +19,7 @@ import { CreateApplicationDto } from './dto/create-application.dto';
 @Controller('applications')
 @UseGuards(JwtAuthGuard)
 export class ApplicationsController {
-  constructor(private readonly applicationsService: ApplicationsService) {}
+  constructor(private readonly applicationsService: ApplicationsService) { }
 
   // ==========================================
   // ENDPOINTS CHO NGƯỜI DÙNG (ADOPTER)
@@ -130,11 +130,13 @@ export class ApplicationsController {
   @Post(':id/tags')
   async addTag(
     @Param('id') applicationId: string,
-    @Body('tagId') tagId: string,
+    @Body('tagId') tagId?: string,
+    @Body('name') name?: string,
   ) {
     const data = await this.applicationsService.addTagToApplication(
       applicationId,
       tagId,
+      name,
     );
     return { success: true, data };
   }
