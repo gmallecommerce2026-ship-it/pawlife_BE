@@ -1,7 +1,7 @@
 import { Controller, Get, Put, Post, Patch, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { AdoptionApplicationService } from './adoption-application.service';
 import { UpsertAdoptionApplicationDto, CreateAppointmentDto } from './dto/adoption-application.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 
 @Controller('adoption-applications')
 @UseGuards(JwtAuthGuard)

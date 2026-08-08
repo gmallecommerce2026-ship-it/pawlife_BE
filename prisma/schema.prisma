@@ -145,7 +145,7 @@ model User {
 
   sentTransfers     TransferRequest[] @relation("SentTransfers")
   receivedTransfers TransferRequest[] @relation("ReceivedTransfers")
-
+  applicationNotes ApplicationNote[]
   pets                 Pet[]                 @relation("UserPets")
   adoptionRequests     AdoptionRequest[]
   messagesSent         Message[]             @relation("SenderMessages")
@@ -215,6 +215,7 @@ model Shelter {
   latitude    Float?
   longitude   Float?
   openingHours Json? 
+  applicationTags ApplicationTag[]
   // Liên kết
   followers      FollowedShelter[]
   users          User[] // Danh sách tài khoản quản lý Shelter này
@@ -510,7 +511,8 @@ model AdoptionApplication {
   // --- Section E: Adoption Commitment ---
   adoptionReason String
   commitments    Json // Lưu các giá trị (vaccine, medical, expenses, updateStatus, homeVisit, provideID)
-
+  notes            ApplicationNote[]
+  tags             ApplicationTagOnApplication[]
   verificationPhotos Json?
   reviewNote String? @db.Text
   appointment Appointment?
@@ -519,7 +521,55 @@ model AdoptionApplication {
 
   @@unique([userId, petId])
 }
+model ApplicationNote {
+  id            String   @id @default(uuid())
+  applicationId String
+  authorId      String
+  content       String   @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
+  application AdoptionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  author      User                @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([authorId])
+  @@map("application_notes")
+}
+
+// ==========================================
+// 2. TAG / NHÃN DÀNH CHO ĐƠN NHẬN NUÔI (ApplicationTag)
+// ==========================================
+model ApplicationTag {
+  id        String   @id @default(uuid())
+  shelterId String?  // Tag riêng của từng Trạm cứu hộ (hoặc NULL nếu là Tag chung toàn hệ thống)
+  name      String   // Tên tag (VD: "Ưu tiên", "Đã phỏng vấn", "Cần xác minh", "Gia đình có sân")
+  color     String?  // Mã màu hiển thị Badge trên UI (VD: "#E53E3E", "#3182CE", "green")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shelter      Shelter?                      @relation(fields: [shelterId], references: [id], onDelete: Cascade)
+  applications ApplicationTagOnApplication[]
+
+  @@unique([shelterId, name])
+  @@index([shelterId])
+  @@map("application_tags")
+}
+
+// Bảng trung gian liên kết N-N giữa Application và Tag
+model ApplicationTagOnApplication {
+  applicationId String
+  tagId         String
+  assignedAt    DateTime @default(now())
+
+  application AdoptionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  tag         ApplicationTag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([applicationId, tagId])
+  @@index([tagId])
+  @@index([applicationId])
+  @@map("application_tag_mappings")
+}
 enum ApplicationStatus {
   SUBMITTED
   PENDING
