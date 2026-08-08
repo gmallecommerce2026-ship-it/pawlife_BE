@@ -102,7 +102,7 @@ import { SupportModule } from './modules/support/support.module';
     // 5. App Modules
     DatabaseModule,
     ShelterDashboardModule,
-    AppointmentModule,
+    AppointmentsModule,
     RedisModule,
     AuthModule,
     StoriesModule,
@@ -116,7 +116,6 @@ import { SupportModule } from './modules/support/support.module';
     PawcareModule,
     SupportModule,
     NotificationsModule,
-    AppointmentsModule,
     ApplicationsModule,
     WalletModule,
     TranslateModule,
