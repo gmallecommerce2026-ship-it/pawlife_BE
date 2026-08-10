@@ -143,59 +143,62 @@ export class ShelterDashboardService {
             requirementRelations = { create: requirements.map((r) => ({ requirementId: r.id })) };
         }
 
-        const pet = await this.prisma.pet.create({
-            data: {
-                ...rest,
-                species: toBilingual(rest.species),
-                breed: rest.breed ? toBilingual(rest.breed) : undefined,
-                description: rest.description ? toBilingual(rest.description) : undefined,
-                color: rest.color ? toBilingual(rest.color) : undefined,
-                dob: rest.dob ? new Date(rest.dob) : undefined,
-                shelterId,
-                status: rest.status ?? 'AVAILABLE',
-                idSetByShelter: code || undefined,   // ← map đúng cột
-                goodWith: goodWith ?? undefined,
-                badWith: badWith ?? undefined,
-                traitsList: traits?.length ? { create: traits.map((t: any) => ({ name: toBilingual(t) })) } : undefined,
-                images: images?.length ? { create: images.map((url: string) => ({ url })) } : undefined,
-                medicalRecords: medicalRecords?.length
-                    ? {
-                        create: medicalRecords.map((r: any) => ({
-                            type: r.type,
-                            recordName: toBilingual(r.recordName),
-                            recordDate: new Date(r.recordDate),
-                            images: r.images || [],
-                            hasNextDueDate: r.hasNextDueDate || false,
-                            nextDueDate: r.nextDueDate ? new Date(r.nextDueDate) : null,
-                            nextDueName: r.nextDueName ? toBilingual(r.nextDueName) : null,
-                        })),
-                    }
-                    : undefined,
-                adoptionRequirements: requirementRelations,
-            },
-            include: { images: true },
-        });
+        try {
+            const pet = await this.prisma.pet.create({
+                data: {
+                    ...rest,
+                    species: toBilingual(rest.species),
+                    breed: rest.breed ? toBilingual(rest.breed) : undefined,
+                    description: rest.description ? toBilingual(rest.description) : undefined,
+                    color: rest.color ? toBilingual(rest.color) : undefined,
+                    dob: rest.dob ? new Date(rest.dob) : undefined,
+                    shelterId,
+                    status: rest.status ?? 'AVAILABLE',
+                    idSetByShelter: code || undefined,
+                    goodWith: goodWith ?? undefined,
+                    badWith: badWith ?? undefined,
+                    traitsList: traits?.length ? { create: traits.map((t: any) => ({ name: toBilingual(t) })) } : undefined,
+                    images: images?.length ? { create: images.map((url: string) => ({ url })) } : undefined,
+                    medicalRecords: medicalRecords?.length
+                        ? {
+                            create: medicalRecords.map((r: any) => ({
+                                type: r.type,
+                                recordName: toBilingual(r.recordName),
+                                recordDate: new Date(r.recordDate),
+                                images: r.images || [],
+                                hasNextDueDate: r.hasNextDueDate || false,
+                                nextDueDate: r.nextDueDate ? new Date(r.nextDueDate) : null,
+                                nextDueName: r.nextDueName ? toBilingual(r.nextDueName) : null,
+                            })),
+                        }
+                        : undefined,
+                    adoptionRequirements: requirementRelations,
+                },
+                include: { images: true },
+            });
 
-        if (tagId) {
-            await this.prisma.tag.update({
-                where: { id: tagId },
-                data: {
-                    petId: pet.id,
-                    status: 'ACTIVE',
-                    linkedAt: new Date(),
-                    linkCount: { increment: 1 }
+            if (tagId) {
+                await this.prisma.tag.update({
+                    where: { id: tagId },
+                    data: { petId: pet.id, status: 'ACTIVE', linkedAt: new Date(), linkCount: { increment: 1 } },
+                });
+                await this.prisma.pet.update({
+                    where: { id: pet.id },
+                    data: { qrVerificationStatus: 'VERIFIED', qrCodeUrl: `https://pawcare.app/tag/${tagId}` },
+                });
+            }
+
+            return pet;
+        } catch (err) {
+            if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+                const target = (err.meta?.target as string[]) || [];
+                if (target.includes('idSetByShelter')) {
+                    throw new BadRequestException('PawLife ID này đã được sử dụng cho một pet khác. Vui lòng chọn mã khác.');
                 }
-            });
-            await this.prisma.pet.update({
-                where: { id: pet.id },
-                data: {
-                    qrVerificationStatus: 'VERIFIED',
-                    qrCodeUrl: `https://pawcare.app/tag/${tagId}`
-                }
-            });
+                throw new BadRequestException('Dữ liệu bị trùng lặp, vui lòng kiểm tra lại.');
+            }
+            throw err;
         }
-
-        return pet;
     }
 
     async updatePet(shelterId: string, petId: string, dto: any) {
@@ -223,30 +226,36 @@ export class ShelterDashboardService {
             }
         }
 
-        const pet = await this.prisma.pet.update({
-            where: { id: petId },
-            data: {
-                ...rest,
-                ...(rest.species && { species: toBilingual(rest.species) }),
-                ...(rest.breed && { breed: toBilingual(rest.breed) }),
-                ...(rest.description && { description: toBilingual(rest.description) }),
-                ...(rest.color && { color: toBilingual(rest.color) }),
-                ...(rest.dob && { dob: new Date(rest.dob) }),
-                ...(code !== undefined && { idSetByShelter: code || null }),  // ← map đúng cột
-                ...(goodWith !== undefined && { goodWith }),
-                ...(badWith !== undefined && { badWith }),
-                ...(images && { images: { deleteMany: {}, create: images.map((url: string) => ({ url })) } }),
-            },
-            include: { images: true },
-        });
+        try {
+            const pet = await this.prisma.pet.update({
+                where: { id: petId },
+                data: {
+                    ...rest,
+                    ...(rest.species && { species: toBilingual(rest.species) }),
+                    ...(rest.breed && { breed: toBilingual(rest.breed) }),
+                    ...(rest.description && { description: toBilingual(rest.description) }),
+                    ...(rest.color && { color: toBilingual(rest.color) }),
+                    ...(rest.dob && { dob: new Date(rest.dob) }),
+                    ...(code !== undefined && { idSetByShelter: code || null }),
+                    ...(goodWith !== undefined && { goodWith }),
+                    ...(badWith !== undefined && { badWith }),
+                    ...(images && { images: { deleteMany: {}, create: images.map((url: string) => ({ url })) } }),
+                },
+                include: { images: true },
+            });
 
-
-        // medicalRecords: dùng logic merge (update/create/delete) như PetsService.updatePet
-        // đã có ở mobile — khuyến nghị TÁI SỬ DỤNG hàm đó bằng cách export ra 1 shared service
-        // thay vì copy lại toàn bộ (xem mục "Refactor gợi ý" cuối bài).
-
-        await this.redisService.del(`pet:detail:${petId}`);
-        return pet;
+            await this.redisService.del(`pet:detail:${petId}`);
+            return { ...pet, code: pet.idSetByShelter };
+        } catch (err) {
+            if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+                const target = (err.meta?.target as string[]) || [];
+                if (target.includes('idSetByShelter')) {
+                    throw new BadRequestException('PawLife ID này đã được sử dụng cho một pet khác. Vui lòng chọn mã khác.');
+                }
+                throw new BadRequestException('Dữ liệu bị trùng lặp, vui lòng kiểm tra lại.');
+            }
+            throw err;
+        }
     }
 
     async deletePet(shelterId: string, petId: string) {

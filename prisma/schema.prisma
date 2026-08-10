@@ -492,6 +492,7 @@ model Pet {
   contentReports       ContentReport[]
   adoptionRequirements PetAdoptionRequirement[]
   hiddenByUsers        UserHiddenPet[]
+  @@unique([shelterId, idSetByShelter]) 
 }
 
 model AdoptionApplication {
