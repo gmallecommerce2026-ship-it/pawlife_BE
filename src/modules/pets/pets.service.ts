@@ -1874,7 +1874,7 @@ export class PetsService {
       }
     }
 
-    const { images, medicalRecords, nameLastUpdatedAt, adoptionRequirementKeys, personalityTags, goodWith, badWith, ...petInfo } = updateData;
+    const { images, medicalRecords, nameLastUpdatedAt, adoptionRequirementKeys, personalityTags, goodWith, badWith, code, ...petInfo } = updateData;
     const requirementIds = adoptionRequirementKeys !== undefined
       ? await this.resolveRequirementIds(adoptionRequirementKeys)
       : undefined; // 🆕 — undefined nghĩa là FE không gửi field này, giữ nguyên dữ liệu cũ
@@ -1945,10 +1945,11 @@ export class PetsService {
           ...petInfo,
           dob: petInfo.dob ? new Date(petInfo.dob) : undefined,
           ...(nameLastUpdatedAt && { nameLastUpdatedAt }),
+          ...(code !== undefined && { idSetByShelter: code?.trim() || null }), // 🆕 THÊM DÒNG NÀY
           ...(personalityTags !== undefined && { traits: normalizeTraitsList(personalityTags) }),
           ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }),
           ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),
-          ...(requirementIds !== undefined && {                                        // 🆕 thêm khối này
+          ...(requirementIds !== undefined && {
             adoptionRequirements: {
               deleteMany: {},
               create: requirementIds.map((requirementId) => ({ requirementId })),
@@ -1967,6 +1968,17 @@ export class PetsService {
         data: updatedPet,
       };
     } catch (error) {
+      // 🆕 THAY catch block cũ bằng đoạn này để bắt lỗi trùng PawLife ID rõ ràng
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const target = (error.meta?.target as string[]) || [];
+        if (target.includes('idSetByShelter')) {
+          throw new BadRequestException({
+            message: 'PawLife ID này đã được sử dụng cho một pet khác. Vui lòng chọn mã khác.',
+            i18n: { key: 'error.pawlife_id_duplicate' },
+          });
+        }
+      }
+      if (error instanceof BadRequestException) throw error;
       throw new InternalServerErrorException({ message: 'Error updating pet information', i18n: { key: 'error.update_pet_failed' } });
     }
   }
