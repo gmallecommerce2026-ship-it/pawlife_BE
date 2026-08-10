@@ -4,6 +4,11 @@ import { Type } from 'class-transformer';
 import { PetGender, PetSize, PetStatus } from '@prisma/client';
 
 class BilingualDto { @IsString() vi: string; @IsString() en: string; }
+export enum VaccinationStatusDto {
+  NOT_VACCINATED = 'NOT_VACCINATED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  VACCINATED = 'VACCINATED',
+}
 
 class MedicalRecordInputDto {
   @IsOptional() @IsString() id?: string;
@@ -59,6 +64,18 @@ export class CreateShelterPetDto {
   @IsOptional() 
   @IsString() 
   tagId?: string;
+
+  @IsOptional()
+  @IsString()
+  code?: string; // PawLife ID
+
+  @IsOptional()
+  @IsString()
+  shelterInternalId?: string; // Shelter ID
+
+  @IsOptional()
+  @IsEnum(VaccinationStatusDto)
+  vaccinationStatus?: VaccinationStatusDto;
 }
 
 export class UpdateShelterPetDto extends CreateShelterPetDto { }

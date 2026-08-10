@@ -52,31 +52,25 @@ export class ShelterDashboardService {
         return { ...updated, email: updated.emailAddress, phone: updated.contactInfo, logoUrl: updated.avatarUrl };
     }
     async getPetById(shelterId: string, petId: string) {
-        // 1. Kiểm tra quyền sở hữu (hàm có sẵn của bạn)
         await this.assertOwnsPet(shelterId, petId);
 
-        // 2. Query thông tin chi tiết pet
         const pet = await this.prisma.pet.findUnique({
             where: { id: petId },
             include: {
                 images: { orderBy: { createdAt: 'asc' } },
                 medicalRecords: true,
                 traitsList: true,
-                adoptionRequirements: {
-                    include: { requirement: true }
-                },
+                adoptionRequirements: { include: { requirement: true } },
                 tags: true,
                 adoptionApplications: {
                     orderBy: { createdAt: 'desc' },
-                    include: {
-                        user: { select: { id: true, name: true, email: true, avatarUrl: true } },
-                    },
+                    include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
                 },
-
             },
         });
 
         if (!pet) throw new NotFoundException('Không tìm thấy thú cưng.');
+
         const applications = (pet.adoptionApplications ?? []).map((app) => ({
             id: app.id,
             applicantName: app.fullName || app.user?.name || 'Ẩn danh',
@@ -87,10 +81,10 @@ export class ShelterDashboardService {
             submittedAt: app.createdAt,
         }));
 
-        // 3. Format lại images thành mảng string để đồng bộ Type với Frontend
         return {
             ...pet,
-            images: pet.images.map(img => img.url),
+            code: pet.idSetByShelter, // ← alias để frontend đọc đúng key cũ, không cần sửa PetForm.tsx
+            images: pet.images.map((img) => img.url),
             applications,
         };
     }
@@ -139,7 +133,7 @@ export class ShelterDashboardService {
     }
 
     async createPet(shelterId: string, dto: any) {
-        const { images, medicalRecords, adoptionRequirementKeys, traits, goodWith, badWith, healthStatus, tagId, ...rest } = dto;
+        const { images, medicalRecords, adoptionRequirementKeys, traits, goodWith, badWith, healthStatus, tagId, code, ...rest } = dto;
 
         let requirementRelations;
         if (adoptionRequirementKeys?.length) {
@@ -158,7 +152,8 @@ export class ShelterDashboardService {
                 color: rest.color ? toBilingual(rest.color) : undefined,
                 dob: rest.dob ? new Date(rest.dob) : undefined,
                 shelterId,
-                status: rest.status ?? 'AVAILABLE', // 🔑 KHÁC hẳn createPet của mobile
+                status: rest.status ?? 'AVAILABLE',
+                idSetByShelter: code || undefined,   // ← map đúng cột
                 goodWith: goodWith ?? undefined,
                 badWith: badWith ?? undefined,
                 traitsList: traits?.length ? { create: traits.map((t: any) => ({ name: toBilingual(t) })) } : undefined,
@@ -180,6 +175,7 @@ export class ShelterDashboardService {
             },
             include: { images: true },
         });
+
         if (tagId) {
             await this.prisma.tag.update({
                 where: { id: tagId },
@@ -204,7 +200,7 @@ export class ShelterDashboardService {
 
     async updatePet(shelterId: string, petId: string, dto: any) {
         await this.assertOwnsPet(shelterId, petId);
-        const { images, medicalRecords, adoptionRequirementKeys, traits, goodWith, badWith, healthStatus, tagId, ...rest } = dto;
+        const { images, medicalRecords, adoptionRequirementKeys, traits, goodWith, badWith, healthStatus, tagId, code, ...rest } = dto;
 
         if (adoptionRequirementKeys) {
             const requirements = await this.prisma.adoptionRequirement.findMany({
@@ -236,15 +232,14 @@ export class ShelterDashboardService {
                 ...(rest.description && { description: toBilingual(rest.description) }),
                 ...(rest.color && { color: toBilingual(rest.color) }),
                 ...(rest.dob && { dob: new Date(rest.dob) }),
-
-                // Sửa 2 dòng này:
+                ...(code !== undefined && { idSetByShelter: code || null }),  // ← map đúng cột
                 ...(goodWith !== undefined && { goodWith }),
                 ...(badWith !== undefined && { badWith }),
-
                 ...(images && { images: { deleteMany: {}, create: images.map((url: string) => ({ url })) } }),
             },
             include: { images: true },
         });
+
 
         // medicalRecords: dùng logic merge (update/create/delete) như PetsService.updatePet
         // đã có ở mobile — khuyến nghị TÁI SỬ DỤNG hàm đó bằng cách export ra 1 shared service
