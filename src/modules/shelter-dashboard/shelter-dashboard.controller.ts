@@ -8,13 +8,18 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } f
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { ShelterDashboardService } from './shelter-dashboard.service';
 import { UpdateShelterProfileDto } from './dto/update-shelter-profile.dto';
-import { CreateShelterPetDto, UpdateShelterPetDto } from './dto/create-shelter-pet.dto';
+import { PetsService } from '../pets/pets.service';
+import { CreatePetDto } from '../pets/dto/create-pet.dto';
+import { UpdatePetDto } from '../pets/dto/update-pet.dto';
 
 @Controller('shelter-dashboard')
 @UseGuards(JwtAuthGuard, RolesGuard, ShelterGuard)
 @Roles(Role.SHELTER)
 export class ShelterDashboardController {
-  constructor(private readonly service: ShelterDashboardService) {}
+  constructor(
+    private readonly service: ShelterDashboardService,
+    private readonly petsService: PetsService,
+  ) {}
 
   @Get('profile')
   getProfile(@User('shelterId') shelterId: string) {
@@ -27,11 +32,9 @@ export class ShelterDashboardController {
   }
 
   @Get('pets/:id')
-  getPetById(
-    @User('shelterId') shelterId: string, 
-    @Param('id') id: string
-  ) {
-    return this.service.getPetById(shelterId, id);
+  async getPetById(@User('id') userId: string, @Param('id') id: string) {
+    const pet = await this.petsService.getPetById(id, userId);
+    return { ...pet, code: pet.idSetByShelter }; // alias để PetForm.tsx không cần sửa
   }
 
   @Get('pets')
@@ -40,18 +43,18 @@ export class ShelterDashboardController {
   }
 
   @Post('pets')
-  createPet(@User('shelterId') shelterId: string, @Body() dto: CreateShelterPetDto) {
-    return this.service.createPet(shelterId, dto);
+  createPet(@User('id') userId: string, @Body() dto: CreatePetDto) {
+    return this.petsService.createPet(userId, dto);
   }
 
   @Patch('pets/:id')
-  updatePet(@User('shelterId') shelterId: string, @Param('id') id: string, @Body() dto: UpdateShelterPetDto) {
-    return this.service.updatePet(shelterId, id, dto);
+  updatePet(@User('id') userId: string, @Param('id') id: string, @Body() dto: UpdatePetDto) {
+    return this.petsService.updatePet(userId, id, dto);
   }
 
   @Delete('pets/:id')
-  deletePet(@User('shelterId') shelterId: string, @Param('id') id: string) {
-    return this.service.deletePet(shelterId, id);
+  deletePet(@User('id') userId: string, @Param('id') id: string) {
+    return this.petsService.removePet(userId, id);
   }
 
   @Get('applications')
