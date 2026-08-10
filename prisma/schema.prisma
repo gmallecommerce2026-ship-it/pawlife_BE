@@ -410,6 +410,13 @@ model Appointment {
   @@index([shelterId, appointmentDate])
   @@index([userId])
 }
+
+enum VaccinationStatus {
+  NOT_VACCINATED
+  IN_PROGRESS
+  VACCINATED
+}
+
 model Pet {
   id   String @id @default(uuid())
   name String
@@ -461,6 +468,9 @@ model Pet {
   updatedAt DateTime @default(now()) @updatedAt
   shelterId String?
   shelter   Shelter? @relation(fields: [shelterId], references: [id])
+
+  vaccinationStatus  VaccinationStatus @default(VACCINATED)
+  shelterInternalId  String?
 
   tags                 Tag[]
   adoptionRequests     AdoptionRequest[]
