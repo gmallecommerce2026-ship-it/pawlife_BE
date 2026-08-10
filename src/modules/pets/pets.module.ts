@@ -15,5 +15,6 @@ import { PetNotesService } from './pet-notes.service';
   ],
   controllers: [PetsController, PetNotesController],
   providers: [PetsService, PetNotesService, SwipeProcessor],
+  exports: [PetsService], // 🆕 thêm dòng này
 })
 export class PetsModule {}

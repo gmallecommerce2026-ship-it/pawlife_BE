@@ -1132,17 +1132,28 @@ export class PetsService {
   }
   async createPet(userId: string, createPetDto: CreatePetDto) {
     const publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN');
-    const idSetByShelter = await this.generateUniqueShelterCode();
 
-    // 👈 THÊM: lấy shelterId của user đang tạo pet (nếu là tài khoản shelter)
     const currentUser = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { shelterId: true },
     });
-    const { images, tagId, medicalRecords, adoptionRequirementKeys, personalityTags, goodWith, badWith, ...petData } = createPetDto;
+
+    const {
+      images, tagId, medicalRecords, adoptionRequirementKeys,
+      personalityTags, goodWith, badWith,
+      code, // 🆕 PawLife ID tuỳ chỉnh (web gửi lên), app không gửi thì undefined
+      ...petData
+    } = createPetDto;
+
+    // 🆕 Nếu có code hợp lệ thì dùng, không thì tự sinh như cũ
+    const idSetByShelter = code?.trim()
+      ? code.trim()
+      : await this.generateUniqueShelterCode();
+
     const requirementIds = adoptionRequirementKeys && adoptionRequirementKeys.length > 0
       ? await this.resolveRequirementIds(adoptionRequirementKeys)
       : [];
+
     const medicalRecordsData = medicalRecords && medicalRecords.length > 0 ? {
       create: medicalRecords.map(record => ({
         type: record.type, recordName: getBilingualText(record.recordName) as any, recordDate: new Date(record.recordDate),
@@ -1152,57 +1163,47 @@ export class PetsService {
         isPublic: record.isPublic ?? true,
       }))
     } : undefined;
+
+    const buildData = (): any => ({
+      ...(petData as any), ownerId: userId,
+      shelterId: currentUser?.shelterId ?? null,
+      status: petData.status || (currentUser?.shelterId ? 'AVAILABLE' : 'ADOPTED'),
+      adoptedAt: currentUser?.shelterId ? null : new Date(),
+      dob: petData.dob ? new Date(petData.dob) : undefined,
+      idSetByShelter, // 🆕
+      ...(personalityTags !== undefined && { traits: normalizeTraitsList(personalityTags) }),
+      ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }),
+      ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),
+      ...(requirementIds.length > 0 && {
+        adoptionRequirements: { create: requirementIds.map((requirementId) => ({ requirementId })) },
+      }),
+      ...(images && images.length > 0 && { images: { create: images.map(url => ({ url })) } }),
+      ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
+    });
+
     try {
       if (tagId) {
-        // ... giữ nguyên phần kiểm tra tag
         const result = await this.prisma.$transaction(async (prisma) => {
-          const newPet = await this.prisma.pet.create({
-            data: {
-              ...(petData as any), ownerId: userId,
-              shelterId: currentUser?.shelterId ?? null,
-              status: petData.status || (currentUser?.shelterId ? 'AVAILABLE' : 'ADOPTED'),
-              adoptedAt: currentUser?.shelterId ? null : new Date(),
-              dob: petData.dob ? new Date(petData.dob) : undefined,
-              idSetByShelter,
-              ...(personalityTags !== undefined && { traits: normalizeTraitsList(personalityTags) }),
-              ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }),
-              ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),
-              ...(requirementIds.length > 0 && {                                          // 🆕 thêm khối này
-                adoptionRequirements: { create: requirementIds.map((requirementId) => ({ requirementId })) },
-              }),
-              ...(images && images.length > 0 && { images: { create: images.map(url => ({ url })) } }),
-              ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
-            },
-            include: { images: true }
-          });
+          const newPet = await this.prisma.pet.create({ data: buildData(), include: { images: true } });
           await prisma.tag.update({ where: { id: tagId }, data: { petId: newPet.id, status: 'ACTIVE', linkedAt: new Date(), linkCount: { increment: 1 } } });
           return newPet;
         });
         return result;
       }
 
-      const newPet = await this.prisma.pet.create({
-        data: {
-          ...(petData as any), ownerId: userId,
-          shelterId: currentUser?.shelterId ?? null,
-          status: petData.status || (currentUser?.shelterId ? 'AVAILABLE' : 'ADOPTED'),
-          adoptedAt: currentUser?.shelterId ? null : new Date(),
-          dob: petData.dob ? new Date(petData.dob) : undefined,
-          idSetByShelter,
-          ...(personalityTags !== undefined && { traits: normalizeTraitsList(personalityTags) }),
-          ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }),
-          ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),
-          ...(requirementIds.length > 0 && {                                          // 🆕 thêm khối này
-            adoptionRequirements: { create: requirementIds.map((requirementId) => ({ requirementId })) },
-          }),
-          ...(images && images.length > 0 && { images: { create: images.map(url => ({ url })) } }),
-          ...(medicalRecordsData && { medicalRecords: medicalRecordsData })
-        },
-        include: { images: true }
-      });
+      const newPet = await this.prisma.pet.create({ data: buildData(), include: { images: true } });
       return newPet;
 
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const target = (error.meta?.target as string[]) || [];
+        if (target.includes('idSetByShelter')) {
+          throw new BadRequestException({
+            message: 'PawLife ID này đã được sử dụng cho một pet khác. Vui lòng chọn mã khác.',
+            i18n: { key: 'error.pawlife_id_duplicate' },
+          });
+        }
+      }
       if (error instanceof BadRequestException) throw error;
       throw new InternalServerErrorException({ message: 'System error when creating pet', i18n: { key: 'error.create_pet_failed' } });
     }

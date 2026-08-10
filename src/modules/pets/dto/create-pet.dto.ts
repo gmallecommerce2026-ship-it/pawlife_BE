@@ -1,5 +1,5 @@
 import { IsString, IsNotEmpty, IsOptional, IsNumber, IsArray, IsEnum, IsBoolean, IsDateString, ValidateNested, IsNotEmptyObject } from 'class-validator';
-import { PetGender, PetSize, PetStatus, VerificationStatus } from '@prisma/client';
+import { PetGender, PetSize, PetStatus, VerificationStatus, VaccinationStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
 
 // 1. Tạo Class DTO chuẩn cho dữ liệu Song Ngữ
@@ -171,4 +171,16 @@ export class CreatePetDto {
   @IsOptional()
   @IsEnum(PetStatus)
   status?: PetStatus;
+
+  @IsString()
+  @IsOptional()
+  code?: string; 
+
+  @IsString()
+  @IsOptional()
+  shelterInternalId?: string;
+
+  @IsEnum(VaccinationStatus)
+  @IsOptional()
+  vaccinationStatus?: VaccinationStatus;
 }

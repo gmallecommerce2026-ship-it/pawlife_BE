@@ -1,11 +1,11 @@
-// src/modules/shelter-dashboard/shelter-dashboard.module.ts
 import { Module } from '@nestjs/common';
 import { ShelterDashboardController } from './shelter-dashboard.controller';
 import { ShelterDashboardService } from './shelter-dashboard.service';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PetsModule } from '../pets/pets.module'; // 🆕
 
 @Module({
-  imports: [NotificationsModule],
+  imports: [NotificationsModule, PetsModule], // 🆕 thêm PetsModule
   controllers: [ShelterDashboardController],
   providers: [ShelterDashboardService],
 })
