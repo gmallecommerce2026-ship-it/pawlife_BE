@@ -400,6 +400,7 @@ model Appointment {
   type                 AppointmentType     @default(IN_PERSON)
   status               AppointmentStatus   @default(PENDING)
   location             String?             // Địa chỉ trạm hoặc link meeting online
+  meetLink             String?
   notes                String?             // Ghi chú của người dùng khi đặt
   cancellationReason   String?             // Lý do hủy (nếu có)
   bookingDelegated Boolean          @default(false)
@@ -409,6 +410,7 @@ model Appointment {
 
   @@index([shelterId, appointmentDate])
   @@index([userId])
+  @@unique([shelterId, appointmentDate, startTime], name: "uniq_shelter_slot") 
 }
 
 enum VaccinationStatus {
