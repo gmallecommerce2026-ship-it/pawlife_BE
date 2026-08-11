@@ -214,6 +214,7 @@ model Shelter {
   coverUrl    String? // Ảnh bìa
   latitude    Float?
   longitude   Float?
+  website String?
   openingHours Json? 
   applicationTags ApplicationTag[]
   // Liên kết
