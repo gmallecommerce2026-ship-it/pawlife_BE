@@ -303,6 +303,7 @@ model PetTrait {
 model MedicalRecord {
   id         String   @id @default(uuid())
   type       String // VD: "vaccination", "deworming"...
+  vaccineCategory String? // "RABIES" | "CORE" | "OTHER" — chỉ có ý nghĩa khi type = "VACCINATION"
   recordName Json // Đổi từ String sang Json
   recordDate DateTime
   images     Json?

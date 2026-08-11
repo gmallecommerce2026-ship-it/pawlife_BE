@@ -941,6 +941,10 @@ export class PetsService {
 
     const dataToUpdate: Prisma.MedicalRecordUpdateInput = {};
     if (updateData.type !== undefined) dataToUpdate.type = updateData.type;
+    if ((updateData as any).vaccineCategory !== undefined) {
+      dataToUpdate.vaccineCategory = (updateData as any).vaccineCategory;
+    }
+
     if (updateData.recordName !== undefined) {
       dataToUpdate.recordName = getBilingualText(updateData.recordName) as any;
     }
@@ -1161,6 +1165,7 @@ export class PetsService {
         nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null,
         nextDueName: record.nextDueName ? (getBilingualText(record.nextDueName) as any) : null,
         isPublic: record.isPublic ?? true,
+        vaccineCategory: record.vaccineCategory ?? null,
       }))
     } : undefined;
 
@@ -1171,6 +1176,9 @@ export class PetsService {
       adoptedAt: currentUser?.shelterId ? null : new Date(),
       dob: petData.dob ? new Date(petData.dob) : undefined,
       idSetByShelter, // 🆕
+      ...(petData.vaccinationStatus !== undefined && {
+        isVaccinated: petData.vaccinationStatus === 'VACCINATED',
+      }),
       ...(personalityTags !== undefined && { traits: normalizeTraitsList(personalityTags) }),
       ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }),
       ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),
@@ -1433,6 +1441,17 @@ export class PetsService {
         titleKey: string;
         bodyKey: string;
       } => {
+        const normalizedType = (record.type || '').toUpperCase();
+       if (normalizedType === 'DENTAL_CARE') {
+         return { type: 'DENTAL_CARE', titleKey: 'pawHistory.dental_title', bodyKey: 'pawHistory.dental_body' };
+       }
+       if (normalizedType === 'ANNUAL_CHECKUP') {
+         return { type: 'ANNUAL_CHECKUP', titleKey: 'pawHistory.checkup_title', bodyKey: 'pawHistory.checkup_body' };
+       }
+       if (normalizedType === 'VACCINATION') {
+         return { type: 'VACCINE', titleKey: 'pawHistory.vaccine_title', bodyKey: 'pawHistory.vaccine_body' };
+       }
+
         const nameBi = getBilingualText(record.recordName);
         const nameRaw = `${nameBi.en} ${nameBi.vi}`.toLowerCase();
 
@@ -1915,6 +1934,7 @@ export class PetsService {
                 nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null,
                 nextDueName: record.nextDueName ? (getBilingualText(record.nextDueName) as any) : null,
                 isPublic: record.isPublic ?? true,
+                vaccineCategory: record.vaccineCategory ?? null,
               },
             })
           ),
@@ -1931,6 +1951,7 @@ export class PetsService {
                   nextDueDate: record.nextDueDate ? new Date(record.nextDueDate) : null,
                   nextDueName: record.nextDueName ? (getBilingualText(record.nextDueName) as any) : null,
                   isPublic: record.isPublic ?? true,
+                  vaccineCategory: record.vaccineCategory ?? null,
                 })),
               }),
             ]
@@ -1946,6 +1967,9 @@ export class PetsService {
           dob: petInfo.dob ? new Date(petInfo.dob) : undefined,
           ...(nameLastUpdatedAt && { nameLastUpdatedAt }),
           ...(code !== undefined && { idSetByShelter: code?.trim() || null }), // 🆕 THÊM DÒNG NÀY
+          ...(petInfo.vaccinationStatus !== undefined && {
+            isVaccinated: petInfo.vaccinationStatus === 'VACCINATED',
+          }),
           ...(personalityTags !== undefined && { traits: normalizeTraitsList(personalityTags) }),
           ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }),
           ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),

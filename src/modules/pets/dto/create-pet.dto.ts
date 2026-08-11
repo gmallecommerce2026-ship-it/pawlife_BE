@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, IsArray, IsEnum, IsBoolean, IsDateString, ValidateNested, IsNotEmptyObject } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsArray, IsEnum, IsBoolean, IsDateString, ValidateNested, IsNotEmptyObject, IsIn } from 'class-validator';
 import { PetGender, PetSize, PetStatus, VerificationStatus, VaccinationStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
 
@@ -53,6 +53,10 @@ export class MedicalRecordDto {
   @IsEnum(VerificationStatus)
   @IsOptional()
   verificationStatus?: VerificationStatus;
+
+  @IsOptional()
+  @IsIn(['RABIES', 'CORE', 'OTHER'])
+  vaccineCategory?: string;
 }
 
 export class CreatePetDto {
