@@ -1494,10 +1494,8 @@ export class PetsService {
       const pawHistory: PawHistoryItem[] = [];
 
       // 1. CURRENT_OWNER — chỉ push khi pet có owner
-      if (pet.owner) {
-        // Lấy ngày sở hữu chính xác:
-        // - Nếu pet đã từng được transfer, lấy ngày hoàn thành transfer gần nhất (completedTransfers[0] vì đã order desc)
-        // - Nếu chưa từng transfer, lấy adoptedAt hoặc ngày tạo profile gốc (createdAt)
+      const isUnderShelterManagement = !!pet.shelterId && pet.status !== 'ADOPTED';
+      if (pet.owner && !isUnderShelterManagement) {
         const ownershipDate = completedTransfers.length > 0
           ? completedTransfers[0].updatedAt
           : (pet.adoptedAt ?? pet.createdAt);
