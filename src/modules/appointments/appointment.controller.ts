@@ -12,7 +12,7 @@ import { SetMeetLinkDto } from './dto/set-meet-link.dto';
 @Controller('appointments')
 @UseGuards(JwtAuthGuard)
 export class AppointmentsController {
-  constructor(private readonly service: AppointmentsService) {}
+  constructor(private readonly service: AppointmentsService) { }
 
   @Post()
   create(@User() user: any, @Body() dto: CreateAppointmentDto) {
@@ -44,7 +44,10 @@ export class AppointmentsController {
   delegate(@User('shelterId') shelterId: string, @Param('applicationId') applicationId: string, @Body() dto: DelegateBookingDto) {
     return this.service.delegateBooking(shelterId, applicationId, dto);
   }
-
+  @Get('me/upcoming-interview')
+  getUpcomingInterview(@User('id') userId: string) {
+    return this.service.getUpcomingInterviewForUser(userId);
+  }
   @Get(':id')
   getById(@Param('id') id: string) {
     return this.service.getById(id);

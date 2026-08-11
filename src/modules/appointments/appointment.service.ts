@@ -24,7 +24,7 @@ export class AppointmentsService {
     private readonly prisma: PrismaService,
     private readonly gateway: NotificationsGateway,
     private readonly notifications: NotificationsService,
-  ) {}
+  ) { }
 
   private async getApplicationWithGuard(applicationId: string) {
     const app = await this.prisma.adoptionApplication.findUnique({
@@ -158,7 +158,55 @@ export class AppointmentsService {
     await this.pushRealtime(appointment, event);
     return appointment;
   }
+  async getUpcomingInterviewForUser(userId: string) {
+    const now = new Date();
+    const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
 
+    const appointments = await this.prisma.appointment.findMany({
+      where: {
+        userId,
+        type: AppointmentType.ONLINE,
+        status: { in: ACTIVE_STATUSES },
+        appointmentDate: { gte: todayStart, lte: todayEnd },
+      },
+      include: {
+        pet: { select: { name: true } },
+        shelter: { select: { name: true, avatarUrl: true } },
+      },
+    });
+
+    const WINDOW_MS = 10 * 60 * 1000;
+
+    const candidate = appointments.find((appt) => {
+      const [sh, sm] = appt.startTime.split(':').map(Number);
+      const start = new Date(appt.appointmentDate);
+      start.setHours(sh || 0, sm || 0, 0, 0);
+
+      const [eh, em] = appt.endTime.split(':').map(Number);
+      const end = new Date(appt.appointmentDate);
+      end.setHours(eh || 0, em || 0, 0, 0);
+
+      const startsWithinWindow = start.getTime() - now.getTime() <= WINDOW_MS;
+      const notEndedYet = end.getTime() > now.getTime();
+      return startsWithinWindow && notEndedYet;
+    });
+
+    if (!candidate) return null;
+
+    const [sh, sm] = candidate.startTime.split(':').map(Number);
+    const start = new Date(candidate.appointmentDate);
+    start.setHours(sh || 0, sm || 0, 0, 0);
+
+    return {
+      id: candidate.id,
+      petName: candidate.pet.name,
+      shelterName: candidate.shelter.name,
+      shelterAvatar: candidate.shelter.avatarUrl,
+      startAt: start.toISOString(), // FE tự tính countdown từ mốc này, không hardcode "10 phút" nữa
+      meetLink: candidate.meetLink,
+    };
+  }
   async reschedule(actorId: string, actorRole: ActorRole, appointmentId: string, dto: RescheduleAppointmentDto) {
     const existing = await this.prisma.appointment.findUnique({ where: { id: appointmentId } });
     if (!existing) throw new NotFoundException();
