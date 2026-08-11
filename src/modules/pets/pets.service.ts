@@ -1144,11 +1144,11 @@ export class PetsService {
 
     const {
       images, tagId, medicalRecords, adoptionRequirementKeys,
-      personalityTags, goodWith, badWith,
+      personalityTags, traits, goodWith, badWith,
       code, // 🆕 PawLife ID tuỳ chỉnh (web gửi lên), app không gửi thì undefined
       ...petData
     } = createPetDto;
-
+    const normalizedTraits = normalizeTraitsList(traits ?? personalityTags);
     // 🆕 Nếu có code hợp lệ thì dùng, không thì tự sinh như cũ
     const idSetByShelter = code?.trim()
       ? code.trim()
@@ -1179,7 +1179,10 @@ export class PetsService {
       ...(petData.vaccinationStatus !== undefined && {
         isVaccinated: petData.vaccinationStatus === 'VACCINATED',
       }),
-      ...(personalityTags !== undefined && { traits: normalizeTraitsList(personalityTags) }),
+      ...(normalizedTraits.length > 0 && {
+        traits: normalizedTraits,                       // cột Json — để web load lại khi edit
+        traitsList: { create: normalizedTraits },        // relation — để app đọc & hiển thị
+      }),
       ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }),
       ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),
       ...(requirementIds.length > 0 && {
@@ -1442,15 +1445,15 @@ export class PetsService {
         bodyKey: string;
       } => {
         const normalizedType = (record.type || '').toUpperCase();
-       if (normalizedType === 'DENTAL_CARE') {
-         return { type: 'DENTAL_CARE', titleKey: 'pawHistory.dental_title', bodyKey: 'pawHistory.dental_body' };
-       }
-       if (normalizedType === 'ANNUAL_CHECKUP') {
-         return { type: 'ANNUAL_CHECKUP', titleKey: 'pawHistory.checkup_title', bodyKey: 'pawHistory.checkup_body' };
-       }
-       if (normalizedType === 'VACCINATION') {
-         return { type: 'VACCINE', titleKey: 'pawHistory.vaccine_title', bodyKey: 'pawHistory.vaccine_body' };
-       }
+        if (normalizedType === 'DENTAL_CARE') {
+          return { type: 'DENTAL_CARE', titleKey: 'pawHistory.dental_title', bodyKey: 'pawHistory.dental_body' };
+        }
+        if (normalizedType === 'ANNUAL_CHECKUP') {
+          return { type: 'ANNUAL_CHECKUP', titleKey: 'pawHistory.checkup_title', bodyKey: 'pawHistory.checkup_body' };
+        }
+        if (normalizedType === 'VACCINATION') {
+          return { type: 'VACCINE', titleKey: 'pawHistory.vaccine_title', bodyKey: 'pawHistory.vaccine_body' };
+        }
 
         const nameBi = getBilingualText(record.recordName);
         const nameRaw = `${nameBi.en} ${nameBi.vi}`.toLowerCase();
@@ -1893,10 +1896,14 @@ export class PetsService {
       }
     }
 
-    const { images, medicalRecords, nameLastUpdatedAt, adoptionRequirementKeys, personalityTags, goodWith, badWith, code, ...petInfo } = updateData;
+    const { images, medicalRecords, nameLastUpdatedAt, adoptionRequirementKeys, personalityTags, traits, goodWith, badWith, code, ...petInfo } = updateData;
+
     const requirementIds = adoptionRequirementKeys !== undefined
       ? await this.resolveRequirementIds(adoptionRequirementKeys)
       : undefined; // 🆕 — undefined nghĩa là FE không gửi field này, giữ nguyên dữ liệu cũ
+    const normalizedTraits = (traits !== undefined || personalityTags !== undefined)
+      ? normalizeTraitsList(traits ?? personalityTags)
+      : undefined;
     try {
       // ── Xử lý medicalRecords KHÔNG xoá hết — giữ nguyên verificationStatus của record cũ ──
       if (medicalRecords) {
@@ -1970,7 +1977,13 @@ export class PetsService {
           ...(petInfo.vaccinationStatus !== undefined && {
             isVaccinated: petInfo.vaccinationStatus === 'VACCINATED',
           }),
-          ...(personalityTags !== undefined && { traits: normalizeTraitsList(personalityTags) }),
+          ...(normalizedTraits !== undefined && {
+            traits: normalizedTraits,
+            traitsList: {
+              deleteMany: {},              // xoá hết tag cũ trong bảng PetTrait
+              create: normalizedTraits,    // tạo lại theo danh sách mới nhất
+            },
+          }),
           ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }),
           ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),
           ...(requirementIds !== undefined && {
