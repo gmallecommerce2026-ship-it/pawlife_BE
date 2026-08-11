@@ -1632,12 +1632,21 @@ export class PetsService {
 
       // 7. BIRTH
       if (pet.dob) {
+        const dobDate = new Date(pet.dob);
+        const today = new Date();
+
+        let latestBirthday = new Date(today.getFullYear(), dobDate.getMonth(), dobDate.getDate());
+        // Nếu sinh nhật năm nay chưa tới (còn ở tương lai) → lùi về sinh nhật năm ngoái
+        if (latestBirthday.getTime() > today.getTime()) {
+          latestBirthday.setFullYear(latestBirthday.getFullYear() - 1);
+        }
+
         pawHistory.push({
           id: `dob_${pet.id}`,
           type: 'BIRTH',
-          title: 'Date of Birth',
-          date: pet.dob,
-          description: `${pet.name} was born.`,
+          title: 'Birthday',
+          date: latestBirthday,
+          description: `${pet.name}'s birthday.`,
           i18n: {
             titleKey: 'pawHistory.birth_title',
             bodyKey: 'pawHistory.birth_body',
