@@ -46,9 +46,10 @@ enum PetSize {
 
 enum PetStatus {
   AVAILABLE
-  PENDING // Đang có người xin nhận nuôi
-  REJECTED     // có tồn tại chưa?
-  HEALTH_ISSUE // có tồn tại chưa?
+  PENDING
+  FOSTERING     // 🆕
+  REJECTED
+  HEALTH_ISSUE
   ADOPTED
 }
 
