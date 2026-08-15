@@ -49,7 +49,6 @@ export class ApplicationsService {
     });
 
     if (existingApp) {
-      // Nếu đơn đang mở -> Chặn lại
       if (
         existingApp.status !== 'CLOSED' &&
         existingApp.status !== 'ADOPTION_COMPLETED'
@@ -60,12 +59,14 @@ export class ApplicationsService {
         });
       }
 
-      // Nếu đơn cũ đã bị CLOSED / ADOPTION_COMPLETED -> Tái sử dụng (Update)
+      // Nếu đơn cũ đã bị CLOSED / ADOPTION_COMPLETED -> Reset và Tái sử dụng
       const updated = await this.prisma.adoptionApplication.update({
         where: { id: existingApp.id },
         data: {
           ...data,
           status: 'SUBMITTED',
+          reviewNote: null, // Xóa ghi chú từ chối cũ (nếu có)
+          submittedAt: new Date(), // Cập nhật lại thời gian nộp mới
         },
       });
       await this.redisService.del(`pet:detail:${data.petId}`);
