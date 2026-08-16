@@ -40,6 +40,7 @@ export class ApplicationsService {
       });
     }
 
+    // TÌM TẤT CẢ CÁC ĐƠN BẤT KỂ TRẠNG THÁI
     const existingApp = await this.prisma.adoptionApplication.findFirst({
       where: {
         userId,
@@ -47,17 +48,28 @@ export class ApplicationsService {
       },
     });
 
-    // 1. Chuẩn hóa dữ liệu để phone luôn là string, không bị undefined
+    // Map chính xác các cột thuộc bảng AdoptionApplication (loại bỏ email và các trường thừa)
     const applicationPayload = {
-      ...data,
+      petId: data.petId,
+      fullName: data.fullName,
       phone: data.phone || data.zalo,
+      zalo: data.zalo,
+      adoptFor: data.adoptFor,
+      location: data.location,
+      housing: data.housing,
+      children: data.children,
+      cage: data.cage,
+      petExperience: data.petExperience,
       prevPetHistory: data.prevPetHistory || '',
-      email: data.email || null,
+      employmentStatus: data.employmentStatus,
+      adoptionReason: data.adoptionReason,
+      commitments: data.commitments,
       otherQuestion: data.otherQuestion || null,
       status: 'SUBMITTED' as const,
     };
 
     if (existingApp) {
+      // Nếu đơn đang mở -> Chặn lại
       if (
         existingApp.status !== 'CLOSED' &&
         existingApp.status !== 'ADOPTION_COMPLETED'
@@ -68,7 +80,7 @@ export class ApplicationsService {
         });
       }
 
-      // 2. Dùng createdAt thay vì submittedAt
+      // Nếu đơn cũ đã bị CLOSED / ADOPTION_COMPLETED -> Tái sử dụng (Update)
       const updated = await this.prisma.adoptionApplication.update({
         where: { id: existingApp.id },
         data: {
@@ -80,7 +92,7 @@ export class ApplicationsService {
       return updated;
     }
 
-    // 3. Truyền applicationPayload vào create
+    // Nếu chưa từng có đơn nào -> Tạo mới
     const created = await this.prisma.adoptionApplication.create({
       data: {
         userId,
