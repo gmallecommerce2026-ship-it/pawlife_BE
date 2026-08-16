@@ -48,7 +48,7 @@ export class ApplicationsService {
       },
     });
 
-    // Map chính xác các cột thuộc bảng AdoptionApplication (loại bỏ email và các trường thừa)
+    // Map chính xác các cột thuộc bảng AdoptionApplication (đã loại bỏ otherQuestion và email)
     const applicationPayload = {
       petId: data.petId,
       fullName: data.fullName,
@@ -64,7 +64,6 @@ export class ApplicationsService {
       employmentStatus: data.employmentStatus,
       adoptionReason: data.adoptionReason,
       commitments: data.commitments,
-      otherQuestion: data.otherQuestion || null,
       status: 'SUBMITTED' as const,
     };
 
@@ -88,6 +87,18 @@ export class ApplicationsService {
           createdAt: new Date(),
         },
       });
+
+      // Nếu có câu hỏi khác từ người nhận nuôi -> Lưu vào ApplicationNote
+      if (data.otherQuestion && data.otherQuestion.trim()) {
+        await this.prisma.applicationNote.create({
+          data: {
+            applicationId: updated.id,
+            authorId: userId,
+            content: `Câu hỏi từ người nhận nuôi: ${data.otherQuestion.trim()}`,
+          },
+        }).catch(() => {});
+      }
+
       await this.redisService.del(`pet:detail:${data.petId}`);
       return updated;
     }
@@ -99,6 +110,18 @@ export class ApplicationsService {
         ...applicationPayload,
       },
     });
+
+    // Nếu có câu hỏi khác từ người nhận nuôi -> Lưu vào ApplicationNote
+    if (data.otherQuestion && data.otherQuestion.trim()) {
+      await this.prisma.applicationNote.create({
+        data: {
+          applicationId: created.id,
+          authorId: userId,
+          content: `Câu hỏi từ người nhận nuôi: ${data.otherQuestion.trim()}`,
+        },
+      }).catch(() => {});
+    }
+
     await this.redisService.del(`pet:detail:${data.petId}`);
     return created;
   }
