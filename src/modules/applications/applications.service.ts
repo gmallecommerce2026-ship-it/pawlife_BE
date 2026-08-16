@@ -40,13 +40,22 @@ export class ApplicationsService {
       });
     }
 
-    // TÌM TẤT CẢ CÁC ĐƠN BẤT KỂ TRẠNG THÁI
     const existingApp = await this.prisma.adoptionApplication.findFirst({
       where: {
         userId,
         petId: data.petId,
       },
     });
+
+    // 1. Chuẩn hóa dữ liệu để phone luôn là string, không bị undefined
+    const applicationPayload = {
+      ...data,
+      phone: data.phone || data.zalo,
+      prevPetHistory: data.prevPetHistory || '',
+      email: data.email || null,
+      otherQuestion: data.otherQuestion || null,
+      status: 'SUBMITTED' as const,
+    };
 
     if (existingApp) {
       if (
@@ -59,26 +68,23 @@ export class ApplicationsService {
         });
       }
 
-      // Nếu đơn cũ đã bị CLOSED / ADOPTION_COMPLETED -> Reset và Tái sử dụng
+      // 2. Dùng createdAt thay vì submittedAt
       const updated = await this.prisma.adoptionApplication.update({
         where: { id: existingApp.id },
         data: {
-          ...data,
-          status: 'SUBMITTED',
-          reviewNote: null, // Xóa ghi chú từ chối cũ (nếu có)
-          submittedAt: new Date(), // Cập nhật lại thời gian nộp mới
+          ...applicationPayload,
+          createdAt: new Date(),
         },
       });
       await this.redisService.del(`pet:detail:${data.petId}`);
       return updated;
     }
 
-    // Nếu chưa từng có đơn nào -> Tạo mới
+    // 3. Truyền applicationPayload vào create
     const created = await this.prisma.adoptionApplication.create({
       data: {
         userId,
-        ...data,
-        status: 'SUBMITTED',
+        ...applicationPayload,
       },
     });
     await this.redisService.del(`pet:detail:${data.petId}`);
