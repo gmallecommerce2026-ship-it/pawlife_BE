@@ -9,7 +9,7 @@ import { PrismaService } from '../../database/prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { RedisService } from '../../database/redis/redis.service';
 import { NotificationsService } from '../notifications/notifications.service';
-
+import { Role, NotificationType } from '@prisma/client'; 
 @Injectable()
 export class ApplicationsService {
   constructor(
