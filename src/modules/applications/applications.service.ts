@@ -9,7 +9,7 @@ import { PrismaService } from '../../database/prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { RedisService } from '../../database/redis/redis.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { Role, NotificationType } from '@prisma/client'; 
+import { Role, NotificationType } from '@prisma/client';
 @Injectable()
 export class ApplicationsService {
   constructor(
@@ -240,7 +240,28 @@ export class ApplicationsService {
     await this.redisService.del(`pet:detail:${application.petId}`);
     return created;
   }
+  async simulateSubmitDocument(shelterId: string, applicationId: string, docId: string) {
+    await this.assertOwnsApplication(shelterId, applicationId);
 
+    const doc = await this.prisma.applicationDocument.findFirst({
+      where: { id: docId, applicationId },
+    });
+    if (!doc) throw new NotFoundException('Không tìm thấy tài liệu.');
+    if (doc.status === 'ACCEPTED') {
+      throw new BadRequestException('Tài liệu này đã được chấp nhận.');
+    }
+
+    return this.prisma.applicationDocument.update({
+      where: { id: docId },
+      data: {
+        status: 'PENDING_REVIEW',
+        fileUrl: doc.fileUrl || 'https://placeholder.pawlife.vn/simulated-document.pdf',
+        fileName: doc.fileName || 'simulated-document.pdf',
+        submittedAt: new Date(),
+        rejectionReason: null,
+      },
+    });
+  }
   async submitDocument(
     userId: string,
     applicationId: string,

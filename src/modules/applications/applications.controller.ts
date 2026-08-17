@@ -280,7 +280,21 @@ export class ApplicationsController {
     );
     return { success: true, data };
   }
-
+  @Post(':id/documents/:docId/simulate-submit')
+  @UseGuards(RolesGuard, ShelterGuard)
+  @Roles(Role.SHELTER)
+  async simulateSubmitDocument(
+    @User('shelterId') shelterId: string,
+    @Param('id') applicationId: string,
+    @Param('docId') docId: string,
+  ) {
+    const data = await this.applicationsService.simulateSubmitDocument(
+      shelterId,
+      applicationId,
+      docId,
+    );
+    return { success: true, data };
+  }
   @Delete(':id/documents/:docId')
   @UseGuards(RolesGuard, ShelterGuard)
   @Roles(Role.SHELTER)
