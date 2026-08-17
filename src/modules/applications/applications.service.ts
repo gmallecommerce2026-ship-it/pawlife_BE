@@ -463,7 +463,7 @@ export class ApplicationsService {
   // ==========================================
 
   async getShelterApplications(shelterId: string, status?: string) {
-    return this.prisma.adoptionApplication.findMany({
+    const applications = await this.prisma.adoptionApplication.findMany({
       where: {
         pet: { shelterId },
         ...(status ? { status: status as any } : {}),
@@ -491,9 +491,12 @@ export class ApplicationsService {
           include: { tag: true },
         },
         appointment: true,
+        documents: true, // NEW — để FE tự tính số đã duyệt/tổng, hiển thị badge trên Kanban card
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    return applications;
   }
 
   async addNote(shelterId: string, applicationId: string, authorId: string, content: string) {
