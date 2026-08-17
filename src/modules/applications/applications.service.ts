@@ -1,6 +1,7 @@
 // src/modules/applications/applications.service.ts
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -15,13 +16,25 @@ export class ApplicationsService {
     private readonly redisService: RedisService,
   ) { }
 
+  // FIX BẢO MẬT: helper dùng chung để xác nhận đơn thuộc đúng shelter đang
+  // gọi API — bắt buộc gọi trước mọi thao tác ghi (notes/tags/status/appointments)
+  // ở phần "LUỒNG SHELTER" bên dưới.
+  private async assertOwnsApplication(shelterId: string, applicationId: string) {
+    const application = await this.prisma.adoptionApplication.findUnique({
+      where: { id: applicationId },
+      include: { pet: true },
+    });
+    if (!application) throw new NotFoundException('Không tìm thấy đơn.');
+    if (application.pet.shelterId !== shelterId) {
+      throw new ForbiddenException('Bạn không có quyền với đơn này.');
+    }
+    return application;
+  }
+
   // ==========================================
-  // 1. LUỒNG NGƯỜI DÙNG (ADOPTER)
+  // 1. LUỒNG NGƯỜI DÙNG (ADOPTER) — không đổi
   // ==========================================
 
-  /**
-   * Tạo đơn nhận nuôi mới (Giới hạn tối đa 5 đơn chưa đóng)
-   */
   async createApplication(userId: string, data: CreateApplicationDto) {
     const activeApplicationsCount = await this.prisma.adoptionApplication.count({
       where: {
@@ -40,7 +53,6 @@ export class ApplicationsService {
       });
     }
 
-    // TÌM TẤT CẢ CÁC ĐƠN BẤT KỂ TRẠNG THÁI
     const existingApp = await this.prisma.adoptionApplication.findFirst({
       where: {
         userId,
@@ -48,7 +60,6 @@ export class ApplicationsService {
       },
     });
 
-    // Map chính xác các cột thuộc bảng AdoptionApplication (đã loại bỏ otherQuestion và email)
     const applicationPayload = {
       petId: data.petId,
       fullName: data.fullName,
@@ -68,7 +79,6 @@ export class ApplicationsService {
     };
 
     if (existingApp) {
-      // Nếu đơn đang mở -> Chặn lại
       if (
         existingApp.status !== 'CLOSED' &&
         existingApp.status !== 'ADOPTION_COMPLETED'
@@ -79,7 +89,6 @@ export class ApplicationsService {
         });
       }
 
-      // Nếu đơn cũ đã bị CLOSED / ADOPTION_COMPLETED -> Tái sử dụng (Update)
       const updated = await this.prisma.adoptionApplication.update({
         where: { id: existingApp.id },
         data: {
@@ -88,7 +97,6 @@ export class ApplicationsService {
         },
       });
 
-      // Nếu có câu hỏi khác từ người nhận nuôi -> Lưu vào ApplicationNote
       if (data.otherQuestion && data.otherQuestion.trim()) {
         await this.prisma.applicationNote.create({
           data: {
@@ -103,7 +111,6 @@ export class ApplicationsService {
       return updated;
     }
 
-    // Nếu chưa từng có đơn nào -> Tạo mới
     const created = await this.prisma.adoptionApplication.create({
       data: {
         userId,
@@ -111,7 +118,6 @@ export class ApplicationsService {
       },
     });
 
-    // Nếu có câu hỏi khác từ người nhận nuôi -> Lưu vào ApplicationNote
     if (data.otherQuestion && data.otherQuestion.trim()) {
       await this.prisma.applicationNote.create({
         data: {
@@ -126,11 +132,8 @@ export class ApplicationsService {
     return created;
   }
 
-  /**
-   * Lấy danh sách đơn của tôi
-   */
   async getMyApplications(userId: string) {
-    const applications = await this.prisma.adoptionApplication.findMany({
+    return this.prisma.adoptionApplication.findMany({
       where: { userId },
       include: {
         pet: {
@@ -156,13 +159,8 @@ export class ApplicationsService {
       },
       orderBy: { createdAt: 'desc' },
     });
-
-    return applications;
   }
 
-  /**
-   * Lấy chi tiết đơn ứng tuyển theo ID
-   */
   async getApplicationById(userId: string, applicationId: string) {
     const application = await this.prisma.adoptionApplication.findFirst({
       where: {
@@ -201,9 +199,6 @@ export class ApplicationsService {
     return application;
   }
 
-  /**
-   * Cập nhật ảnh xác minh bổ sung
-   */
   async updateVerificationPhotos(
     userId: string,
     applicationId: string,
@@ -241,9 +236,6 @@ export class ApplicationsService {
     return updated;
   }
 
-  /**
-   * Rút đơn nhận nuôi
-   */
   async withdrawApplication(userId: string, applicationId: string) {
     const application = await this.prisma.adoptionApplication.findFirst({
       where: {
@@ -279,11 +271,11 @@ export class ApplicationsService {
 
   // ==========================================
   // 2. LUỒNG TRẠM CỨU HỘ (SHELTER / ADMIN)
+  // Mọi method dưới đây giờ nhận thêm `shelterId` và gọi
+  // assertOwnsApplication() trước khi ghi dữ liệu — FIX lỗ hổng cho phép
+  // sửa đơn của shelter khác.
   // ==========================================
 
-  /**
-   * Lấy danh sách đơn dành cho Shelter
-   */
   async getShelterApplications(shelterId: string, status?: string) {
     return this.prisma.adoptionApplication.findMany({
       where: {
@@ -318,10 +310,9 @@ export class ApplicationsService {
     });
   }
 
-  /**
-   * Thêm ghi chú nội bộ cho đơn
-   */
-  async addNote(applicationId: string, authorId: string, content: string) {
+  async addNote(shelterId: string, applicationId: string, authorId: string, content: string) {
+    await this.assertOwnsApplication(shelterId, applicationId);
+
     return this.prisma.applicationNote.create({
       data: {
         applicationId,
@@ -334,10 +325,9 @@ export class ApplicationsService {
     });
   }
 
-  /**
-   * Gán Tag cho đơn
-   */
-  async addTagToApplication(applicationId: string, tagId?: string, name?: string) {
+  async addTagToApplication(shelterId: string, applicationId: string, tagId?: string, name?: string) {
+    await this.assertOwnsApplication(shelterId, applicationId);
+
     let resolvedTagId = tagId;
 
     if (!resolvedTagId && name) {
@@ -362,10 +352,9 @@ export class ApplicationsService {
     });
   }
 
-  /**
-   * Gỡ Tag khỏi đơn
-   */
-  async removeTagFromApplication(applicationId: string, tagId: string) {
+  async removeTagFromApplication(shelterId: string, applicationId: string, tagId: string) {
+    await this.assertOwnsApplication(shelterId, applicationId);
+
     return this.prisma.applicationTagOnApplication.delete({
       where: {
         applicationId_tagId: { applicationId, tagId },
@@ -373,14 +362,14 @@ export class ApplicationsService {
     });
   }
 
-  /**
-   * Cập nhật trạng thái đơn
-   */
   async updateApplicationStatus(
+    shelterId: string,
     applicationId: string,
     status: any,
     rejectionReason?: string,
   ) {
+    await this.assertOwnsApplication(shelterId, applicationId);
+
     const updated = await this.prisma.adoptionApplication.update({
       where: { id: applicationId },
       data: {
@@ -392,18 +381,8 @@ export class ApplicationsService {
     return updated;
   }
 
-  /**
-   * Đặt lịch hẹn phỏng vấn
-   */
-  async scheduleAppointment(applicationId: string, dto: any) {
-    const app = await this.prisma.adoptionApplication.findUnique({
-      where: { id: applicationId },
-      include: { pet: true },
-    });
-
-    if (!app) {
-      throw new NotFoundException('Adoption application not found');
-    }
+  async scheduleAppointment(shelterId: string, applicationId: string, dto: any) {
+    const app = await this.assertOwnsApplication(shelterId, applicationId);
 
     return this.prisma.appointment.create({
       data: {
