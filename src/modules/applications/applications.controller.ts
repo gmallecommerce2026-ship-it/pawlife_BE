@@ -19,7 +19,9 @@ import { ShelterGuard } from 'src/common/guards/shelter.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { User } from '../../common/decorators/user.decorator';
 import { CreateApplicationDto } from './dto/create-application.dto';
-
+import { RequestDocumentsDto } from './dto/request-documents.dto';
+import { SubmitDocumentDto } from './dto/submit-document.dto';
+import { ReviewDocumentDto } from './dto/review-document.dto';
 @Controller('applications')
 @UseGuards(JwtAuthGuard)
 export class ApplicationsController {
@@ -58,7 +60,34 @@ export class ApplicationsController {
     );
     return { success: true, data };
   }
+  // GET dùng chung cả adopter lẫn shelter — service tự phân quyền theo role
+  @Get(':id/documents')
+  async getApplicationDocuments(
+    @User() user: any, // lấy nguyên object user từ JWT (id, role, shelterId)
+    @Param('id') applicationId: string,
+  ) {
+    const data = await this.applicationsService.getApplicationDocuments(
+      { id: user.id, role: user.role, shelterId: user.shelterId },
+      applicationId,
+    );
+    return { success: true, data };
+  }
 
+  @Post(':id/documents/:docId/submit')
+  async submitDocument(
+    @User('id') userId: string,
+    @Param('id') applicationId: string,
+    @Param('docId') docId: string,
+    @Body() dto: SubmitDocumentDto,
+  ) {
+    const data = await this.applicationsService.submitDocument(
+      userId,
+      applicationId,
+      docId,
+      dto,
+    );
+    return { success: true, data };
+  }
   @Patch(':id/verification-photos')
   async updateVerificationPhotos(
     @User('id') userId: string,
@@ -212,5 +241,55 @@ export class ApplicationsController {
       dto,
     );
     return { success: true, data };
+  }
+
+  @Post(':id/documents')
+  @UseGuards(RolesGuard, ShelterGuard)
+  @Roles(Role.SHELTER)
+  async requestDocuments(
+    @User('id') staffId: string,
+    @User('shelterId') shelterId: string,
+    @Param('id') applicationId: string,
+    @Body() dto: RequestDocumentsDto,
+  ) {
+    const data = await this.applicationsService.requestDocuments(
+      shelterId,
+      applicationId,
+      staffId,
+      dto.documents,
+    );
+    return { success: true, data };
+  }
+
+  @Patch(':id/documents/:docId/review')
+  @UseGuards(RolesGuard, ShelterGuard)
+  @Roles(Role.SHELTER)
+  async reviewDocument(
+    @User('id') staffId: string,
+    @User('shelterId') shelterId: string,
+    @Param('id') applicationId: string,
+    @Param('docId') docId: string,
+    @Body() dto: ReviewDocumentDto,
+  ) {
+    const data = await this.applicationsService.reviewDocument(
+      shelterId,
+      applicationId,
+      docId,
+      staffId,
+      dto,
+    );
+    return { success: true, data };
+  }
+
+  @Delete(':id/documents/:docId')
+  @UseGuards(RolesGuard, ShelterGuard)
+  @Roles(Role.SHELTER)
+  async removeDocument(
+    @User('shelterId') shelterId: string,
+    @Param('id') applicationId: string,
+    @Param('docId') docId: string,
+  ) {
+    await this.applicationsService.removeDocument(shelterId, applicationId, docId);
+    return { success: true, message: 'Document removed successfully' };
   }
 }

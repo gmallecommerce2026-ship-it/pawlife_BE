@@ -8,12 +8,14 @@ import {
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { RedisService } from '../../database/redis/redis.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ApplicationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
+    private readonly notificationsService: NotificationsService,
   ) { }
 
   // FIX BẢO MẬT: helper dùng chung để xác nhận đơn thuộc đúng shelter đang
@@ -104,7 +106,7 @@ export class ApplicationsService {
             authorId: userId,
             content: `Câu hỏi từ người nhận nuôi: ${data.otherQuestion.trim()}`,
           },
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       await this.redisService.del(`pet:detail:${data.petId}`);
@@ -125,7 +127,7 @@ export class ApplicationsService {
           authorId: userId,
           content: `Câu hỏi từ người nhận nuôi: ${data.otherQuestion.trim()}`,
         },
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     await this.redisService.del(`pet:detail:${data.petId}`);
@@ -160,7 +162,170 @@ export class ApplicationsService {
       orderBy: { createdAt: 'desc' },
     });
   }
+  async getApplicationDocuments(
+    currentUser: { id: string; role: Role; shelterId?: string },
+    applicationId: string,
+  ) {
+    const application = await this.prisma.adoptionApplication.findUnique({
+      where: { id: applicationId },
+      include: { pet: true },
+    });
+    if (!application) throw new NotFoundException('Không tìm thấy đơn.');
 
+    const isOwnerAdopter = application.userId === currentUser.id;
+    const isOwnerShelter =
+      currentUser.role === Role.SHELTER &&
+      application.pet.shelterId === currentUser.shelterId;
+
+    if (!isOwnerAdopter && !isOwnerShelter) {
+      throw new ForbiddenException('Bạn không có quyền xem tài liệu của đơn này.');
+    }
+
+    return this.prisma.applicationDocument.findMany({
+      where: { applicationId },
+      orderBy: { requestedAt: 'asc' },
+    });
+  }
+
+  async requestDocuments(
+    shelterId: string,
+    applicationId: string,
+    staffId: string,
+    items: { key: string; label: string; description: string }[],
+  ) {
+    const application = await this.assertOwnsApplication(shelterId, applicationId);
+
+    const existing = await this.prisma.applicationDocument.findMany({
+      where: { applicationId },
+      select: { key: true },
+    });
+    const existingKeys = new Set(existing.map((d) => d.key));
+    const newItems = items.filter((d) => !existingKeys.has(d.key));
+
+    if (newItems.length === 0) {
+      throw new BadRequestException('Các tài liệu này đã được yêu cầu trước đó.');
+    }
+
+    const created = await this.prisma.$transaction(
+      newItems.map((d) =>
+        this.prisma.applicationDocument.create({
+          data: {
+            applicationId,
+            key: d.key,
+            label: d.label,
+            description: d.description,
+            status: 'PENDING_SUBMISSION',
+            requestedById: staffId,
+          },
+        }),
+      ),
+    );
+
+    if (application.status !== 'NEED_MORE_INFO') {
+      await this.prisma.adoptionApplication.update({
+        where: { id: applicationId },
+        data: { status: 'NEED_MORE_INFO' },
+      });
+    }
+
+    await this.notificationsService.createAndSendNotification({
+      userId: application.userId,
+      title: '📄 Cần bổ sung tài liệu',
+      body: `Trạm cứu hộ cần bạn bổ sung ${newItems.length} tài liệu cho đơn nhận nuôi ${application.pet.name}.`,
+      type: NotificationType.SYSTEM,
+      referenceId: application.petId,
+      metadata: { applicationId, documentIds: created.map((d) => d.id) },
+    });
+
+    await this.redisService.del(`pet:detail:${application.petId}`);
+    return created;
+  }
+
+  async submitDocument(
+    userId: string,
+    applicationId: string,
+    docId: string,
+    dto: { fileUrl: string; fileName?: string; fileSizeLabel?: string },
+  ) {
+    const application = await this.prisma.adoptionApplication.findFirst({
+      where: { id: applicationId, userId },
+    });
+    if (!application) throw new NotFoundException('Không tìm thấy đơn.');
+
+    const doc = await this.prisma.applicationDocument.findFirst({
+      where: { id: docId, applicationId },
+    });
+    if (!doc) throw new NotFoundException('Không tìm thấy tài liệu được yêu cầu.');
+    if (doc.status === 'ACCEPTED') {
+      throw new BadRequestException('Tài liệu này đã được chấp nhận, không thể nộp lại.');
+    }
+
+    return this.prisma.applicationDocument.update({
+      where: { id: docId },
+      data: {
+        status: 'PENDING_REVIEW',
+        fileUrl: dto.fileUrl,
+        fileName: dto.fileName,
+        fileSizeLabel: dto.fileSizeLabel,
+        submittedAt: new Date(),
+        rejectionReason: null, // nộp lại sau khi bị reject -> xoá lý do cũ
+      },
+    });
+  }
+
+  async reviewDocument(
+    shelterId: string,
+    applicationId: string,
+    docId: string,
+    staffId: string,
+    dto: { status: 'ACCEPTED' | 'REJECTED'; reason?: string },
+  ) {
+    const application = await this.assertOwnsApplication(shelterId, applicationId);
+
+    const doc = await this.prisma.applicationDocument.findFirst({
+      where: { id: docId, applicationId },
+    });
+    if (!doc) throw new NotFoundException('Không tìm thấy tài liệu.');
+    if (doc.status !== 'PENDING_REVIEW') {
+      throw new BadRequestException('Tài liệu này chưa được nộp hoặc đã được duyệt.');
+    }
+
+    const updated = await this.prisma.applicationDocument.update({
+      where: { id: docId },
+      data: {
+        status: dto.status,
+        rejectionReason: dto.status === 'REJECTED' ? dto.reason ?? null : null,
+        reviewedAt: new Date(),
+        reviewedById: staffId,
+      },
+    });
+
+    await this.notificationsService.createAndSendNotification({
+      userId: application.userId,
+      title: dto.status === 'ACCEPTED' ? '✅ Tài liệu đã được chấp nhận' : '⚠️ Tài liệu bị từ chối',
+      body:
+        dto.status === 'ACCEPTED'
+          ? `Tài liệu "${doc.label}" đã được chấp nhận.`
+          : `Tài liệu "${doc.label}" bị từ chối${dto.reason ? `: ${dto.reason}` : '.'}`,
+      type: NotificationType.SYSTEM,
+      referenceId: application.petId,
+      metadata: { applicationId, documentId: docId, status: dto.status },
+    });
+
+    return updated;
+  }
+
+  async removeDocument(shelterId: string, applicationId: string, docId: string) {
+    await this.assertOwnsApplication(shelterId, applicationId);
+
+    const doc = await this.prisma.applicationDocument.findFirst({
+      where: { id: docId, applicationId },
+    });
+    if (!doc) throw new NotFoundException('Không tìm thấy tài liệu.');
+
+    await this.prisma.applicationDocument.delete({ where: { id: docId } });
+    return { success: true };
+  }
   async getApplicationById(userId: string, applicationId: string) {
     const application = await this.prisma.adoptionApplication.findFirst({
       where: {

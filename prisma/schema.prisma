@@ -499,7 +499,42 @@ model Pet {
   hiddenByUsers        UserHiddenPet[]
   @@unique([shelterId, idSetByShelter]) 
 }
+enum RequiredDocumentStatus {
+  PENDING_SUBMISSION // đã yêu cầu, applicant chưa nộp
+  PENDING_REVIEW      // applicant đã nộp, chờ shelter duyệt
+  ACCEPTED
+  REJECTED
+}
 
+model ApplicationDocument {
+  id            String   @id @default(cuid())
+  applicationId String
+  application   AdoptionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  key           String
+  label         String
+  description   String   @db.Text
+
+  status        RequiredDocumentStatus @default(PENDING_SUBMISSION)
+
+  fileUrl       String?
+  fileName      String?
+  fileSizeLabel String?
+  submittedAt   DateTime?
+
+  rejectionReason String? @db.Text
+  reviewedAt      DateTime?
+  reviewedById    String?
+
+  requestedAt   DateTime @default(now())
+  requestedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([applicationId, key]) // chặn shelter yêu cầu trùng 1 loại tài liệu 2 lần
+  @@index([applicationId])
+}
 model AdoptionApplication {
   id     String            @id @default(uuid())
   userId String
@@ -519,6 +554,7 @@ model AdoptionApplication {
   housing  String // Loại nhà ở (Apartment, House...)
   children String // Có trẻ em không (Yes/No)
   cage     String // Nhốt chuồng không (Yes/No/Sometimes)
+  documents ApplicationDocument[] 
 
   // --- Section C & D: Experience & Employment ---
   petExperience    String // Yes/No/Still living...
