@@ -387,33 +387,37 @@ model Appointment {
   id                   String              @id @default(cuid())
   applicationId        String              @unique
   application          AdoptionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  
+
   userId               String
   user                 User                @relation("UserAppointments", fields: [userId], references: [id])
-  
+
   shelterId            String
   shelter              Shelter             @relation("ShelterAppointments", fields: [shelterId], references: [id])
-  
+
   petId                String
   pet                  Pet                 @relation("PetAppointments", fields: [petId], references: [id])
 
-  appointmentDate      DateTime            // Ngày hẹn (VD: 2026-08-10)
-  startTime            String              // Giờ bắt đầu (VD: "09:00")
-  endTime              String              // Giờ kết thúc (VD: "10:00")
+  title                String?             // 🆕 tiêu đề buổi phỏng vấn
+  appointmentDate      DateTime
+  startTime            String
+  endTime              String
   type                 AppointmentType     @default(IN_PERSON)
   status               AppointmentStatus   @default(PENDING)
-  location             String?             // Địa chỉ trạm hoặc link meeting online
+  location             String?
   meetLink             String?
-  notes                String?             // Ghi chú của người dùng khi đặt
-  cancellationReason   String?             // Lý do hủy (nếu có)
-  bookingDelegated Boolean          @default(false)
-  createdBy             String
+  notes                String?
+  cancellationReason   String?
+  bookingDelegated     Boolean             @default(false)
+  members              Json?               // 🆕 [{ id, name, note }]
+  reminderMinutesBefore Int                @default(10) // 🆕
+  reminderSentAt       DateTime?           // 🆕 chống gửi nhắc trùng
+  createdBy            String
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
   @@index([shelterId, appointmentDate])
   @@index([userId])
-  @@unique([shelterId, appointmentDate, startTime], name: "uniq_shelter_slot") 
+  @@unique([shelterId, appointmentDate, startTime], name: "uniq_shelter_slot")
 }
 
 enum VaccinationStatus {

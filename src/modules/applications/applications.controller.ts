@@ -22,6 +22,7 @@ import { CreateApplicationDto } from './dto/create-application.dto';
 import { RequestDocumentsDto } from './dto/request-documents.dto';
 import { SubmitDocumentDto } from './dto/submit-document.dto';
 import { ReviewDocumentDto } from './dto/review-document.dto';
+import { ScheduleAppointmentDto } from '../google-calendar/dto/schedule-appointment.dto';
 @Controller('applications')
 @UseGuards(JwtAuthGuard)
 export class ApplicationsController {
@@ -60,6 +61,7 @@ export class ApplicationsController {
     );
     return { success: true, data };
   }
+
   // GET dùng chung cả adopter lẫn shelter — service tự phân quyền theo role
   @Get(':id/documents')
   async getApplicationDocuments(
@@ -231,13 +233,15 @@ export class ApplicationsController {
   @UseGuards(RolesGuard, ShelterGuard)
   @Roles(Role.SHELTER)
   async scheduleAppointment(
+    @User('id') staffId: string,          // 🆕 thêm — service cần staffId để set createdBy
     @User('shelterId') shelterId: string,
     @Param('id') applicationId: string,
-    @Body() dto: any,
+    @Body() dto: ScheduleAppointmentDto,  // 🔧 đổi từ `any`
   ) {
     const data = await this.applicationsService.scheduleAppointment(
       shelterId,
       applicationId,
+      staffId,
       dto,
     );
     return { success: true, data };
