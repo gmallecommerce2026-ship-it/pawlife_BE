@@ -28,7 +28,6 @@ import { TranslateModule } from './translate/translate.module';
 import { IngredientsModule } from './modules/ingredients/ingredients.module';
 import { AppointmentsModule } from './modules/appointments/appointment.module';
 import { SupportModule } from './modules/support/support.module';
-import { GoogleOAuthModule } from './modules/google-calendar/google-oauth.module';
 
 @Module({
   imports: [
@@ -102,7 +101,6 @@ import { GoogleOAuthModule } from './modules/google-calendar/google-oauth.module
 
     // 5. App Modules
     DatabaseModule,
-    GoogleOAuthModule,
     ShelterDashboardModule,
     AppointmentsModule,
     RedisModule,
