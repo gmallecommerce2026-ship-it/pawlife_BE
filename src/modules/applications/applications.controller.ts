@@ -22,7 +22,6 @@ import { CreateApplicationDto } from './dto/create-application.dto';
 import { RequestDocumentsDto } from './dto/request-documents.dto';
 import { SubmitDocumentDto } from './dto/submit-document.dto';
 import { ReviewDocumentDto } from './dto/review-document.dto';
-import { ScheduleAppointmentDto } from '../google-calendar/dto/schedule-appointment.dto';
 @Controller('applications')
 @UseGuards(JwtAuthGuard)
 export class ApplicationsController {
