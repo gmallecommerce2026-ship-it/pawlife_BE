@@ -233,15 +233,13 @@ export class ApplicationsController {
   @UseGuards(RolesGuard, ShelterGuard)
   @Roles(Role.SHELTER)
   async scheduleAppointment(
-    @User('id') staffId: string,          // 🆕 thêm — service cần staffId để set createdBy
     @User('shelterId') shelterId: string,
     @Param('id') applicationId: string,
-    @Body() dto: ScheduleAppointmentDto,  // 🔧 đổi từ `any`
+    @Body() dto: any,
   ) {
     const data = await this.applicationsService.scheduleAppointment(
       shelterId,
       applicationId,
-      staffId,
       dto,
     );
     return { success: true, data };
