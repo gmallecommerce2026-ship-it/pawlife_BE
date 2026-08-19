@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
@@ -16,6 +17,8 @@ import { GoogleMeetService } from '../google-meet/google-meet.service';
 
 @Injectable()
 export class ApplicationsService {
+  private readonly logger = new Logger(ApplicationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly googleMeetService: GoogleMeetService,
@@ -29,7 +32,10 @@ export class ApplicationsService {
   private async assertOwnsApplication(shelterId: string, applicationId: string) {
     const application = await this.prisma.adoptionApplication.findUnique({
       where: { id: applicationId },
-      include: { pet: true },
+      include: {
+        pet: true,
+        user: { select: { id: true, email: true, name: true, avatarUrl: true } }, // thêm dòng này
+      },
     });
     if (!application) throw new NotFoundException('Không tìm thấy đơn.');
     if (application.pet.shelterId !== shelterId) {
@@ -597,8 +603,7 @@ export class ApplicationsService {
     let googleEventId: string | null = existing?.googleEventId ?? null;
 
     if (dto.format === 'Online') {
-      const attendeeEmails = [app.user?.email, ...dto.members.map((m) => m.email)]
-        .filter((e): e is string => !!e);
+      const attendeeEmails = [app.user?.email].filter((e): e is string => !!e);
 
       try {
         const result = googleEventId
