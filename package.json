@@ -61,7 +61,7 @@
     "dotenv": "^17.2.3",
     "fs": "^0.0.1-security",
     "geoip-lite": "^1.4.10",
-    "google-auth-library": "^10.6.1",
+    "google-auth-library": "^10.9.1",
     "googleapis": "^171.4.0",
     "ioredis": "^5.10.1",
     "jimp": "^0.22.12",

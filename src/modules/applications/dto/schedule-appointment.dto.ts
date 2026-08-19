@@ -1,11 +1,69 @@
+// src/modules/applications/dto/schedule-appointment.dto.ts
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsIn,
+  IsInt,
+  IsISO8601,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
+
+class InterviewMemberDto {
+  @IsString()
+  id: string;
+
+  @IsString()
+  @MinLength(1)
+  name: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
 export class ScheduleAppointmentDto {
+  @IsString()
+  @MinLength(1)
   title: string;
+
+  @IsIn(['Online', 'Offline'])
   format: 'Online' | 'Offline';
+
+  @IsOptional()
+  @IsString()
   location?: string | null;
-  meetingLink?: string | null; // nếu để BE tự tạo link thì field này có thể bỏ hoặc chỉ dùng khi update
+
+  // Không còn bắt buộc từ FE — BE tự tạo qua Google Meet API khi format = Online.
+  // Chỉ giữ lại để dùng khi Google API lỗi và cần fallback thủ công.
+  @IsOptional()
+  @IsString()
+  meetingLink?: string | null;
+
+  @IsISO8601()
   scheduledAt: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(15)
+  @Max(240)
   durationMinutes?: number;
-  members: { id: string; name: string; note: string }[];
-  reminderMinutesBefore: number;
-  reviewNote: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => InterviewMemberDto)
+  members: InterviewMemberDto[];
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  reminderMinutesBefore?: number;
+
+  @IsOptional()
+  @IsString()
+  reviewNote?: string;
 }
