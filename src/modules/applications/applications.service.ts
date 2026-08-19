@@ -9,11 +9,16 @@ import { PrismaService } from '../../database/prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { RedisService } from '../../database/redis/redis.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { Role, NotificationType } from '@prisma/client';
+import { AppointmentType, AppointmentStatus, ApplicationStatus, Role, NotificationType } from '@prisma/client';
+import { ScheduleAppointmentDto } from './dto/schedule-appointment.dto';
+import { GoogleMeetService } from '../google-meet/google-meet.service';
+
+
 @Injectable()
 export class ApplicationsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly googleMeetService: GoogleMeetService,
     private readonly redisService: RedisService,
     private readonly notificationsService: NotificationsService,
   ) { }
