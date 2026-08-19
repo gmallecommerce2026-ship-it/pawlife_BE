@@ -403,6 +403,7 @@ model Appointment {
   endTime              String
   type                 AppointmentType     @default(IN_PERSON)
   status               AppointmentStatus   @default(PENDING)
+  
   location             String?
   meetLink             String?
   notes                String?
@@ -411,6 +412,7 @@ model Appointment {
   members              Json?               // 🆕 [{ id, name, note }]
   reminderMinutesBefore Int                @default(10) // 🆕
   reminderSentAt       DateTime?           // 🆕 chống gửi nhắc trùng
+  googleEventId        String?
   createdBy            String
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt

@@ -478,7 +478,9 @@ export class ApplicationsService {
             name: true,
             breed: true,
             gender: true,
+            dob: true,
             images: { select: { url: true }, take: 1 },
+            shelter: { select: { address: true } },
           },
         },
         notes: {
@@ -570,23 +572,119 @@ export class ApplicationsService {
     return updated;
   }
 
-  async scheduleAppointment(shelterId: string, applicationId: string, dto: any) {
-    const app = await this.assertOwnsApplication(shelterId, applicationId);
+  async scheduleAppointment(shelterId: string, applicationId: string, dto: ScheduleAppointmentDto) {
+    const app = await this.assertOwnsApplication(shelterId, applicationId); // đã include user ở bước trước
 
-    return this.prisma.appointment.create({
-      data: {
-        applicationId,
+    const scheduledAt = new Date(dto.scheduledAt);
+    if (Number.isNaN(scheduledAt.getTime()) || scheduledAt.getTime() < Date.now()) {
+      throw new BadRequestException('Thời gian hẹn không hợp lệ.');
+    }
+
+    const duration = dto.durationMinutes ?? 60;
+    const endsAt = new Date(scheduledAt.getTime() + duration * 60_000);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const toHHmm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+    // applicationId là @unique -> lấy record cũ (nếu có) để biết đang cần TẠO MỚI hay CẬP NHẬT event Meet
+    const existing = await this.prisma.appointment.findUnique({ where: { applicationId } });
+
+    let meetLink: string | null = null;
+    let googleEventId: string | null = existing?.googleEventId ?? null;
+
+    if (dto.format === 'Online') {
+      const attendeeEmails = [app.user?.email, ...dto.members.map((m) => m.email)]
+        .filter((e): e is string => !!e);
+
+      try {
+        const result = googleEventId
+          ? await this.googleMeetService.updateMeetEvent(googleEventId, {
+            title: dto.title,
+            description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
+            startAt: scheduledAt,
+            endAt: endsAt,
+            attendeeEmails,
+          })
+          : await this.googleMeetService.createMeetEvent({
+            title: dto.title,
+            description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
+            startAt: scheduledAt,
+            endAt: endsAt,
+            attendeeEmails,
+          });
+        meetLink = result.meetLink;
+        googleEventId = result.eventId;
+      } catch (err) {
+        this.logger.warn(`Tạo/cập nhật Google Meet thất bại cho đơn ${applicationId}`, err as Error);
+        meetLink = dto.meetingLink || existing?.meetLink || null; // fallback nếu staff có dán tay
+      }
+    } else if (googleEventId) {
+      // Đổi từ Online -> Offline: dọn event Meet cũ cho sạch calendar
+      await this.googleMeetService.cancelMeetEvent(googleEventId).catch(() => { });
+      googleEventId = null;
+    }
+
+    try {
+      const [appointment] = await this.prisma.$transaction([
+        this.prisma.appointment.upsert({
+          where: { applicationId },
+          create: {
+            applicationId,
+            userId: app.userId,
+            shelterId: app.pet.shelterId!,
+            petId: app.petId,
+            title: dto.title,
+            appointmentDate: scheduledAt,
+            startTime: toHHmm(scheduledAt),
+            endTime: toHHmm(endsAt),
+            type: dto.format === 'Online' ? AppointmentType.ONLINE : AppointmentType.IN_PERSON,
+            status: AppointmentStatus.PENDING,
+            location: dto.format === 'Offline' ? dto.location : null,
+            meetLink,
+            googleEventId,
+            members: dto.members as any,
+            reminderMinutesBefore: dto.reminderMinutesBefore ?? 10,
+            createdBy: shelterId,
+          },
+          update: {
+            title: dto.title,
+            appointmentDate: scheduledAt,
+            startTime: toHHmm(scheduledAt),
+            endTime: toHHmm(endsAt),
+            type: dto.format === 'Online' ? AppointmentType.ONLINE : AppointmentType.IN_PERSON,
+            status: AppointmentStatus.PENDING, // đổi lịch -> chờ xác nhận lại
+            location: dto.format === 'Offline' ? dto.location : null,
+            meetLink,
+            googleEventId,
+            members: dto.members as any,
+            reminderMinutesBefore: dto.reminderMinutesBefore ?? 10,
+            reminderSentAt: null, // reset để cron tính lại mốc nhắc mới
+          },
+        }),
+        this.prisma.adoptionApplication.update({
+          where: { id: applicationId },
+          data: {
+            status: ApplicationStatus.INTERVIEW_SCHEDULED,
+            ...(dto.reviewNote ? { reviewNote: dto.reviewNote } : {}),
+          },
+        }),
+      ]);
+
+      await this.notificationsService.createAndSendNotification({
         userId: app.userId,
-        petId: app.petId,
-        shelterId: app.pet.shelterId!,
-        appointmentDate: new Date(dto.dateSlot || dto.appointmentDate),
-        startTime: dto.startTime || '09:00',
-        endTime: dto.endTime || '10:00',
-        type: dto.format === 'Online' ? 'ONLINE' : 'IN_PERSON',
-        location: dto.location || dto.link,
-        status: 'PENDING',
-        createdBy: app.pet.shelterId!,
-      },
-    });
+        title: '📅 Lịch phỏng vấn nhận nuôi',
+        body: `Trạm đã đặt lịch phỏng vấn cho đơn nhận nuôi ${app.pet.name} vào ${scheduledAt.toLocaleString('vi-VN')}.`,
+        type: NotificationType.SYSTEM,
+        referenceId: app.petId,
+        metadata: { applicationId, appointmentId: appointment.id },
+      });
+
+      await this.redisService.del(`pet:detail:${app.petId}`);
+      return appointment;
+    } catch (err: any) {
+      if (err.code === 'P2002' && err.meta?.target?.includes?.('uniq_shelter_slot')) {
+        throw new BadRequestException('Khung giờ này trạm đã có lịch hẹn khác, vui lòng chọn giờ khác.');
+      }
+      throw err;
+    }
   }
 }
