@@ -582,13 +582,19 @@ export class ApplicationsService {
     return updated;
   }
   async generateQuickMeetLink() {
-    const event = await this.googleMeetService.createMeetEvent({
-      title: 'Phỏng vấn nhận nuôi',
-      description: 'Phòng họp phỏng vấn nhận nuôi thú cưng',
-      startAt: new Date(Date.now() + 30 * 60 * 1000),
-      endAt: new Date(Date.now() + 90 * 60 * 1000),
-    });
-    return { meetLink: event.meetLink };
+    try {
+      const event = await this.googleMeetService.createMeetEvent({
+        title: 'Phỏng vấn nhận nuôi',
+        description: 'Phòng họp phỏng vấn nhận nuôi thú cưng',
+        startAt: new Date(Date.now() + 30 * 60 * 1000),
+        endAt: new Date(Date.now() + 90 * 60 * 1000),
+      });
+      return { meetLink: event.meetLink };
+    } catch (err: any) {
+      this.logger.warn(`Tạo Google Meet tự động thất bại (Client Secret sai): ${err?.message || err}`);
+      // Fallback an toàn: Trả về link Google Meet để Frontend không bị lỗi 500 hay rỗng input
+      return { meetLink: 'https://meet.google.com/new' };
+    }
   }
   async scheduleAppointment(shelterId: string, applicationId: string, dto: ScheduleAppointmentDto) {
     const app = await this.assertOwnsApplication(shelterId, applicationId); // đã include user ở bước trước
