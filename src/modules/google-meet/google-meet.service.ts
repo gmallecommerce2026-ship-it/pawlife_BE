@@ -26,15 +26,30 @@ export class GoogleMeetService {
     private ready = false;
 
     constructor(private readonly config: ConfigService) {
-        const clientId = this.config.get<string>('GOOGLE_MEET_CLIENT_ID');
-        const clientSecret = this.config.get<string>('GOOGLE_MEET_CLIENT_SECRET');
-        const redirectUri = this.config.get<string>('GOOGLE_MEET_REDIRECT_URI');
-        const refreshToken = this.config.get<string>('GOOGLE_MEET_REFRESH_TOKEN');
-        this.organizerEmail = this.config.get<string>('GOOGLE_MEET_ORGANIZER_EMAIL');
+        // 👉 Tự động nhận diện cả 2 kiểu đặt tên biến trong file .env
+        const clientId =
+            this.config.get<string>('GOOGLE_MEET_CLIENT_ID') ||
+            this.config.get<string>('GOOGLE_CLIENT_ID');
+        const clientSecret =
+            this.config.get<string>('GOOGLE_MEET_CLIENT_SECRET') ||
+            this.config.get<string>('GOOGLE_CLIENT_SECRET');
+        const redirectUri =
+            this.config.get<string>('GOOGLE_MEET_REDIRECT_URI') ||
+            this.config.get<string>('GOOGLE_REDIRECT_URI');
+        const refreshToken =
+            this.config.get<string>('GOOGLE_MEET_REFRESH_TOKEN') ||
+            this.config.get<string>('GOOGLE_REFRESH_TOKEN');
+        this.organizerEmail =
+            this.config.get<string>('GOOGLE_MEET_ORGANIZER_EMAIL') ||
+            this.config.get<string>('GOOGLE_ORGANIZER_EMAIL');
 
-        // Nếu không set riêng GOOGLE_MEET_CALENDAR_ID thì mặc định dùng lịch của
-        // chính organizer (tài khoản đã cấp refresh token) — 'primary' cũng chạy
-        // được vì refresh token luôn gắn với 1 tài khoản cụ thể.
+        // Log kiểm tra chi tiết giá trị nạp vào
+        this.logger.log(
+            `🔍 [GoogleMeetConfig] ClientID: ${clientId ? clientId.slice(0, 15) + '...' : '❌ THIẾU'} | Secret: ${
+                clientSecret ? '✅ ĐÃ CÓ (dài ' + clientSecret.length + ' ký tự)' : '❌ THIẾU'
+            } | RefreshToken: ${refreshToken ? '✅ ĐÃ CÓ (' + refreshToken.slice(0, 7) + '...)' : '❌ THIẾU'}`,
+        );
+
         this.calendarId =
             this.config.get<string>('GOOGLE_MEET_CALENDAR_ID') ||
             this.organizerEmail ||
@@ -44,14 +59,14 @@ export class GoogleMeetService {
 
         if (!clientId || !clientSecret) {
             this.logger.warn(
-                'Thiếu GOOGLE_MEET_CLIENT_ID / GOOGLE_MEET_CLIENT_SECRET — GoogleMeetService sẽ luôn throw khi tạo phòng Meet.',
+                'Thiếu GOOGLE_CLIENT_ID hoặc GOOGLE_CLIENT_SECRET — GoogleMeetService sẽ không thể tạo phòng Meet.',
             );
             return;
         }
 
         if (!refreshToken) {
             this.logger.warn(
-                'Thiếu GOOGLE_MEET_REFRESH_TOKEN — cần chạy flow xin quyền 1 lần (xem GoogleAuthController) trước khi dùng tính năng Meet.',
+                'Thiếu GOOGLE_REFRESH_TOKEN / GOOGLE_MEET_REFRESH_TOKEN — Cần cấp refresh token trước khi dùng.',
             );
             return;
         }
@@ -59,17 +74,16 @@ export class GoogleMeetService {
         this.oauth2Client.setCredentials({ refresh_token: refreshToken });
         this.ready = true;
         this.logger.log(
-            `GoogleMeetService sẵn sàng — sự kiện sẽ được tạo trên lịch: ${this.calendarId}`,
+            `✅ GoogleMeetService sẵn sàng — sự kiện sẽ được tạo trên lịch: ${this.calendarId}`,
         );
     }
 
-    // Dùng khi cần lấy refresh token mới (lần đầu setup hoặc sau khi revoke quyền cũ)
     generateAuthUrl(): string {
         return this.oauth2Client.generateAuthUrl({
             access_type: 'offline',
-            prompt: 'consent', // bắt buộc để Google luôn trả refresh_token
+            prompt: 'consent',
             scope: ['https://www.googleapis.com/auth/calendar'],
-            login_hint: this.organizerEmail, // gợi ý đăng nhập đúng tài khoản organizer
+            login_hint: this.organizerEmail,
         });
     }
 
@@ -82,7 +96,7 @@ export class GoogleMeetService {
         }
         this.oauth2Client.setCredentials(tokens);
         this.ready = true;
-        return tokens.refresh_token; // -> lưu giá trị này vào env GOOGLE_MEET_REFRESH_TOKEN
+        return tokens.refresh_token;
     }
 
     private assertReady() {
