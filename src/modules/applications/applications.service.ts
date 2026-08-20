@@ -602,8 +602,6 @@ export class ApplicationsService {
     let googleEventId: string | null = existing?.googleEventId ?? null;
 
     if (dto.format === 'Online') {
-      const attendeeEmails = [app.user?.email].filter((e): e is string => !!e);
-
       try {
         const result = googleEventId
           ? await this.googleMeetService.updateMeetEvent(googleEventId, {
@@ -611,20 +609,18 @@ export class ApplicationsService {
             description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
             startAt: scheduledAt,
             endAt: endsAt,
-            attendeeEmails,
           })
           : await this.googleMeetService.createMeetEvent({
             title: dto.title,
             description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
             startAt: scheduledAt,
             endAt: endsAt,
-            attendeeEmails,
           });
         meetLink = result.meetLink;
         googleEventId = result.eventId;
       } catch (err) {
         this.logger.warn(`Tạo/cập nhật Google Meet thất bại cho đơn ${applicationId}`, err as Error);
-        meetLink = dto.meetingLink || existing?.meetLink || null; // fallback nếu staff có dán tay
+        meetLink = dto.meetingLink || existing?.meetLink || null;
       }
     } else if (googleEventId) {
       // Đổi từ Online -> Offline: dọn event Meet cũ cho sạch calendar
