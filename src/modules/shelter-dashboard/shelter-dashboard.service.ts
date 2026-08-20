@@ -51,7 +51,7 @@ export class ShelterDashboardService {
         await this.redisService.del(`shelter:profile:${shelterId}`);
         return { ...updated, email: updated.emailAddress, phone: updated.contactInfo, logoUrl: updated.avatarUrl };
     }
-   
+
     // ---------------- PETS ----------------
     async getMyPets(shelterId: string, query: { search?: string; species?: string; status?: string; page?: any; pageSize?: any }) {
         const { search, species, status, page = 1, pageSize = 12 } = query;
@@ -129,6 +129,12 @@ export class ShelterDashboardService {
                 tags: {
                     include: { tag: true },
                 },
+                appointment: true, // ✅ FIX: thiếu include này khiến ApproveApplicationModal / InterviewScheduleModal
+                //         luôn nhận application.appointment = undefined, dù đã lưu lịch hẹn thật.
+                //         Hệ quả: format luôn reset về Offline, meetLink/dateSlot/members rỗng,
+                //         và useEffect tưởng "chưa có lịch" nên tự âm thầm gọi API tạo link Meet mới.
+                documents: true,   // (tuỳ chọn) nên thêm luôn để đồng bộ với ApplicationsService.getShelterApplications,
+                //            tránh phải gọi riêng fetchDocuments() ở FE mỗi lần mở modal.
             },
             orderBy: { createdAt: 'desc' },
         });
