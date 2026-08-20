@@ -49,6 +49,12 @@ export class ApplicationsController {
     return { success: true, data };
   }
 
+  @Get('quick-meet-link')
+  async getQuickMeetLink() {
+    const data = await this.applicationsService.generateQuickMeetLink();
+    return { success: true, data };
+  }
+
   @Get(':id')
   async getApplicationById(
     @User('id') userId: string,
@@ -225,11 +231,6 @@ export class ApplicationsController {
       status,
       rejectionReason,
     );
-    return { success: true, data };
-  }
-  @Get('quick-meet-link')
-  async getQuickMeetLink() {
-    const data = await this.applicationsService.generateQuickMeetLink();
     return { success: true, data };
   }
 
