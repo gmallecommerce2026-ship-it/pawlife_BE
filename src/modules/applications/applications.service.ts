@@ -14,7 +14,6 @@ import { AppointmentType, AppointmentStatus, ApplicationStatus, Role, Notificati
 import { ScheduleAppointmentDto } from './dto/schedule-appointment.dto';
 import { GoogleMeetService } from '../google-meet/google-meet.service';
 
-
 @Injectable()
 export class ApplicationsService {
   private readonly logger = new Logger(ApplicationsService.name);
