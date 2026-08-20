@@ -616,29 +616,35 @@ export class ApplicationsService {
     let googleEventId: string | null = existing?.googleEventId ?? null;
 
     if (dto.format === 'Online') {
-      try {
-        const result = googleEventId
-          ? await this.googleMeetService.updateMeetEvent(googleEventId, {
-            title: dto.title,
-            description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
-            startAt: scheduledAt,
-            endAt: endsAt,
-          })
-          : await this.googleMeetService.createMeetEvent({
-            title: dto.title,
-            description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
-            startAt: scheduledAt,
-            endAt: endsAt,
-          });
-        meetLink = result.meetLink;
-        googleEventId = result.eventId;
-      } catch (err) {
-        this.logger.warn(`Tạo/cập nhật Google Meet thất bại cho đơn ${applicationId}`, err as Error);
-        meetLink = dto.meetingLink || existing?.meetLink || null;
+      // 👉 NẾU ĐÃ CÓ LINK THẬT TỪ FRONTEND GỬI LÊN (được tạo từ quick-meet-link) -> DÙNG LUÔN, KHÔNG TẠO LẠI
+      if (dto.meetingLink && dto.meetingLink.includes('meet.google.com') && !dto.meetingLink.includes('/new')) {
+        meetLink = dto.meetingLink.trim();
+      } else {
+        // Chỉ tạo mới nếu chưa có link
+        try {
+          const result = googleEventId
+            ? await this.googleMeetService.updateMeetEvent(googleEventId, {
+                title: dto.title,
+                description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
+                startAt: scheduledAt,
+                endAt: endsAt,
+              })
+            : await this.googleMeetService.createMeetEvent({
+                title: dto.title,
+                description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
+                startAt: scheduledAt,
+                endAt: endsAt,
+              });
+          meetLink = result.meetLink;
+          googleEventId = result.eventId;
+        } catch (err) {
+          this.logger.warn(`Tạo/cập nhật Google Meet thất bại cho đơn ${applicationId}`, err as Error);
+          meetLink = dto.meetingLink || existing?.meetLink || null;
+        }
       }
     } else if (googleEventId) {
-      // Đổi từ Online -> Offline: dọn event Meet cũ cho sạch calendar
-      await this.googleMeetService.cancelMeetEvent(googleEventId).catch(() => { });
+      // Đổi sang Offline -> Hủy event Meet cũ
+      await this.googleMeetService.cancelMeetEvent(googleEventId).catch(() => {});
       googleEventId = null;
     }
 
