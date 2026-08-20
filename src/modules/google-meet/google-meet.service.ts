@@ -26,22 +26,36 @@ export class GoogleMeetService {
     private ready = false;
 
     constructor(private readonly config: ConfigService) {
-        // 👉 Tự động nhận diện cả 2 kiểu đặt tên biến trong file .env
-        const clientId =
+        // 👉 Thêm .trim() để cắt sạch khoảng trắng thừa và ký tự \r ẩn
+        const clientId = (
             this.config.get<string>('GOOGLE_MEET_CLIENT_ID') ||
-            this.config.get<string>('GOOGLE_CLIENT_ID');
-        const clientSecret =
+            this.config.get<string>('GOOGLE_CLIENT_ID') ||
+            ''
+        ).trim();
+
+        const clientSecret = (
             this.config.get<string>('GOOGLE_MEET_CLIENT_SECRET') ||
-            this.config.get<string>('GOOGLE_CLIENT_SECRET');
-        const redirectUri =
+            this.config.get<string>('GOOGLE_CLIENT_SECRET') ||
+            ''
+        ).trim();
+
+        const redirectUri = (
             this.config.get<string>('GOOGLE_MEET_REDIRECT_URI') ||
-            this.config.get<string>('GOOGLE_REDIRECT_URI');
-        const refreshToken =
+            this.config.get<string>('GOOGLE_REDIRECT_URI') ||
+            ''
+        ).trim();
+
+        const refreshToken = (
             this.config.get<string>('GOOGLE_MEET_REFRESH_TOKEN') ||
-            this.config.get<string>('GOOGLE_REFRESH_TOKEN');
-        this.organizerEmail =
+            this.config.get<string>('GOOGLE_REFRESH_TOKEN') ||
+            ''
+        ).trim();
+
+        this.organizerEmail = (
             this.config.get<string>('GOOGLE_MEET_ORGANIZER_EMAIL') ||
-            this.config.get<string>('GOOGLE_ORGANIZER_EMAIL');
+            this.config.get<string>('GOOGLE_ORGANIZER_EMAIL') ||
+            ''
+        ).trim();
 
         // Log kiểm tra chi tiết giá trị nạp vào
         this.logger.log(
