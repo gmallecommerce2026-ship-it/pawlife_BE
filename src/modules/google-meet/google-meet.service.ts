@@ -64,10 +64,7 @@ export class GoogleMeetService {
             } | RefreshToken: ${refreshToken ? '✅ ĐÃ CÓ (' + refreshToken.slice(0, 7) + '...)' : '❌ THIẾU'}`,
         );
 
-        this.calendarId =
-            this.config.get<string>('GOOGLE_MEET_CALENDAR_ID') ||
-            this.organizerEmail ||
-            'primary';
+        this.calendarId = 'primary';
 
         this.oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 
