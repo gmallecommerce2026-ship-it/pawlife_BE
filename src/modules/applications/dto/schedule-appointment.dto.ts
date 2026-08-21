@@ -2,6 +2,7 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsEmail,
   IsIn,
   IsInt,
   IsISO8601,
@@ -20,6 +21,12 @@ class InterviewMemberDto {
   @IsString()
   @MinLength(1)
   name: string;
+
+  // Dùng để mời làm attendee trong sự kiện Google Calendar (đồng tổ chức buổi Meet).
+  // Optional vì thành viên có thể chỉ tham gia offline hoặc chưa cung cấp email.
+  @IsOptional()
+  @IsEmail()
+  email?: string;
 
   @IsOptional()
   @IsString()

@@ -59,8 +59,7 @@ export class GoogleMeetService {
 
         // Log kiểm tra chi tiết giá trị nạp vào
         this.logger.log(
-            `🔍 [GoogleMeetConfig] ClientID: ${clientId ? clientId.slice(0, 15) + '...' : '❌ THIẾU'} | Secret: ${
-                clientSecret ? '✅ ĐÃ CÓ (dài ' + clientSecret.length + ' ký tự)' : '❌ THIẾU'
+            `🔍 [GoogleMeetConfig] ClientID: ${clientId ? clientId.slice(0, 15) + '...' : '❌ THIẾU'} | Secret: ${clientSecret ? '✅ ĐÃ CÓ (dài ' + clientSecret.length + ' ký tự)' : '❌ THIẾU'
             } | RefreshToken: ${refreshToken ? '✅ ĐÃ CÓ (' + refreshToken.slice(0, 7) + '...)' : '❌ THIẾU'}`,
         );
 
@@ -138,6 +137,8 @@ export class GoogleMeetService {
                 ...(input.attendeeEmails?.length
                     ? { attendees: input.attendeeEmails.map((email) => ({ email })) }
                     : {}),
+                guestsCanModify: true,       // 👈 mới — attendee có thể sửa sự kiện/join sớm với quyền cao hơn
+                guestsCanInviteOthers: true,
                 conferenceData: {
                     createRequest: {
                         requestId,
@@ -175,6 +176,8 @@ export class GoogleMeetService {
                     ...(input.attendeeEmails?.length
                         ? { attendees: input.attendeeEmails.map((email) => ({ email })) }
                         : {}),
+                    guestsCanModify: true,       // 👈 mới — attendee có thể sửa sự kiện/join sớm với quyền cao hơn
+                    guestsCanInviteOthers: true,
                 },
             });
 

@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { MailerService } from '@nestjs-modules/mailer';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { RedisService } from '../../database/redis/redis.service';
@@ -13,6 +14,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { AppointmentType, AppointmentStatus, ApplicationStatus, Role, NotificationType } from '@prisma/client';
 import { ScheduleAppointmentDto } from './dto/schedule-appointment.dto';
 import { GoogleMeetService } from '../google-meet/google-meet.service';
+import { renderInterviewConfirmationEmail } from './templates/interview-confirmation.template';
 
 @Injectable()
 export class ApplicationsService {
@@ -23,6 +25,7 @@ export class ApplicationsService {
     private readonly googleMeetService: GoogleMeetService,
     private readonly redisService: RedisService,
     private readonly notificationsService: NotificationsService,
+    private readonly mailerService: MailerService,
   ) { }
 
   // FIX BẢO MẬT: helper dùng chung để xác nhận đơn thuộc đúng shelter đang
@@ -32,7 +35,7 @@ export class ApplicationsService {
     const application = await this.prisma.adoptionApplication.findUnique({
       where: { id: applicationId },
       include: {
-        pet: true,
+        pet: { include: { shelter: true } },
         user: { select: { id: true, email: true, name: true, avatarUrl: true } }, // thêm dòng này
       },
     });
@@ -597,7 +600,7 @@ export class ApplicationsService {
     }
   }
   async scheduleAppointment(shelterId: string, applicationId: string, dto: ScheduleAppointmentDto) {
-    const app = await this.assertOwnsApplication(shelterId, applicationId); // đã include user ở bước trước
+    const app = await this.assertOwnsApplication(shelterId, applicationId);
 
     const scheduledAt = new Date(dto.scheduledAt);
     if (Number.isNaN(scheduledAt.getTime()) || scheduledAt.getTime() < Date.now()) {
@@ -609,42 +612,42 @@ export class ApplicationsService {
     const pad = (n: number) => String(n).padStart(2, '0');
     const toHHmm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
-    // applicationId là @unique -> lấy record cũ (nếu có) để biết đang cần TẠO MỚI hay CẬP NHẬT event Meet
     const existing = await this.prisma.appointment.findUnique({ where: { applicationId } });
 
     let meetLink: string | null = null;
     let googleEventId: string | null = existing?.googleEventId ?? null;
 
+    // 👇 MỚI: gom email hợp lệ từ danh sách thành viên
+    const attendeeEmails = (dto.members || [])
+      .map((m) => m.email?.trim())
+      .filter((e): e is string => !!e && /\S+@\S+\.\S+/.test(e));
+
     if (dto.format === 'Online') {
-      // 👉 NẾU ĐÃ CÓ LINK THẬT TỪ FRONTEND GỬI LÊN (được tạo từ quick-meet-link) -> DÙNG LUÔN, KHÔNG TẠO LẠI
-      if (dto.meetingLink && dto.meetingLink.includes('meet.google.com') && !dto.meetingLink.includes('/new')) {
-        meetLink = dto.meetingLink.trim();
-      } else {
-        // Chỉ tạo mới nếu chưa có link
-        try {
-          const result = googleEventId
-            ? await this.googleMeetService.updateMeetEvent(googleEventId, {
-                title: dto.title,
-                description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
-                startAt: scheduledAt,
-                endAt: endsAt,
-              })
-            : await this.googleMeetService.createMeetEvent({
-                title: dto.title,
-                description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
-                startAt: scheduledAt,
-                endAt: endsAt,
-              });
-          meetLink = result.meetLink;
-          googleEventId = result.eventId;
-        } catch (err) {
-          this.logger.warn(`Tạo/cập nhật Google Meet thất bại cho đơn ${applicationId}`, err as Error);
-          meetLink = dto.meetingLink || existing?.meetLink || null;
-        }
+      // 👇 BỎ nhánh "dùng lại link FE gửi lên" — luôn tạo/cập nhật thật theo giờ hẹn + email thành viên
+      try {
+        const result = googleEventId
+          ? await this.googleMeetService.updateMeetEvent(googleEventId, {
+            title: dto.title,
+            description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
+            startAt: scheduledAt,
+            endAt: endsAt,
+            attendeeEmails, // 👈 mới
+          })
+          : await this.googleMeetService.createMeetEvent({
+            title: dto.title,
+            description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
+            startAt: scheduledAt,
+            endAt: endsAt,
+            attendeeEmails, // 👈 mới
+          });
+        meetLink = result.meetLink;
+        googleEventId = result.eventId;
+      } catch (err) {
+        this.logger.warn(`Tạo/cập nhật Google Meet thất bại cho đơn ${applicationId}`, err as Error);
+        meetLink = existing?.meetLink || null; // fallback: giữ link cũ nếu có, không dùng dto.meetingLink nữa
       }
     } else if (googleEventId) {
-      // Đổi sang Offline -> Hủy event Meet cũ
-      await this.googleMeetService.cancelMeetEvent(googleEventId).catch(() => {});
+      await this.googleMeetService.cancelMeetEvent(googleEventId).catch(() => { });
       googleEventId = null;
     }
 
@@ -693,15 +696,37 @@ export class ApplicationsService {
           },
         }),
       ]);
+      const scheduledDateLabel = scheduledAt.toLocaleDateString('vi-VN'); // "20/08/2026"
+      const scheduledTimeLabel = toHHmm(scheduledAt); // "14:30" — tái dùng hàm toHHmm đã có sẵn
 
-      await this.notificationsService.createAndSendNotification({
-        userId: app.userId,
-        title: '📅 Lịch phỏng vấn nhận nuôi',
-        body: `Trạm đã đặt lịch phỏng vấn cho đơn nhận nuôi ${app.pet.name} vào ${scheduledAt.toLocaleString('vi-VN')}.`,
-        type: NotificationType.SYSTEM,
-        referenceId: app.petId,
-        metadata: { applicationId, appointmentId: appointment.id },
+      const { subject, html } = renderInterviewConfirmationEmail({
+        adopterName: app.fullName || app.user.name,
+        petName: app.pet.name,
+        shelterName: app.pet.shelter.name,
+        appointmentDate: scheduledAt.toLocaleDateString('vi-VN'),
+        appointmentTime: toHHmm(scheduledAt),
+        isOnline: dto.format === 'Online',
+        shelterAddress: dto.location || app.pet.shelter.address,
+        googleMeetLink: meetLink || undefined,
+        shelterPhone: app.pet.shelter.contactInfo,
+        shelterEmail: app.pet.shelter.emailAddress,
       });
+
+      if (app.user.email) {
+        this.mailerService
+          .sendMail({ to: app.user.email, subject, html })
+          .catch((err) =>
+            this.logger.warn(`Gửi email xác nhận phỏng vấn thất bại cho ${app.user.email}`, err),
+          );
+      }
+
+      // Gửi cho từng thành viên trạm có email được phân công
+      for (const email of attendeeEmails) {
+        this.mailerService
+          .sendMail({ to: email, subject: `[Nội bộ] ${subject}`, html })
+          .catch((err) => this.logger.warn(`Gửi email nội bộ thất bại cho ${email}`, err));
+      }
+
 
       await this.redisService.del(`pet:detail:${app.petId}`);
       return appointment;
