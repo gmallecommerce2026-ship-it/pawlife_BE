@@ -696,8 +696,12 @@ export class ApplicationsService {
           },
         }),
       ]);
-      const scheduledDateLabel = scheduledAt.toLocaleDateString('vi-VN'); // "20/08/2026"
-      const scheduledTimeLabel = toHHmm(scheduledAt); // "14:30" — tái dùng hàm toHHmm đã có sẵn
+
+      if (!app.pet.shelter) {
+        this.logger.warn(`Đơn ${applicationId} có pet không gắn shelter — bỏ qua gửi email xác nhận.`);
+        await this.redisService.del(`pet:detail:${app.petId}`);
+        return appointment;
+      }
 
       const { subject, html } = renderInterviewConfirmationEmail({
         adopterName: app.fullName || app.user.name,
