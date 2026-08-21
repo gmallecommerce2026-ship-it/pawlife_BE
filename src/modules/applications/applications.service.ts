@@ -704,7 +704,7 @@ export class ApplicationsService {
       }
 
       const { subject, html } = renderInterviewConfirmationEmail({
-        adopterName: app.fullName || app.user.name,
+        adopterName: app.fullName || app.user.name || 'Người nhận nuôi',
         petName: app.pet.name,
         shelterName: app.pet.shelter.name,
         appointmentDate: scheduledAt.toLocaleDateString('vi-VN'),
@@ -713,7 +713,7 @@ export class ApplicationsService {
         shelterAddress: dto.location || app.pet.shelter.address,
         googleMeetLink: meetLink || undefined,
         shelterPhone: app.pet.shelter.contactInfo,
-        shelterEmail: app.pet.shelter.emailAddress,
+        shelterEmail: app.pet.shelter.emailAddress || undefined,
       });
 
       if (app.user.email) {
