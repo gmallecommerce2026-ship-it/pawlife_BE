@@ -197,7 +197,11 @@ export class WalletService {
           certificates: this.loadCertificates(),
         },
         {
-          serialNumber: `${pet.id}_${Math.floor(Date.now() / 1000)}`,
+          // Serial ổn định theo pet.id: Wallet định danh thẻ bằng cặp
+          // (passTypeIdentifier, serialNumber) nên tải lại thẻ của cùng một bé
+          // sẽ GHI ĐÈ thẻ cũ thay vì tạo thêm bản trùng. Đây cũng là điều kiện
+          // để FE hỏi hasPass(passTypeId, pet.id) → quyết định nút View hay Add.
+          serialNumber: pet.id,
           passTypeIdentifier:
             this.configService.get<string>('WALLET_PASS_TYPE_IDENTIFIER') ??
             'pass.com.pawlife.petid',
