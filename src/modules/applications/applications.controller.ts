@@ -150,14 +150,16 @@ export class ApplicationsController {
     @User('shelterId') requesterShelterId: string,
     @Param('shelterId') shelterId: string,
     @Query('status') status?: string,
+    @Query('noteTypes') noteTypes?: string, // 🆕 CSV: "VET_RECORDS,CONCERN"
   ) {
-    // Chặn shelter A xem đơn của shelter B qua path param
     if (requesterShelterId !== shelterId) {
       throw new BadRequestException('Bạn không có quyền xem đơn của trạm này.');
     }
+    const noteTypesArr = noteTypes ? noteTypes.split(',').filter(Boolean) : undefined;
     const data = await this.applicationsService.getShelterApplications(
       shelterId,
       status,
+      noteTypesArr,
     );
     return { success: true, data };
   }

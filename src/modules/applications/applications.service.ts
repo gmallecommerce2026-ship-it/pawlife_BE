@@ -475,38 +475,35 @@ export class ApplicationsService {
   // sửa đơn của shelter khác.
   // ==========================================
 
-  async getShelterApplications(shelterId: string, status?: string) {
+  async getShelterApplications(
+    shelterId: string,
+    status?: string,
+    noteTypes?: string[], // 🆕
+  ) {
     const applications = await this.prisma.adoptionApplication.findMany({
       where: {
         pet: { shelterId },
         ...(status ? { status: status as any } : {}),
+        ...(noteTypes && noteTypes.length > 0
+          ? { notes: { some: { type: { in: noteTypes as any } } } }
+          : {}),
       },
       include: {
-        user: {
-          select: { id: true, name: true, email: true, avatarUrl: true, phone: true },
-        },
+        user: { select: { id: true, name: true, email: true, avatarUrl: true, phone: true } },
         pet: {
           select: {
-            id: true,
-            name: true,
-            breed: true,
-            gender: true,
-            dob: true,
+            id: true, name: true, breed: true, gender: true, dob: true,
             images: { select: { url: true }, take: 1 },
             shelter: { select: { address: true } },
           },
         },
         notes: {
-          include: {
-            author: { select: { id: true, name: true, avatarUrl: true } },
-          },
+          include: { author: { select: { id: true, name: true, avatarUrl: true } } },
           orderBy: { createdAt: 'desc' },
         },
-        tags: {
-          include: { tag: true },
-        },
+        tags: { include: { tag: true } },
         appointment: true,
-        documents: true, // NEW — để FE tự tính số đã duyệt/tổng, hiển thị badge trên Kanban card
+        documents: true,
       },
       orderBy: { createdAt: 'desc' },
     });
