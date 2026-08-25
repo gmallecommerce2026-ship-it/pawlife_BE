@@ -594,7 +594,7 @@ model ApplicationNote {
   id            String   @id @default(uuid())
   applicationId String
   authorId      String
-  type ApplicationNoteType @default(GENERAL)
+  type ApplicationNoteType @default(FOLLOW_UP)
   content       String   @db.Text
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
