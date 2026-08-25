@@ -580,10 +580,21 @@ model AdoptionApplication {
 
   @@unique([userId, petId])
 }
+enum ApplicationNoteType {
+  HOME_VISIT
+  VET_RECORDS
+  FOLLOW_UP
+  CONCERN
+  REJECTION
+  REFERENCE_CHECK
+  BACKGROUND_CHECK
+}
+
 model ApplicationNote {
   id            String   @id @default(uuid())
   applicationId String
   authorId      String
+  type ApplicationNoteType @default(GENERAL)
   content       String   @db.Text
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

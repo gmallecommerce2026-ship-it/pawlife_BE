@@ -11,7 +11,7 @@ import { PrismaService } from '../../database/prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { RedisService } from '../../database/redis/redis.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { AppointmentType, AppointmentStatus, ApplicationStatus, Role, NotificationType } from '@prisma/client';
+import { AppointmentType, AppointmentStatus, ApplicationStatus, Role, NotificationType, ApplicationNoteType } from '@prisma/client';
 import { ScheduleAppointmentDto } from './dto/schedule-appointment.dto';
 import { GoogleMeetService } from '../google-meet/google-meet.service';
 import { renderInterviewConfirmationEmail } from './templates/interview-confirmation.template';
@@ -514,7 +514,7 @@ export class ApplicationsService {
     return applications;
   }
 
-  async addNote(shelterId: string, applicationId: string, authorId: string, content: string) {
+  async addNote(shelterId: string, applicationId: string, authorId: string, content: string, type: ApplicationNoteType) {
     await this.assertOwnsApplication(shelterId, applicationId);
 
     return this.prisma.applicationNote.create({
@@ -522,6 +522,7 @@ export class ApplicationsService {
         applicationId,
         authorId,
         content,
+        type,
       },
       include: {
         author: { select: { id: true, name: true, avatarUrl: true } },
@@ -598,6 +599,104 @@ export class ApplicationsService {
       // Fallback an toàn: Trả về link Google Meet để Frontend không bị lỗi 500 hay rỗng input
       return { meetLink: 'https://meet.google.com/new' };
     }
+  }
+  async getApplicantProfile(shelterId: string, applicationId: string) {
+    // Xác nhận đơn này thuộc shelter đang gọi API, đồng thời lấy userId của applicant
+    const baseApp = await this.assertOwnsApplication(shelterId, applicationId);
+    const userId = baseApp.userId;
+
+    // Toàn bộ đơn của applicant này — CHỈ trong phạm vi shelter hiện tại (không lộ chéo shelter)
+    const applications = await this.prisma.adoptionApplication.findMany({
+      where: { userId, pet: { shelterId } },
+      include: {
+        pet: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            images: { select: { url: true }, take: 1 },
+            shelter: { select: { id: true, name: true } },
+          },
+        },
+        appointment: { select: { appointmentDate: true, status: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const activeApplications = applications.filter(
+      (a) => !['CLOSED', 'ADOPTION_COMPLETED'].includes(a.status),
+    );
+    const adoptionHistory = applications.filter(
+      (a) => a.status === 'ADOPTION_COMPLETED',
+    );
+
+    // Pet mà applicant đang sở hữu, đến từ chính shelter này
+    const currentPets = await this.prisma.pet.findMany({
+      where: { ownerId: userId, shelterId },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        images: { select: { url: true }, take: 1 },
+        qrVerificationStatus: true,
+        idSetByShelter: true,
+      },
+    });
+
+    // Note trải trên mọi đơn của applicant này tại shelter hiện tại
+    const notes = await this.prisma.applicationNote.findMany({
+      where: { application: { userId, pet: { shelterId } } },
+      include: { author: { select: { id: true, name: true, avatarUrl: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, phone: true, email: true, avatarUrl: true },
+    });
+
+    const mapAppSummary = (a: (typeof applications)[number]) => ({
+      id: a.id,
+      status: a.status,
+      createdAt: a.createdAt,
+      pet: {
+        id: a.pet.id,
+        name: a.pet.name,
+        avatarUrl: a.pet.images?.[0]?.url ?? null,
+      },
+      shelterName: a.pet.shelter?.name ?? null,
+    });
+
+    return {
+      applicant: {
+        id: user!.id,
+        fullName: baseApp.fullName || user!.name || 'N/A',
+        phone: baseApp.phone || user!.phone || '',
+        email: user!.email,
+        avatarUrl: user!.avatarUrl,
+      },
+      stats: {
+        activeApplications: activeApplications.length,
+        successfulAdoptions: adoptionHistory.length,
+        totalApplications: applications.length,
+      },
+      activeApplications: activeApplications.map(mapAppSummary),
+      adoptionHistory: adoptionHistory.map(mapAppSummary),
+      currentPets: currentPets.map((p) => ({
+        id: p.id,
+        name: p.name,
+        status: p.status,
+        avatarUrl: p.images?.[0]?.url ?? null,
+        qrVerificationStatus: p.qrVerificationStatus,
+      })),
+      notes: notes.map((n) => ({
+        id: n.id,
+        content: n.content,
+        type: n.type,
+        createdAt: n.createdAt,
+        author: n.author,
+      })),
+    };
   }
   async scheduleAppointment(shelterId: string, applicationId: string, dto: ScheduleAppointmentDto) {
     const app = await this.assertOwnsApplication(shelterId, applicationId);

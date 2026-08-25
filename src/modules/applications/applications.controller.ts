@@ -11,7 +11,7 @@ import {
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
-import { Role } from '@prisma/client';
+import { Role, ApplicationNoteType } from '@prisma/client';
 import { ApplicationsService } from './applications.service';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
@@ -22,6 +22,7 @@ import { CreateApplicationDto } from './dto/create-application.dto';
 import { RequestDocumentsDto } from './dto/request-documents.dto';
 import { SubmitDocumentDto } from './dto/submit-document.dto';
 import { ReviewDocumentDto } from './dto/review-document.dto';
+
 @Controller('applications')
 @UseGuards(JwtAuthGuard)
 export class ApplicationsController {
@@ -169,15 +170,20 @@ export class ApplicationsController {
     @User('shelterId') shelterId: string,
     @Param('id') applicationId: string,
     @Body('content') content: string,
+    @Body('type') type: ApplicationNoteType,
   ) {
     if (!content) {
       throw new BadRequestException('Note content is required.');
+    }
+    if (!type) {
+      throw new BadRequestException('Note type is required.');
     }
     const data = await this.applicationsService.addNote(
       shelterId,
       applicationId,
       authorId,
       content,
+      type,
     );
     return { success: true, data };
   }
@@ -250,6 +256,8 @@ export class ApplicationsController {
     return { success: true, data };
   }
 
+
+
   @Post(':id/documents')
   @UseGuards(RolesGuard, ShelterGuard)
   @Roles(Role.SHELTER)
@@ -264,6 +272,20 @@ export class ApplicationsController {
       applicationId,
       staffId,
       dto.documents,
+    );
+    return { success: true, data };
+  }
+
+  @Get(':id/applicant-profile')
+  @UseGuards(RolesGuard, ShelterGuard)
+  @Roles(Role.SHELTER)
+  async getApplicantProfile(
+    @User('shelterId') shelterId: string,
+    @Param('id') applicationId: string,
+  ) {
+    const data = await this.applicationsService.getApplicantProfile(
+      shelterId,
+      applicationId,
     );
     return { success: true, data };
   }
