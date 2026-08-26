@@ -14,7 +14,7 @@ import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { User } from '../../common/decorators/user.decorator';
 import { ShelterTeamService } from './shelter-team.service';
-import { InviteMemberDto, UpdateMemberRoleDto, AcceptInvitationDto } from './dto/shelter-team.dto';
+import { InviteMemberDto, UpdateMemberRoleDto, AcceptInvitationDto, UpdateOwnProfileDto } from './dto/shelter-team.dto';
 
 @Controller('shelter-dashboard/team')
 @UseGuards(JwtAuthGuard, RolesGuard)
