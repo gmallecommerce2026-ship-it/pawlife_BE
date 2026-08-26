@@ -307,7 +307,7 @@ export class AuthService {
         data: { name, address, contactInfo: phone, latitude: lat, longitude: lng, isVerified: false },
       });
       return tx.user.create({
-        data: { email, password: hashedPassword, name, phone, role: 'SHELTER', shelterId: shelter.id },
+        data: { email, password: hashedPassword, name, phone, role: 'SHELTER', shelterId: shelter.id, shelterRole: 'ADMIN' },
       });
     });
 

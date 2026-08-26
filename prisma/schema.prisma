@@ -121,7 +121,37 @@ model TransferRequest {
   sender   User @relation("SentTransfers", fields: [senderId], references: [id])
   receiver User @relation("ReceivedTransfers", fields: [receiverId], references: [id])
 }
+enum ShelterStaffRole {
+  ADMIN
+  MEMBER
+  VOLUNTEER
+  VETERINARIAN
+}
 
+enum ShelterInvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+model ShelterInvitation {
+  id          String                  @id @default(uuid())
+  shelterId   String
+  shelter     Shelter                 @relation(fields: [shelterId], references: [id], onDelete: Cascade)
+  email       String
+  role        ShelterStaffRole
+  token       String                  @unique
+  status      ShelterInvitationStatus @default(PENDING)
+  invitedById String
+  invitedBy   User                    @relation("SentInvitations", fields: [invitedById], references: [id])
+  expiresAt   DateTime
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@index([shelterId])
+  @@index([email])
+}
 model User {
   id        String    @id @default(uuid())
   email     String    @unique
@@ -138,6 +168,8 @@ model User {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
+  shelterRole     ShelterStaffRole?
+  sentInvitations ShelterInvitation[] @relation("SentInvitations")
   petNotes PetNote[]
   appointments Appointment[] @relation("UserAppointments")
   // Liên kết
@@ -217,6 +249,7 @@ model Shelter {
   longitude   Float?
   website String?
   openingHours Json? 
+  invitations ShelterInvitation[]
   applicationTags ApplicationTag[]
   // Liên kết
   followers      FollowedShelter[]
