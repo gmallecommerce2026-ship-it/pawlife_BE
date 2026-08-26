@@ -204,7 +204,7 @@ export class ApplicationsService {
     shelterId: string,
     applicationId: string,
     staffId: string,
-    items: { key: string; label: string; description: string; category: DocumentCategory }[], 
+    items: { key: string; label: string; description: string; category: DocumentCategory }[],
   ) {
     const application = await this.assertOwnsApplication(shelterId, applicationId);
 
@@ -613,6 +613,60 @@ export class ApplicationsService {
       // Fallback an toàn: Trả về link Google Meet để Frontend không bị lỗi 500 hay rỗng input
       return { meetLink: 'https://meet.google.com/new' };
     }
+  }
+  async getPostAdoptionRecords(shelterId: string) {
+    const applications = await this.prisma.adoptionApplication.findMany({
+      where: {
+        pet: { shelterId },
+        status: 'ADOPTION_COMPLETED',
+      },
+      include: {
+        pet: {
+          select: {
+            id: true,
+            name: true,
+            breed: true,
+            gender: true,
+            adoptedAt: true,
+            images: { select: { url: true }, take: 1 },
+          },
+        },
+        user: { select: { id: true, name: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    return applications.map((a) => ({
+      id: a.id,
+      petId: a.petId,
+      petName: a.pet.name,
+      petImage: a.pet.images[0]?.url ?? null,
+      petGender: a.pet.gender,
+      breed: a.pet.breed, // Json song ngữ {vi,en} — FE tự resolve locale
+      adopterName: a.fullName || a.user.name || 'N/A',
+      // adoptedAt được set chính xác lúc chuyển ADOPTION_COMPLETED trong updateApplicationStatus
+      adoptionDate: a.pet.adoptedAt ?? a.updatedAt,
+      nextFollowUpDate: a.nextFollowUpDate,
+    }));
+  }
+
+  async updateNextFollowUpDate(
+    shelterId: string,
+    applicationId: string,
+    nextFollowUpDate: Date | null,
+  ) {
+    const application = await this.assertOwnsApplication(shelterId, applicationId);
+
+    if (application.status !== 'ADOPTION_COMPLETED') {
+      throw new BadRequestException(
+        'Chỉ có thể đặt lịch tái khám cho đơn đã hoàn tất nhận nuôi.',
+      );
+    }
+
+    return this.prisma.adoptionApplication.update({
+      where: { id: applicationId },
+      data: { nextFollowUpDate },
+    });
   }
   async getApplicantProfile(shelterId: string, applicationId: string) {
     // Xác nhận đơn này thuộc shelter đang gọi API, đồng thời lấy userId của applicant

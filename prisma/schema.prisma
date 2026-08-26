@@ -581,6 +581,7 @@ model AdoptionApplication {
   tags             ApplicationTagOnApplication[]
   verificationPhotos Json?
   reviewNote String? @db.Text
+  nextFollowUpDate   DateTime? 
   appointment Appointment?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

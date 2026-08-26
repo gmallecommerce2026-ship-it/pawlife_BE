@@ -142,7 +142,36 @@ export class ApplicationsController {
   // của đơn thuộc shelter khác. Giờ thêm RolesGuard + ShelterGuard + kiểm tra
   // quyền sở hữu thật sự trong service (giống ShelterDashboardService.moveApplication).
   // ==========================================
+  // Đặt gần route 'shelter/:shelterId' hiện có
+  @Get('shelter/:shelterId/post-adoption')
+  @UseGuards(RolesGuard, ShelterGuard)
+  @Roles(Role.SHELTER)
+  async getPostAdoptionRecords(
+    @User('shelterId') requesterShelterId: string,
+    @Param('shelterId') shelterId: string,
+  ) {
+    if (requesterShelterId !== shelterId) {
+      throw new BadRequestException('Bạn không có quyền xem dữ liệu của trạm này.');
+    }
+    const data = await this.applicationsService.getPostAdoptionRecords(shelterId);
+    return { success: true, data };
+  }
 
+  @Patch(':id/next-follow-up')
+  @UseGuards(RolesGuard, ShelterGuard)
+  @Roles(Role.SHELTER)
+  async updateNextFollowUpDate(
+    @User('shelterId') shelterId: string,
+    @Param('id') applicationId: string,
+    @Body('nextFollowUpDate') nextFollowUpDate: string | null,
+  ) {
+    const data = await this.applicationsService.updateNextFollowUpDate(
+      shelterId,
+      applicationId,
+      nextFollowUpDate ? new Date(nextFollowUpDate) : null,
+    );
+    return { success: true, data };
+  }
   @Get('shelter/:shelterId')
   @UseGuards(RolesGuard, ShelterGuard)
   @Roles(Role.SHELTER)
