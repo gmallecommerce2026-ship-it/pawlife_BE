@@ -28,6 +28,7 @@ import { TranslateModule } from './translate/translate.module';
 import { IngredientsModule } from './modules/ingredients/ingredients.module';
 import { AppointmentsModule } from './modules/appointments/appointment.module';
 import { SupportModule } from './modules/support/support.module';
+import { ShelterTeamModule } from './modules/shelter-team/shelter-team.module';
 
 @Module({
   imports: [
@@ -113,6 +114,7 @@ import { SupportModule } from './modules/support/support.module';
     UserInteractionsModule,
     EventsModule,
     TagsModule,
+    ShelterTeamModule,
     PawcareModule,
     SupportModule,
     NotificationsModule,
