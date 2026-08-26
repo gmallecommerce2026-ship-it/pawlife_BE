@@ -20,8 +20,18 @@ import { InviteMemberDto, UpdateMemberRoleDto, AcceptInvitationDto } from './dto
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.SHELTER)
 export class ShelterTeamController {
-  constructor(private readonly shelterTeamService: ShelterTeamService) {}
+  constructor(private readonly shelterTeamService: ShelterTeamService) { }
+  @Get('me')
+  async getMe(@User('id') userId: string) {
+    const data = await this.shelterTeamService.getMe(userId);
+    return { success: true, data };
+  }
 
+  @Patch('me')
+  async updateMe(@User('id') userId: string, @Body() dto: UpdateOwnProfileDto) {
+    const data = await this.shelterTeamService.updateOwnProfile(userId, dto);
+    return { success: true, data };
+  }
   @Get()
   async getTeam(@User('shelterId') shelterId: string) {
     const data = await this.shelterTeamService.getTeam(shelterId);
@@ -73,7 +83,7 @@ export class ShelterTeamController {
 // Controller riêng, KHÔNG guard — dùng cho người được mời (chưa đăng nhập)
 @Controller('invitations')
 export class InvitationsController {
-  constructor(private readonly shelterTeamService: ShelterTeamService) {}
+  constructor(private readonly shelterTeamService: ShelterTeamService) { }
 
   @Get(':token')
   async getInvitation(@Param('token') token: string) {

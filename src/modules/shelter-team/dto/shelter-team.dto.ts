@@ -1,4 +1,4 @@
-import { IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { ShelterStaffRole } from '@prisma/client';
 
 export class InviteMemberDto {
@@ -26,4 +26,11 @@ export class AcceptInvitationDto {
   @IsString()
   @MinLength(6)
   password: string;
+}
+
+export class UpdateOwnProfileDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  name: string;
 }

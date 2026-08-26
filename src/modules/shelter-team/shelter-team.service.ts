@@ -30,7 +30,26 @@ export class ShelterTeamService {
         }
         return requester;
     }
+    async getMe(userId: string) {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, name: true, email: true, avatarUrl: true, shelterRole: true },
+        });
+        if (!user) throw new NotFoundException('Không tìm thấy tài khoản.');
+        return user;
+    }
 
+    async updateOwnProfile(userId: string, dto: { name: string }) {
+        const name = dto.name?.trim();
+        if (!name) {
+            throw new BadRequestException('Tên không được để trống.');
+        }
+        return this.prisma.user.update({
+            where: { id: userId },
+            data: { name },
+            select: { id: true, name: true, email: true, avatarUrl: true, shelterRole: true },
+        });
+    }
     async getTeam(shelterId: string) {
         const [members, invitations] = await Promise.all([
             this.prisma.user.findMany({
