@@ -11,7 +11,7 @@ import { PrismaService } from '../../database/prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { RedisService } from '../../database/redis/redis.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { AppointmentType, AppointmentStatus, ApplicationStatus, Role, NotificationType, ApplicationNoteType } from '@prisma/client';
+import { AppointmentType, AppointmentStatus, ApplicationStatus, Role, NotificationType, ApplicationNoteType, DocumentCategory } from '@prisma/client';
 import { ScheduleAppointmentDto } from './dto/schedule-appointment.dto';
 import { GoogleMeetService } from '../google-meet/google-meet.service';
 import { renderInterviewConfirmationEmail } from './templates/interview-confirmation.template';
@@ -204,7 +204,7 @@ export class ApplicationsService {
     shelterId: string,
     applicationId: string,
     staffId: string,
-    items: { key: string; label: string; description: string }[],
+    items: { key: string; label: string; description: string; category: DocumentCategory }[], 
   ) {
     const application = await this.assertOwnsApplication(shelterId, applicationId);
 
