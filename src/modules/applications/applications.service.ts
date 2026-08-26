@@ -227,6 +227,7 @@ export class ApplicationsService {
             key: d.key,
             label: d.label,
             description: d.description,
+            category: d.category,
             status: 'PENDING_SUBMISSION',
             requestedById: staffId,
           },
@@ -570,7 +571,7 @@ export class ApplicationsService {
     status: any,
     rejectionReason?: string,
   ) {
-    await this.assertOwnsApplication(shelterId, applicationId);
+    const application = await this.assertOwnsApplication(shelterId, applicationId);
 
     const updated = await this.prisma.adoptionApplication.update({
       where: { id: applicationId },
@@ -579,6 +580,22 @@ export class ApplicationsService {
         ...(rejectionReason ? { reviewNote: rejectionReason } : {}),
       },
     });
+
+    // 🆕 Khi đơn được đánh dấu hoàn tất nhận nuôi -> chuyển quyền sở hữu pet
+    // sang applicant, để "Current Pet" trong Applicant Profile nhận diện đúng
+    if (status === 'ADOPTION_COMPLETED') {
+      await this.prisma.pet.update({
+        where: { id: application.petId },
+        data: {
+          ownerId: application.userId,
+          status: 'ADOPTED',
+          adoptedAt: new Date(),
+        },
+      });
+      // Xoá cache pet detail vì owner/status vừa đổi
+      await this.redisService.del(`pet:detail:${application.petId}`);
+    }
+
     await this.redisService.del(`pet:detail:${updated.petId}`);
     return updated;
   }

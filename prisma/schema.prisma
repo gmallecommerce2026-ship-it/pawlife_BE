@@ -511,6 +511,12 @@ enum RequiredDocumentStatus {
   ACCEPTED
   REJECTED
 }
+enum DocumentCategory {
+  SHELTER
+  VETERINARY
+  APPLICANT
+  STAFF
+}
 
 model ApplicationDocument {
   id            String   @id @default(cuid())
@@ -520,6 +526,7 @@ model ApplicationDocument {
   key           String
   label         String
   description   String   @db.Text
+  category      DocumentCategory @default(STAFF)
 
   status        RequiredDocumentStatus @default(PENDING_SUBMISSION)
 
