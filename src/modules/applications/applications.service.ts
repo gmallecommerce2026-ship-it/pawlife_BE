@@ -527,7 +527,40 @@ export class ApplicationsService {
       },
     });
   }
+  async updateNote(
+    shelterId: string,
+    applicationId: string,
+    noteId: string,
+    content: string,
+    type: ApplicationNoteType,
+  ) {
+    await this.assertOwnsApplication(shelterId, applicationId);
 
+    const note = await this.prisma.applicationNote.findFirst({
+      where: { id: noteId, applicationId },
+    });
+    if (!note) throw new NotFoundException('Không tìm thấy ghi chú.');
+
+    return this.prisma.applicationNote.update({
+      where: { id: noteId },
+      data: { content, type },
+      include: {
+        author: { select: { id: true, name: true, avatarUrl: true } },
+      },
+    });
+  }
+
+  async deleteNote(shelterId: string, applicationId: string, noteId: string) {
+    await this.assertOwnsApplication(shelterId, applicationId);
+
+    const note = await this.prisma.applicationNote.findFirst({
+      where: { id: noteId, applicationId },
+    });
+    if (!note) throw new NotFoundException('Không tìm thấy ghi chú.');
+
+    await this.prisma.applicationNote.delete({ where: { id: noteId } });
+    return { success: true };
+  }
   async addTagToApplication(shelterId: string, applicationId: string, tagId?: string, name?: string) {
     await this.assertOwnsApplication(shelterId, applicationId);
 

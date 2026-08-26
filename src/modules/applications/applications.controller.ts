@@ -218,7 +218,43 @@ export class ApplicationsController {
     );
     return { success: true, data };
   }
+  @Patch(':id/notes/:noteId')
+  @UseGuards(RolesGuard, ShelterGuard)
+  @Roles(Role.SHELTER)
+  async updateNote(
+    @User('shelterId') shelterId: string,
+    @Param('id') applicationId: string,
+    @Param('noteId') noteId: string,
+    @Body('content') content: string,
+    @Body('type') type: ApplicationNoteType,
+  ) {
+    if (!content) {
+      throw new BadRequestException('Note content is required.');
+    }
+    if (!type) {
+      throw new BadRequestException('Note type is required.');
+    }
+    const data = await this.applicationsService.updateNote(
+      shelterId,
+      applicationId,
+      noteId,
+      content,
+      type,
+    );
+    return { success: true, data };
+  }
 
+  @Delete(':id/notes/:noteId')
+  @UseGuards(RolesGuard, ShelterGuard)
+  @Roles(Role.SHELTER)
+  async deleteNote(
+    @User('shelterId') shelterId: string,
+    @Param('id') applicationId: string,
+    @Param('noteId') noteId: string,
+  ) {
+    await this.applicationsService.deleteNote(shelterId, applicationId, noteId);
+    return { success: true, message: 'Note removed successfully' };
+  }
   @Post(':id/tags')
   @UseGuards(RolesGuard, ShelterGuard)
   @Roles(Role.SHELTER)
