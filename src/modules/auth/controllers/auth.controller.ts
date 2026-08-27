@@ -76,17 +76,10 @@ export class AuthController {
     const realIp = forwardedIp ? forwardedIp.split(',')[0] : ip;
     const result = await this.authService.login(loginDto, userAgent, realIp, deviceNameHeader, deviceOsHeader, deviceIdHeader);
 
-    // SỬ DỤNG TYPE GUARD: Kiểm tra xem accessToken có nằm trong object result không
-    if ('accessToken' in result) {
-      if (clientType === 'web') {
-        this.setWebCookie(res, result.accessToken, loginDto.rememberMe);
-
-        // TypeScript lúc này đã biết chắc chắn result có accessToken
-        const { accessToken, ...responseData } = result;
-        return responseData;
-      }
+    if ('accessToken' in result && clientType === 'web') {
+      this.setWebCookie(res, result.accessToken, loginDto.rememberMe);
     }
-
+    // Giữ nguyên accessToken trong body trả về
     return result;
   }
 
@@ -150,19 +143,11 @@ export class AuthController {
     const realIp = forwardedIp ? forwardedIp.split(',')[0] : ip;
     const result = await this.authService.socialLogin(socialLoginDto, userAgent, realIp, deviceNameHeader, deviceOsHeader);
 
-    // SỬ DỤNG TYPE GUARD tương tự cho Social Login
-    if ('accessToken' in result) {
-      if (clientType === 'web') {
-        this.setWebCookie(res, result.accessToken, true);
-
-        const { accessToken, ...responseData } = result;
-        return responseData;
-      }
+    if ('accessToken' in result && clientType === 'web') {
+      this.setWebCookie(res, result.accessToken, true);
     }
-
     return result;
   }
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('register-shelter-direct')
   @HttpCode(HttpStatus.OK)
@@ -176,12 +161,10 @@ export class AuthController {
     const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
     const result = await this.authService.registerShelterDirect(dto, userAgent, ip);
 
-    if (clientType === 'web') {
+    if (clientType === 'web' && 'accessToken' in result) {
       this.setWebCookie(res, result.accessToken);
-      const { accessToken, ...responseData } = result;
-      return responseData;
     }
-
+    // Luôn trả về đầy đủ result (chứa accessToken) trong JSON body
     return result;
   }
 
