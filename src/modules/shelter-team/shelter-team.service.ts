@@ -149,6 +149,10 @@ export class ShelterTeamService {
     async updateMemberRole(shelterId: string, requesterId: string, memberId: string, role: ShelterStaffRole) {
         await this.assertShelterAdmin(requesterId, shelterId);
 
+        if (requesterId === memberId) {
+            throw new ForbiddenException('Bạn không thể tự thay đổi vai trò của chính mình.');
+        }
+
         const member = await this.prisma.user.findFirst({ where: { id: memberId, shelterId } });
         if (!member) throw new NotFoundException('Không tìm thấy thành viên.');
 
