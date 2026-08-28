@@ -30,6 +30,33 @@ export class ShelterTeamService {
         }
         return requester;
     }
+
+    private formatNameFromEmail(email: string): string {
+        const localPart = email.split('@')[0] || '';
+        const cleaned = localPart.replace(/[._-]+/g, ' ').trim();
+        if (!cleaned) return 'Người dùng';
+        return cleaned
+            .split(' ')
+            .filter(Boolean)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ');
+    }
+
+    private async resolveAvatarUrl(email: string, name: string): Promise<string> {
+        const hash = createHash('md5').update(email.trim().toLowerCase()).digest('hex');
+        const gravatarCheckUrl = `https://www.gravatar.com/avatar/${hash}?d=404&s=256`;
+
+        try {
+            // Gravatar trả về 404 nếu email chưa từng đăng ký ảnh đại diện
+            await axios.head(gravatarCheckUrl, { timeout: 3000 });
+            return `https://www.gravatar.com/avatar/${hash}?s=256`;
+        } catch {
+            // Không có Gravatar -> tạo avatar bằng chữ cái đầu của tên
+            const encodedName = encodeURIComponent(name);
+            return `https://ui-avatars.com/api/?name=${encodedName}&background=E89B5A&color=fff&size=256&bold=true`;
+        }
+    }
+
     async getMe(userId: string) {
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
@@ -222,7 +249,7 @@ export class ShelterTeamService {
         };
     }
 
-    async acceptInvitation(token: string, dto: { password: string; name?: string }) {
+    async acceptInvitation(token: string, dto: { password: string }) {
         const invitation = await this.prisma.shelterInvitation.findUnique({ where: { token } });
         if (!invitation) throw new NotFoundException('Lời mời không tồn tại.');
         if (invitation.status !== 'PENDING') {
@@ -233,7 +260,13 @@ export class ShelterTeamService {
         }
 
         const existingUser = await this.prisma.user.findUnique({ where: { email: invitation.email } });
-        const fallbackName = invitation.email.split('@')[0];
+
+        const fallbackName = this.formatNameFromEmail(invitation.email);
+        // Chỉ gọi Gravatar khi thật sự cần (tài khoản mới hoặc user cũ thiếu ảnh)
+        const needsAvatar = !existingUser || !existingUser.avatarUrl;
+        const fallbackAvatarUrl = needsAvatar
+            ? await this.resolveAvatarUrl(invitation.email, existingUser?.name || fallbackName)
+            : undefined;
 
         await this.prisma.$transaction(async (tx) => {
             if (existingUser) {
@@ -243,10 +276,9 @@ export class ShelterTeamService {
                         shelterId: invitation.shelterId,
                         shelterRole: invitation.role,
                         role: 'SHELTER',
-                        // Chỉ set password nếu tài khoản chưa có password (đăng nhập bằng social trước đó)
                         ...(existingUser.password ? {} : { password: await bcrypt.hash(dto.password, 10) }),
-                        // Giữ nguyên tên hiện tại, không ghi đè bằng input nữa
                         name: existingUser.name || fallbackName,
+                        avatarUrl: existingUser.avatarUrl || fallbackAvatarUrl,
                     },
                 });
             } else {
@@ -254,6 +286,7 @@ export class ShelterTeamService {
                     data: {
                         email: invitation.email,
                         name: fallbackName,
+                        avatarUrl: fallbackAvatarUrl,
                         password: await bcrypt.hash(dto.password, 10),
                         role: 'SHELTER',
                         shelterId: invitation.shelterId,
