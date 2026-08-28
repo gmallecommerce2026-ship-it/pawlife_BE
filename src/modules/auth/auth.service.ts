@@ -18,6 +18,7 @@ import * as qrcode from 'qrcode';
 import { RedisService } from 'src/database/redis/redis.service';
 import { InjectQueue } from '@nestjs/bullmq'; // <-- ADDED
 import { Queue } from 'bullmq'; // <-- ADDED
+import { formatNameFromEmail, buildFallbackAvatarUrl } from 'src/common/utils/avatar.util';
 import * as https from 'https';
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -230,8 +231,12 @@ export class AuthService {
     if (!otpRecord) throw new BadRequestException('Please request a new OTP before registering, as the previous one has expired.');
     if (otpRecord.otp !== otp) throw new BadRequestException('The OTP is incorrect');
     const hashedPassword = await bcrypt.hash(password, 10);
+
+    const finalName = name?.trim() || formatNameFromEmail(email);
+    const finalAvatarUrl = avatarUrl || buildFallbackAvatarUrl(finalName);
+
     const newUser = await this.prisma.$transaction(async (tx) => {
-      return await tx.user.create({ data: { email, password: hashedPassword, name, phone, gender, dob, avatarUrl, }, });
+      return await tx.user.create({ data: { email, password: hashedPassword, name: finalName, phone, gender, dob, avatarUrl: finalAvatarUrl, }, });
     });
     await this.redisService.del(redisKey);
     await this.notificationsService.createAndSendNotification({ userId: newUser.id, title: '🎉 Welcome to PawLife', body: 'Your account has been securely set up. Let the pet journey begin!', type: NotificationType.SECURITY, });
@@ -301,25 +306,23 @@ export class AuthService {
     if (existingUser) throw new ConflictException('Email này đã được sử dụng!');
 
     const hashedPassword = await bcrypt.hash(password, 10);
+    const finalName = name?.trim() || formatNameFromEmail(email);
+    const finalAvatarUrl = buildFallbackAvatarUrl(finalName);
 
     const newUser = await this.prisma.$transaction(async (tx) => {
       const shelter = await tx.shelter.create({
         data: { name, address, contactInfo: phone, latitude: lat, longitude: lng, isVerified: false },
       });
       return tx.user.create({
-        data: { email, password: hashedPassword, name, phone, role: 'SHELTER', shelterId: shelter.id, shelterRole: 'ADMIN' },
+        data: { email, password: hashedPassword, name: finalName, avatarUrl: finalAvatarUrl, phone, role: 'SHELTER', shelterId: shelter.id, shelterRole: 'ADMIN' },
       });
     });
 
-    // ===== FIX: đồng bộ Redis ngay sau khi tạo Shelter mới =====
     if (lat != null && lng != null && newUser.shelterId) {
       await this.redisService.addLocation('shelters:locations', lng, lat, newUser.shelterId);
     }
     const currentGlobalVersion = (await this.redisService.get<number>('shelters:cache_version:global')) || 0;
     await this.redisService.set('shelters:cache_version:global', currentGlobalVersion + 1, 0);
-    // =============================================================
-
-    // await this.notificationsService.createAndSendNotification({ ...}); // giữ nguyên
 
     return this.generateAuthResponse(newUser, userAgent, ip);
   }
@@ -461,11 +464,13 @@ export class AuthService {
 
     let user = await this.prisma.user.findUnique({ where: { email }, });
     if (!user) {
-      user = await this.prisma.user.create({ data: { email, name, avatarUrl: picture, gender: gender, dob: dob, }, });
+      const finalName = name?.trim() || formatNameFromEmail(email);
+      const finalAvatarUrl = picture || buildFallbackAvatarUrl(finalName);
+      user = await this.prisma.user.create({ data: { email, name: finalName, avatarUrl: finalAvatarUrl, gender: gender, dob: dob, }, });
     } else {
       const updateData: any = {};
-      if (!user.name || user.name === 'User') updateData.name = name;
-      if (!user.avatarUrl && picture) updateData.avatarUrl = picture;
+      if (!user.name || user.name === 'User') updateData.name = name?.trim() || formatNameFromEmail(email);
+      if (!user.avatarUrl) updateData.avatarUrl = picture || buildFallbackAvatarUrl(updateData.name || user.name);
       if (!user.gender && gender) updateData.gender = gender;
       if (!user.dob && dob) updateData.dob = dob;
       if (Object.keys(updateData).length > 0) { user = await this.prisma.user.update({ where: { email }, data: updateData }); }
@@ -484,10 +489,10 @@ export class AuthService {
   ) {
 
     let updatedData: any = {}; let needsUpdate = false;
-    if (!user.name || user.name.trim() === '' || user.name === 'User') { updatedData.name = user.email.split('@')[0]; user.name = updatedData.name; needsUpdate = true; }
+    if (!user.name || user.name.trim() === '' || user.name === 'User') { updatedData.name = formatNameFromEmail(user.email); user.name = updatedData.name; needsUpdate = true; }
     if (!user.gender) { updatedData.gender = 'UNKNOWN'; user.gender = updatedData.gender; needsUpdate = true; }
+    if (!user.avatarUrl) { updatedData.avatarUrl = buildFallbackAvatarUrl(user.name); user.avatarUrl = updatedData.avatarUrl; needsUpdate = true; }
     if (needsUpdate) { await this.prisma.user.update({ where: { id: user.id }, data: updatedData, }); }
-
     const parser = new UAParser(userAgent);
     const os = parser.getOS();
     const device = parser.getDevice();

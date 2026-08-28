@@ -10,6 +10,7 @@ import { randomBytes } from 'crypto';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { ShelterStaffRole } from '@prisma/client';
 import { renderInviteMemberEmail } from './templates/invite-member.template';
+import { formatNameFromEmail, buildFallbackAvatarUrl } from 'src/common/utils/avatar.util';
 
 const INVITE_EXPIRY_DAYS = 7;
 
@@ -261,12 +262,8 @@ export class ShelterTeamService {
 
         const existingUser = await this.prisma.user.findUnique({ where: { email: invitation.email } });
 
-        const fallbackName = this.formatNameFromEmail(invitation.email);
-        // Chỉ gọi Gravatar khi thật sự cần (tài khoản mới hoặc user cũ thiếu ảnh)
-        const needsAvatar = !existingUser || !existingUser.avatarUrl;
-        const fallbackAvatarUrl = needsAvatar
-            ? await this.resolveAvatarUrl(invitation.email, existingUser?.name || fallbackName)
-            : undefined;
+        const fallbackName = formatNameFromEmail(invitation.email);
+        const fallbackAvatarUrl = buildFallbackAvatarUrl(existingUser?.name || fallbackName);
 
         await this.prisma.$transaction(async (tx) => {
             if (existingUser) {
