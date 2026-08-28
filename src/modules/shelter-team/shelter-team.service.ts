@@ -32,31 +32,6 @@ export class ShelterTeamService {
         return requester;
     }
 
-    private formatNameFromEmail(email: string): string {
-        const localPart = email.split('@')[0] || '';
-        const cleaned = localPart.replace(/[._-]+/g, ' ').trim();
-        if (!cleaned) return 'Người dùng';
-        return cleaned
-            .split(' ')
-            .filter(Boolean)
-            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-            .join(' ');
-    }
-
-    private async resolveAvatarUrl(email: string, name: string): Promise<string> {
-        const hash = createHash('md5').update(email.trim().toLowerCase()).digest('hex');
-        const gravatarCheckUrl = `https://www.gravatar.com/avatar/${hash}?d=404&s=256`;
-
-        try {
-            // Gravatar trả về 404 nếu email chưa từng đăng ký ảnh đại diện
-            await axios.head(gravatarCheckUrl, { timeout: 3000 });
-            return `https://www.gravatar.com/avatar/${hash}?s=256`;
-        } catch {
-            // Không có Gravatar -> tạo avatar bằng chữ cái đầu của tên
-            const encodedName = encodeURIComponent(name);
-            return `https://ui-avatars.com/api/?name=${encodedName}&background=E89B5A&color=fff&size=256&bold=true`;
-        }
-    }
 
     async getMe(userId: string) {
         const user = await this.prisma.user.findUnique({
