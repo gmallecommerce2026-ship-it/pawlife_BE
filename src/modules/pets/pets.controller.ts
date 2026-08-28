@@ -199,6 +199,11 @@ export class PetsController {
   ) {
     return this.petsService.reportPet(id, userId, reportData);
   }
+    @Get('shelter/dashboard')
+  @UseGuards(JwtAuthGuard)
+  async getShelterDashboardStats(@User('id') userId: string) {
+    return this.petsService.getShelterDashboardStats(userId);
+  }
   @Get(':id')
   async getPetById(
     @User('id') userId: string,

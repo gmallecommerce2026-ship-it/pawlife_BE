@@ -2050,4 +2050,93 @@ export class PetsService {
       throw new InternalServerErrorException({ message: 'Error updating pet information', i18n: { key: 'error.update_pet_failed' } });
     }
   }
+
+    // ============================================================
+  // DASHBOARD STATS CHO TRẠM (Shelter Overview)
+  // ============================================================
+  private classifySpecies(species: unknown): 'dog' | 'cat' | 'other' {
+    if (!species || typeof species !== 'object') return 'other';
+    const en = String((species as any).en ?? '').toUpperCase();
+    const vi = String((species as any).vi ?? '').toLowerCase();
+    if (en.includes('DOG') || vi.includes('chó')) return 'dog';
+    if (en.includes('CAT') || vi.includes('mèo')) return 'cat';
+    return 'other';
+  }
+
+  async getShelterDashboardStats(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { shelterId: true },
+    });
+
+    if (!user?.shelterId) {
+      return {
+        stats: { availablePets: 0, pendingApplications: 0, adoptedCount: 0, qrIssued: 0 },
+        adoptionTrend: [],
+        petTypeDistribution: [],
+      };
+    }
+
+    const shelterId = user.shelterId;
+
+    const [availablePets, pendingApplications, adoptedCount, qrIssued, allShelterPets] =
+      await Promise.all([
+        this.prisma.pet.count({ where: { shelterId, status: 'AVAILABLE' } }),
+        this.prisma.adoptionApplication.count({
+          where: {
+            pet: { shelterId },
+            status: { in: ['SUBMITTED', 'PENDING', 'NEED_MORE_INFO', 'INTERVIEW_SCHEDULED'] },
+          },
+        }),
+        this.prisma.pet.count({ where: { shelterId, status: 'ADOPTED' } }),
+        this.prisma.tag.count({ where: { pet: { shelterId }, linkedAt: { not: null } } }),
+        this.prisma.pet.findMany({ where: { shelterId }, select: { species: true } }),
+      ]);
+
+    // --- Phân loại pet hiện có tại trạm ---
+    let dogCount = 0, catCount = 0, otherCount = 0;
+    for (const pet of allShelterPets) {
+      const type = this.classifySpecies(pet.species);
+      if (type === 'dog') dogCount++;
+      else if (type === 'cat') catCount++;
+      else otherCount++;
+    }
+
+    const petTypeDistribution = [
+      { name: 'Chó', value: dogCount, color: '#3DB2FF' },
+      { name: 'Mèo', value: catCount, color: '#FF6B93' },
+      { name: 'Khác', value: otherCount, color: '#E89B5A' },
+    ].filter((item) => item.value > 0);
+
+    // --- Xu hướng nhận nuôi 6 tháng gần nhất ---
+    const now = new Date();
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+
+    const adoptedPets = await this.prisma.pet.findMany({
+      where: { shelterId, status: 'ADOPTED', adoptedAt: { gte: sixMonthsAgo } },
+      select: { species: true, adoptedAt: true },
+    });
+
+    const monthBuckets: { key: string; month: string; dogs: number; cats: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      monthBuckets.push({ key: `${d.getFullYear()}-${d.getMonth()}`, month: `T${d.getMonth() + 1}`, dogs: 0, cats: 0 });
+    }
+
+    for (const pet of adoptedPets) {
+      if (!pet.adoptedAt) continue;
+      const d = new Date(pet.adoptedAt);
+      const bucket = monthBuckets.find((b) => b.key === `${d.getFullYear()}-${d.getMonth()}`);
+      if (!bucket) continue;
+      const type = this.classifySpecies(pet.species);
+      if (type === 'dog') bucket.dogs++;
+      else if (type === 'cat') bucket.cats++;
+    }
+
+    return {
+      stats: { availablePets, pendingApplications, adoptedCount, qrIssued },
+      adoptionTrend: monthBuckets.map(({ month, dogs, cats }) => ({ month, dogs, cats })),
+      petTypeDistribution,
+    };
+  }
 }
