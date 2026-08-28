@@ -2,6 +2,7 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsEmail,
   IsIn,
   IsInt,
@@ -73,4 +74,8 @@ export class ScheduleAppointmentDto {
   @IsOptional()
   @IsString()
   reviewNote?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  completed?: boolean;
 }

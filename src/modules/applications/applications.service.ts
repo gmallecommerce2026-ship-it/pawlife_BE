@@ -865,7 +865,7 @@ export class ApplicationsService {
             startTime: toHHmm(scheduledAt),
             endTime: toHHmm(endsAt),
             type: dto.format === 'Online' ? AppointmentType.ONLINE : AppointmentType.IN_PERSON,
-            status: AppointmentStatus.PENDING,
+            status: dto.completed ? AppointmentStatus.COMPLETED : AppointmentStatus.PENDING,
             location: dto.format === 'Offline' ? dto.location : null,
             meetLink,
             googleEventId,
@@ -879,7 +879,7 @@ export class ApplicationsService {
             startTime: toHHmm(scheduledAt),
             endTime: toHHmm(endsAt),
             type: dto.format === 'Online' ? AppointmentType.ONLINE : AppointmentType.IN_PERSON,
-            status: AppointmentStatus.PENDING, // đổi lịch -> chờ xác nhận lại
+            status: dto.completed ? AppointmentStatus.COMPLETED : AppointmentStatus.PENDING, // đổi lịch -> chờ xác nhận lại
             location: dto.format === 'Offline' ? dto.location : null,
             meetLink,
             googleEventId,
