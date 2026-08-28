@@ -222,7 +222,7 @@ export class ShelterTeamService {
         };
     }
 
-    async acceptInvitation(token: string, dto: { name: string; password: string }) {
+    async acceptInvitation(token: string, dto: { password: string; name?: string }) {
         const invitation = await this.prisma.shelterInvitation.findUnique({ where: { token } });
         if (!invitation) throw new NotFoundException('Lời mời không tồn tại.');
         if (invitation.status !== 'PENDING') {
@@ -233,6 +233,7 @@ export class ShelterTeamService {
         }
 
         const existingUser = await this.prisma.user.findUnique({ where: { email: invitation.email } });
+        const fallbackName = invitation.email.split('@')[0];
 
         await this.prisma.$transaction(async (tx) => {
             if (existingUser) {
@@ -242,15 +243,17 @@ export class ShelterTeamService {
                         shelterId: invitation.shelterId,
                         shelterRole: invitation.role,
                         role: 'SHELTER',
+                        // Chỉ set password nếu tài khoản chưa có password (đăng nhập bằng social trước đó)
                         ...(existingUser.password ? {} : { password: await bcrypt.hash(dto.password, 10) }),
-                        name: existingUser.name || dto.name,
+                        // Giữ nguyên tên hiện tại, không ghi đè bằng input nữa
+                        name: existingUser.name || fallbackName,
                     },
                 });
             } else {
                 await tx.user.create({
                     data: {
                         email: invitation.email,
-                        name: dto.name,
+                        name: fallbackName,
                         password: await bcrypt.hash(dto.password, 10),
                         role: 'SHELTER',
                         shelterId: invitation.shelterId,
