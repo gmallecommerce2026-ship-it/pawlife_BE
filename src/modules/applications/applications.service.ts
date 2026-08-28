@@ -494,6 +494,7 @@ export class ApplicationsService {
         pet: {
           select: {
             id: true, name: true, breed: true, gender: true, dob: true,
+            status: true,
             images: { select: { url: true }, take: 1 },
             shelter: { select: { address: true } },
           },

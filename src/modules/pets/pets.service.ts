@@ -1862,6 +1862,7 @@ export class PetsService {
     }
 
     const now = new Date();
+    const previousStatus = pet.status;
 
     if (updateData.name && updateData.name !== pet.name) {
       const isAdopted = pet.status === 'ADOPTED';
@@ -1911,6 +1912,18 @@ export class PetsService {
     const normalizedTraits = (traits !== undefined || personalityTags !== undefined)
       ? normalizeTraitsList(traits ?? personalityTags)
       : undefined;
+
+    const isMarkingAdopted = petInfo.status === 'ADOPTED' && previousStatus !== 'ADOPTED';
+    let matchedApplication: { id: string; userId: string } | null = null;
+    if (isMarkingAdopted) {
+      matchedApplication = await this.prisma.adoptionApplication.findFirst({
+        where: { petId, status: 'APPROVED' }, // đơn đang chờ bàn giao
+        orderBy: { updatedAt: 'desc' },
+        select: { id: true, userId: true },
+      });
+    }
+
+
     try {
       // ── Xử lý medicalRecords KHÔNG xoá hết — giữ nguyên verificationStatus của record cũ ──
       if (medicalRecords) {
@@ -1984,6 +1997,10 @@ export class PetsService {
           ...(petInfo.vaccinationStatus !== undefined && {
             isVaccinated: petInfo.vaccinationStatus === 'VACCINATED',
           }),
+          ...(isMarkingAdopted && matchedApplication && {
+            ownerId: matchedApplication.userId,
+            adoptedAt: now,
+          }),
           ...(normalizedTraits !== undefined && {
             traits: normalizedTraits,
             traitsList: {
@@ -2003,6 +2020,13 @@ export class PetsService {
         },
         include: { images: true, medicalRecords: true },
       });
+
+      if (isMarkingAdopted && matchedApplication) {
+        await this.prisma.adoptionApplication.update({
+          where: { id: matchedApplication.id },
+          data: { status: 'ADOPTION_COMPLETED' },
+        });
+      }
 
       await this.redisService.del(`pet:detail:${petId}`);
 
