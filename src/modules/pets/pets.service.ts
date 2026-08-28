@@ -1111,7 +1111,12 @@ export class PetsService {
       ];
     }
     if (type) {
-      whereCondition.species = { path: ['en'], equals: type.toUpperCase() } as any;
+      // 🔧 FIX: DB lưu species.en dạng "Dog"/"Cat" (chỉ viết hoa chữ đầu — do app mobile
+      // tạo pet gửi lên format này). Trước đây dùng type.toUpperCase() ra "DOG" -> không
+      // bao giờ khớp -> filter loài luôn trả về rỗng. Đồng bộ cách chuẩn hoá với
+      // ShelterDashboardService.getMyPets() để nhất quán trong toàn hệ thống.
+      const normalizedType = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+      whereCondition.species = { path: ['en'], equals: normalizedType } as any;
     }
 
     const [pets, total] = await Promise.all([
@@ -2051,7 +2056,7 @@ export class PetsService {
     }
   }
 
-    // ============================================================
+  // ============================================================
   // DASHBOARD STATS CHO TRẠM (Shelter Overview)
   // ============================================================
   private classifySpecies(species: unknown): 'dog' | 'cat' | 'other' {
