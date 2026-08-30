@@ -36,7 +36,7 @@ export class ApplicationsService {
     private readonly notificationsService: NotificationsService,
     private readonly mailerService: MailerService,
     private readonly gateway: NotificationsGateway, // 👈 Thêm NotificationsGateway
-  ) {}
+  ) { }
 
   // FIX BẢO MẬT: helper dùng chung để xác nhận đơn thuộc đúng shelter đang
   // gọi API — bắt buộc gọi trước mọi thao tác ghi (notes/tags/status/appointments)
@@ -65,12 +65,15 @@ export class ApplicationsService {
   ) {
     try {
       if (this.gateway?.server) {
-        if (typeof this.gateway.notifyUserSmartly === 'function') {
-          await this.gateway.notifyUserSmartly(userId, eventName, payload);
-        } else {
-          this.gateway.server.to(`user_${userId}`).emit(eventName, payload);
-        }
+        // Gửi tới Adopter trên App
+        this.gateway.server.to(`user_${userId}`).emit(eventName, payload);
+        this.gateway.server.to(`user_${userId}`).emit('application_updated', payload);
+
+        // Gửi tới Shelter trên Web
         this.gateway.server.to(`shelter_${shelterId}`).emit(eventName, payload);
+        this.gateway.server.to(`shelter_${shelterId}`).emit('application_updated', payload);
+
+        this.logger.log(`📡 [Socket Emit] Event: ${eventName} -> user_${userId} & shelter_${shelterId}`);
       }
     } catch (err) {
       this.logger.warn(`Emit socket event ${eventName} thất bại:`, err);
@@ -150,7 +153,7 @@ export class ApplicationsService {
             authorId: userId,
             content: `Câu hỏi từ người nhận nuôi: ${data.otherQuestion.trim()}`,
           },
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       await this.redisService.del(`pet:detail:${data.petId}`);
@@ -171,7 +174,7 @@ export class ApplicationsService {
           authorId: userId,
           content: `Câu hỏi từ người nhận nuôi: ${data.otherQuestion.trim()}`,
         },
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     await this.redisService.del(`pet:detail:${data.petId}`);
@@ -336,7 +339,7 @@ export class ApplicationsService {
   ) {
     const application = await this.prisma.adoptionApplication.findFirst({
       where: { id: applicationId, userId },
-      include: { pet: true },
+      include: { pet: true }, // 👈 BẮT BUỘC CÓ DÒNG NÀY ĐỂ LẤY shelterId
     });
     if (!application) throw new NotFoundException('Không tìm thấy đơn.');
 
@@ -356,13 +359,14 @@ export class ApplicationsService {
         fileName: dto.fileName,
         fileSizeLabel: dto.fileSizeLabel,
         submittedAt: new Date(),
-        rejectionReason: null, // nộp lại sau khi bị reject -> xoá lý do cũ
+        rejectionReason: null,
       },
     });
 
-    // 📡 Realtime sync
-    if (application.pet?.shelterId) {
-      await this.broadcastDocumentEvent(application.pet.shelterId, userId, 'document_submitted', {
+    // 📡 Bắn realtime cho Web của Trạm nhận ngay lập tức
+    const shelterId = application.pet?.shelterId;
+    if (shelterId) {
+      await this.broadcastDocumentEvent(shelterId, userId, 'document_submitted', {
         applicationId,
         docId,
         document: updated,
@@ -919,19 +923,19 @@ export class ApplicationsService {
       try {
         const result = googleEventId
           ? await this.googleMeetService.updateMeetEvent(googleEventId, {
-              title: dto.title,
-              description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
-              startAt: scheduledAt,
-              endAt: endsAt,
-              attendeeEmails,
-            })
+            title: dto.title,
+            description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
+            startAt: scheduledAt,
+            endAt: endsAt,
+            attendeeEmails,
+          })
           : await this.googleMeetService.createMeetEvent({
-              title: dto.title,
-              description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
-              startAt: scheduledAt,
-              endAt: endsAt,
-              attendeeEmails,
-            });
+            title: dto.title,
+            description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
+            startAt: scheduledAt,
+            endAt: endsAt,
+            attendeeEmails,
+          });
         meetLink = result.meetLink;
         googleEventId = result.eventId;
       } catch (err) {
@@ -942,7 +946,7 @@ export class ApplicationsService {
         meetLink = existing?.meetLink || null;
       }
     } else if (googleEventId) {
-      await this.googleMeetService.cancelMeetEvent(googleEventId).catch(() => {});
+      await this.googleMeetService.cancelMeetEvent(googleEventId).catch(() => { });
       googleEventId = null;
     }
 
