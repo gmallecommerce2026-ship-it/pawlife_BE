@@ -36,13 +36,11 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
 
       const token = authHeader.replace('Bearer ', '');
       const payload = this.jwtService.verify(token);
-
       const userId = payload.id || payload.sub || payload.userId;
 
-      // 🆕 Lưu thêm role + shelterId vào data của socket để dùng khi xử lý join_shelter
       client.data.userId = userId;
       client.data.role = payload.role;
-      client.data.shelterId = payload.shelterId;
+      client.data.shelterId = payload.shelterId;   // 🆕 lưu lại để đối chiếu lúc join_shelter
 
       client.join(`user_${userId}`);
       await this.redisService.addSocket(userId, client.id);
@@ -53,24 +51,18 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
     }
   }
 
-  // 🆕 HANDLER CÒN THIẾU — bắt đúng event mà web đã emit sẵn
+  // 🆕 Bắt đúng event web/app đã emit sẵn
   @SubscribeMessage('join_shelter')
   handleJoinShelter(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { shelterId: string },
   ) {
-    const userShelterId = client.data.shelterId;
-    const role = client.data.role;
-
-    // Bắt buộc kiểm tra: chỉ cho join đúng room của chính shelter mình,
-    // tránh trường hợp 1 tài khoản shelter tự emit shelterId khác để nghe lén dữ liệu trạm khác.
-    if (role === Role.SHELTER && userShelterId && userShelterId === payload?.shelterId) {
-      client.join(`shelter_${userShelterId}`);
-      this.logger.log(`[JOIN] socket=${client.id} joined shelter_${userShelterId}`);
+    const tokenShelterId = client.data.shelterId;
+    if (tokenShelterId && tokenShelterId === payload?.shelterId) {
+      client.join(`shelter_${tokenShelterId}`);
+      this.logger.log(`[JOIN] socket=${client.id} joined shelter_${tokenShelterId}`);
     } else {
-      this.logger.warn(
-        `[JOIN DENIED] socket=${client.id} role="${role}" tried joining shelter_${payload?.shelterId}`,
-      );
+      this.logger.warn(`[JOIN DENIED] socket=${client.id} requested shelter_${payload?.shelterId}`);
     }
   }
 

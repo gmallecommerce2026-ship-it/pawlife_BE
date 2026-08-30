@@ -726,6 +726,16 @@ export class ApplicationsService {
     }
 
     await this.redisService.del(`pet:detail:${updated.petId}`);
+
+    // 🆕 FIX: trước đây hàm này im lặng hoàn toàn về socket — app/web khác
+    // không bao giờ nhận được cập nhật khi status đổi (approve, pending, closed...)
+    await this.broadcastDocumentEvent(shelterId, application.userId, 'application_updated', {
+      applicationId,
+      petId: updated.petId,
+      status: updated.status,
+      reviewNote: updated.reviewNote,
+    });
+
     return updated;
   }
 
@@ -1001,6 +1011,13 @@ export class ApplicationsService {
           `Đơn ${applicationId} có pet không gắn shelter — bỏ qua gửi email xác nhận.`,
         );
         await this.redisService.del(`pet:detail:${app.petId}`);
+        await this.broadcastDocumentEvent(shelterId, app.userId, 'appointment_updated', {
+          applicationId,
+          petId: app.petId,
+          appointment,
+          status: 'INTERVIEW_SCHEDULED',
+        });
+
         return appointment;
       }
 
@@ -1037,6 +1054,13 @@ export class ApplicationsService {
       }
 
       await this.redisService.del(`pet:detail:${app.petId}`);
+      await this.broadcastDocumentEvent(shelterId, app.userId, 'appointment_updated', {
+        applicationId,
+        petId: app.petId,
+        appointment,
+        status: 'INTERVIEW_SCHEDULED',
+      });
+
       return appointment;
     } catch (err: any) {
       if (err.code === 'P2002' && err.meta?.target?.includes?.('uniq_shelter_slot')) {
