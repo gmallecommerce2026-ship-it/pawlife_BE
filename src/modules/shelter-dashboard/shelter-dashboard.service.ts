@@ -5,6 +5,7 @@ import { RedisService } from 'src/database/redis/redis.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType, ApplicationStatus, Prisma, ApplicationStatus as PrismaApplicationStatus } from '@prisma/client';
 import { UpdateShelterProfileDto } from './dto/update-shelter-profile.dto';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 function toBilingual(v: any): { vi: string; en: string } {
     if (!v) return { vi: '', en: '' };
@@ -18,7 +19,25 @@ export class ShelterDashboardService {
         private readonly prisma: PrismaService,
         private readonly redisService: RedisService,
         private readonly notificationsService: NotificationsService,
+        private readonly gateway: NotificationsGateway,
     ) { }
+    private async broadcastDocumentEvent(
+        shelterId: string,
+        userId: string,
+        eventName: string,
+        payload: any,
+    ) {
+        try {
+            if (this.gateway?.server) {
+                this.gateway.server.to(`user_${userId}`).emit(eventName, payload);
+                this.gateway.server.to(`user_${userId}`).emit('application_updated', payload);
+                this.gateway.server.to(`shelter_${shelterId}`).emit(eventName, payload);
+                this.gateway.server.to(`shelter_${shelterId}`).emit('application_updated', payload);
+            }
+        } catch (err) {
+            // im lặng nếu socket lỗi, không chặn luồng chính
+        }
+    }
 
     // ---------------- PROFILE ----------------
     async getMyProfile(shelterId: string) {
@@ -157,7 +176,6 @@ export class ShelterDashboardService {
             data: { status, reviewNote: reviewNote ?? application.reviewNote },
         });
 
-        // Nếu approved -> đồng bộ Pet.status = PENDING (đang chờ bàn giao)
         if (status === ApplicationStatus.APPROVED) {
             await this.prisma.pet.update({ where: { id: application.petId }, data: { status: 'PENDING' } });
         }
@@ -168,7 +186,6 @@ export class ShelterDashboardService {
             });
         }
         if (status === ApplicationStatus.CLOSED) {
-            // trả pet về AVAILABLE nếu trước đó bị giữ PENDING vì đơn này
             await this.prisma.pet.updateMany({
                 where: { id: application.petId, status: 'PENDING' },
                 data: { status: 'AVAILABLE' },
@@ -184,10 +201,26 @@ export class ShelterDashboardService {
                     : `Đơn nhận nuôi cho ${application.pet.name} đã chuyển sang trạng thái mới.`,
             type: NotificationType.SYSTEM,
             referenceId: application.petId,
-            metadata: { applicationId, status },
+            metadata: {
+                applicationId,          // 👈 dùng để FE điều hướng đúng đơn
+                status,
+                uiAction: 'navigate_application_status', // 🚀 THÊM DÒNG NÀY
+            },
         });
 
         await this.redisService.del(`pet:detail:${application.petId}`);
+
+        // 🆕 FIX: đây là chỗ đang thiếu — app dùng luồng này để đổi trạng thái
+        // (approve/pending/interview_scheduled/need_more_info/closed) qua Kanban board,
+        // nhưng chưa từng bắn socket nên app không tự cập nhật timeline.
+        await this.broadcastDocumentEvent(shelterId, application.userId, 'application_updated', {
+            applicationId,
+            petId: application.petId,
+            status: updated.status,
+            reviewNote: updated.reviewNote,
+        });
+
         return updated;
     }
+
 }
