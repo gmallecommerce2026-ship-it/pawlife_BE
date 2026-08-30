@@ -4,11 +4,15 @@ import {
   WebSocketServer,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  SubscribeMessage,
+  ConnectedSocket,
+  MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { Logger } from '@nestjs/common';
 import { RedisService } from '../../database/redis/redis.service'; // IMPORT REDIS
+import { Role } from '@prisma/client';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -28,26 +32,48 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   async handleConnection(client: Socket) {
     try {
       const authHeader = client.handshake.auth.token || client.handshake.headers['authorization'];
-      if (!authHeader) {
-        throw new Error('No token provided');
-      }
+      if (!authHeader) throw new Error('No token provided');
 
       const token = authHeader.replace('Bearer ', '');
       const payload = this.jwtService.verify(token);
 
-      // Lấy userId từ token (bổ sung thêm payload.userId đề phòng cấu trúc auth đổi)
       const userId = payload.id || payload.sub || payload.userId;
 
-      // 1. LƯU LẠI userId VÀO DATA CỦA SOCKET (để dùng lúc disconnect)
+      // 🆕 Lưu thêm role + shelterId vào data của socket để dùng khi xử lý join_shelter
       client.data.userId = userId;
+      client.data.role = payload.role;
+      client.data.shelterId = payload.shelterId;
+
       client.join(`user_${userId}`);
       await this.redisService.addSocket(userId, client.id);
-      this.logger.log(`[${new Date().toISOString()}] [CONNECT] socket=${client.id} userId="${userId}"`);
+      this.logger.log(`[CONNECT] socket=${client.id} userId="${userId}"`);
     } catch (error: any) {
       this.logger.error(`Connection failed: ${error.message}`);
       client.disconnect();
     }
   }
+
+  // 🆕 HANDLER CÒN THIẾU — bắt đúng event mà web đã emit sẵn
+  @SubscribeMessage('join_shelter')
+  handleJoinShelter(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { shelterId: string },
+  ) {
+    const userShelterId = client.data.shelterId;
+    const role = client.data.role;
+
+    // Bắt buộc kiểm tra: chỉ cho join đúng room của chính shelter mình,
+    // tránh trường hợp 1 tài khoản shelter tự emit shelterId khác để nghe lén dữ liệu trạm khác.
+    if (role === Role.SHELTER && userShelterId && userShelterId === payload?.shelterId) {
+      client.join(`shelter_${userShelterId}`);
+      this.logger.log(`[JOIN] socket=${client.id} joined shelter_${userShelterId}`);
+    } else {
+      this.logger.warn(
+        `[JOIN DENIED] socket=${client.id} role="${role}" tried joining shelter_${payload?.shelterId}`,
+      );
+    }
+  }
+
   broadcastTransferEvent(eventName: string, targetUserIds: string[], payload: any) {
     targetUserIds.forEach(uid => this.notifyUserSmartly(uid, eventName, payload));
   }
