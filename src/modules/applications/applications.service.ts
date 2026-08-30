@@ -11,7 +11,16 @@ import { PrismaService } from '../../database/prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { RedisService } from '../../database/redis/redis.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { AppointmentType, AppointmentStatus, ApplicationStatus, Role, NotificationType, ApplicationNoteType, DocumentCategory } from '@prisma/client';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
+import {
+  AppointmentType,
+  AppointmentStatus,
+  ApplicationStatus,
+  Role,
+  NotificationType,
+  ApplicationNoteType,
+  DocumentCategory,
+} from '@prisma/client';
 import { ScheduleAppointmentDto } from './dto/schedule-appointment.dto';
 import { GoogleMeetService } from '../google-meet/google-meet.service';
 import { renderInterviewConfirmationEmail } from './templates/interview-confirmation.template';
@@ -26,7 +35,8 @@ export class ApplicationsService {
     private readonly redisService: RedisService,
     private readonly notificationsService: NotificationsService,
     private readonly mailerService: MailerService,
-  ) { }
+    private readonly gateway: NotificationsGateway, // 👈 Thêm NotificationsGateway
+  ) {}
 
   // FIX BẢO MẬT: helper dùng chung để xác nhận đơn thuộc đúng shelter đang
   // gọi API — bắt buộc gọi trước mọi thao tác ghi (notes/tags/status/appointments)
@@ -36,7 +46,7 @@ export class ApplicationsService {
       where: { id: applicationId },
       include: {
         pet: { include: { shelter: true } },
-        user: { select: { id: true, email: true, name: true, avatarUrl: true } }, // thêm dòng này
+        user: { select: { id: true, email: true, name: true, avatarUrl: true } },
       },
     });
     if (!application) throw new NotFoundException('Không tìm thấy đơn.');
@@ -46,8 +56,29 @@ export class ApplicationsService {
     return application;
   }
 
+  // Helper bắn realtime event cho cả người nhận nuôi và trạm cứu hộ
+  private async broadcastDocumentEvent(
+    shelterId: string,
+    userId: string,
+    eventName: string,
+    payload: any,
+  ) {
+    try {
+      if (this.gateway?.server) {
+        if (typeof this.gateway.notifyUserSmartly === 'function') {
+          await this.gateway.notifyUserSmartly(userId, eventName, payload);
+        } else {
+          this.gateway.server.to(`user_${userId}`).emit(eventName, payload);
+        }
+        this.gateway.server.to(`shelter_${shelterId}`).emit(eventName, payload);
+      }
+    } catch (err) {
+      this.logger.warn(`Emit socket event ${eventName} thất bại:`, err);
+    }
+  }
+
   // ==========================================
-  // 1. LUỒNG NGƯỜI DÙNG (ADOPTER) — không đổi
+  // 1. LUỒNG NGƯỜI DÙNG (ADOPTER)
   // ==========================================
 
   async createApplication(userId: string, data: CreateApplicationDto) {
@@ -119,7 +150,7 @@ export class ApplicationsService {
             authorId: userId,
             content: `Câu hỏi từ người nhận nuôi: ${data.otherQuestion.trim()}`,
           },
-        }).catch(() => { });
+        }).catch(() => {});
       }
 
       await this.redisService.del(`pet:detail:${data.petId}`);
@@ -140,7 +171,7 @@ export class ApplicationsService {
           authorId: userId,
           content: `Câu hỏi từ người nhận nuôi: ${data.otherQuestion.trim()}`,
         },
-      }).catch(() => { });
+      }).catch(() => {});
     }
 
     await this.redisService.del(`pet:detail:${data.petId}`);
@@ -175,6 +206,7 @@ export class ApplicationsService {
       orderBy: { createdAt: 'desc' },
     });
   }
+
   async getApplicationDocuments(
     currentUser: { id: string; role: Role; shelterId?: string },
     applicationId: string,
@@ -252,10 +284,20 @@ export class ApplicationsService {
     });
 
     await this.redisService.del(`pet:detail:${application.petId}`);
+
+    // 📡 Realtime sync
+    await this.broadcastDocumentEvent(shelterId, application.userId, 'documents_requested', {
+      applicationId,
+      petId: application.petId,
+      status: 'NEED_MORE_INFO',
+      documents: created,
+    });
+
     return created;
   }
+
   async simulateSubmitDocument(shelterId: string, applicationId: string, docId: string) {
-    await this.assertOwnsApplication(shelterId, applicationId);
+    const application = await this.assertOwnsApplication(shelterId, applicationId);
 
     const doc = await this.prisma.applicationDocument.findFirst({
       where: { id: docId, applicationId },
@@ -265,7 +307,7 @@ export class ApplicationsService {
       throw new BadRequestException('Tài liệu này đã được chấp nhận.');
     }
 
-    return this.prisma.applicationDocument.update({
+    const updated = await this.prisma.applicationDocument.update({
       where: { id: docId },
       data: {
         status: 'PENDING_REVIEW',
@@ -275,7 +317,17 @@ export class ApplicationsService {
         rejectionReason: null,
       },
     });
+
+    // 📡 Realtime sync
+    await this.broadcastDocumentEvent(shelterId, application.userId, 'document_submitted', {
+      applicationId,
+      docId,
+      document: updated,
+    });
+
+    return updated;
   }
+
   async submitDocument(
     userId: string,
     applicationId: string,
@@ -284,6 +336,7 @@ export class ApplicationsService {
   ) {
     const application = await this.prisma.adoptionApplication.findFirst({
       where: { id: applicationId, userId },
+      include: { pet: true },
     });
     if (!application) throw new NotFoundException('Không tìm thấy đơn.');
 
@@ -295,7 +348,7 @@ export class ApplicationsService {
       throw new BadRequestException('Tài liệu này đã được chấp nhận, không thể nộp lại.');
     }
 
-    return this.prisma.applicationDocument.update({
+    const updated = await this.prisma.applicationDocument.update({
       where: { id: docId },
       data: {
         status: 'PENDING_REVIEW',
@@ -306,6 +359,17 @@ export class ApplicationsService {
         rejectionReason: null, // nộp lại sau khi bị reject -> xoá lý do cũ
       },
     });
+
+    // 📡 Realtime sync
+    if (application.pet?.shelterId) {
+      await this.broadcastDocumentEvent(application.pet.shelterId, userId, 'document_submitted', {
+        applicationId,
+        docId,
+        document: updated,
+      });
+    }
+
+    return updated;
   }
 
   async reviewDocument(
@@ -347,11 +411,19 @@ export class ApplicationsService {
       metadata: { applicationId, documentId: docId, status: dto.status },
     });
 
+    // 📡 Realtime sync
+    await this.broadcastDocumentEvent(shelterId, application.userId, 'document_reviewed', {
+      applicationId,
+      docId,
+      status: dto.status,
+      document: updated,
+    });
+
     return updated;
   }
 
   async removeDocument(shelterId: string, applicationId: string, docId: string) {
-    await this.assertOwnsApplication(shelterId, applicationId);
+    const application = await this.assertOwnsApplication(shelterId, applicationId);
 
     const doc = await this.prisma.applicationDocument.findFirst({
       where: { id: docId, applicationId },
@@ -359,8 +431,16 @@ export class ApplicationsService {
     if (!doc) throw new NotFoundException('Không tìm thấy tài liệu.');
 
     await this.prisma.applicationDocument.delete({ where: { id: docId } });
+
+    // 📡 Realtime sync
+    await this.broadcastDocumentEvent(shelterId, application.userId, 'document_removed', {
+      applicationId,
+      docId,
+    });
+
     return { success: true };
   }
+
   async getApplicationById(userId: string, applicationId: string) {
     const application = await this.prisma.adoptionApplication.findFirst({
       where: {
@@ -471,15 +551,12 @@ export class ApplicationsService {
 
   // ==========================================
   // 2. LUỒNG TRẠM CỨU HỘ (SHELTER / ADMIN)
-  // Mọi method dưới đây giờ nhận thêm `shelterId` và gọi
-  // assertOwnsApplication() trước khi ghi dữ liệu — FIX lỗ hổng cho phép
-  // sửa đơn của shelter khác.
   // ==========================================
 
   async getShelterApplications(
     shelterId: string,
     status?: string,
-    noteTypes?: string[], // 🆕
+    noteTypes?: string[],
   ) {
     const applications = await this.prisma.adoptionApplication.findMany({
       where: {
@@ -493,7 +570,11 @@ export class ApplicationsService {
         user: { select: { id: true, name: true, email: true, avatarUrl: true, phone: true } },
         pet: {
           select: {
-            id: true, name: true, breed: true, gender: true, dob: true,
+            id: true,
+            name: true,
+            breed: true,
+            gender: true,
+            dob: true,
             status: true,
             images: { select: { url: true }, take: 1 },
             shelter: { select: { address: true } },
@@ -513,7 +594,13 @@ export class ApplicationsService {
     return applications;
   }
 
-  async addNote(shelterId: string, applicationId: string, authorId: string, content: string, type: ApplicationNoteType) {
+  async addNote(
+    shelterId: string,
+    applicationId: string,
+    authorId: string,
+    content: string,
+    type: ApplicationNoteType,
+  ) {
     await this.assertOwnsApplication(shelterId, applicationId);
 
     return this.prisma.applicationNote.create({
@@ -528,6 +615,7 @@ export class ApplicationsService {
       },
     });
   }
+
   async updateNote(
     shelterId: string,
     applicationId: string,
@@ -562,7 +650,13 @@ export class ApplicationsService {
     await this.prisma.applicationNote.delete({ where: { id: noteId } });
     return { success: true };
   }
-  async addTagToApplication(shelterId: string, applicationId: string, tagId?: string, name?: string) {
+
+  async addTagToApplication(
+    shelterId: string,
+    applicationId: string,
+    tagId?: string,
+    name?: string,
+  ) {
     await this.assertOwnsApplication(shelterId, applicationId);
 
     let resolvedTagId = tagId;
@@ -615,8 +709,6 @@ export class ApplicationsService {
       },
     });
 
-    // 🆕 Khi đơn được đánh dấu hoàn tất nhận nuôi -> chuyển quyền sở hữu pet
-    // sang applicant, để "Current Pet" trong Applicant Profile nhận diện đúng
     if (status === 'ADOPTION_COMPLETED') {
       await this.prisma.pet.update({
         where: { id: application.petId },
@@ -626,13 +718,13 @@ export class ApplicationsService {
           adoptedAt: new Date(),
         },
       });
-      // Xoá cache pet detail vì owner/status vừa đổi
       await this.redisService.del(`pet:detail:${application.petId}`);
     }
 
     await this.redisService.del(`pet:detail:${updated.petId}`);
     return updated;
   }
+
   async generateQuickMeetLink() {
     try {
       const event = await this.googleMeetService.createMeetEvent({
@@ -643,11 +735,11 @@ export class ApplicationsService {
       });
       return { meetLink: event.meetLink };
     } catch (err: any) {
-      this.logger.warn(`Tạo Google Meet tự động thất bại (Client Secret sai): ${err?.message || err}`);
-      // Fallback an toàn: Trả về link Google Meet để Frontend không bị lỗi 500 hay rỗng input
+      this.logger.warn(`Tạo Google Meet tự động thất bại: ${err?.message || err}`);
       return { meetLink: 'https://meet.google.com/new' };
     }
   }
+
   async getPostAdoptionRecords(shelterId: string) {
     const applications = await this.prisma.adoptionApplication.findMany({
       where: {
@@ -676,9 +768,8 @@ export class ApplicationsService {
       petName: a.pet.name,
       petImage: a.pet.images[0]?.url ?? null,
       petGender: a.pet.gender,
-      breed: a.pet.breed, // Json song ngữ {vi,en} — FE tự resolve locale
+      breed: a.pet.breed,
       adopterName: a.fullName || a.user.name || 'N/A',
-      // adoptedAt được set chính xác lúc chuyển ADOPTION_COMPLETED trong updateApplicationStatus
       adoptionDate: a.pet.adoptedAt ?? a.updatedAt,
       nextFollowUpDate: a.nextFollowUpDate,
     }));
@@ -702,12 +793,11 @@ export class ApplicationsService {
       data: { nextFollowUpDate },
     });
   }
+
   async getApplicantProfile(shelterId: string, applicationId: string) {
-    // Xác nhận đơn này thuộc shelter đang gọi API, đồng thời lấy userId của applicant
     const baseApp = await this.assertOwnsApplication(shelterId, applicationId);
     const userId = baseApp.userId;
 
-    // Toàn bộ đơn của applicant này — CHỈ trong phạm vi shelter hiện tại (không lộ chéo shelter)
     const applications = await this.prisma.adoptionApplication.findMany({
       where: { userId, pet: { shelterId } },
       include: {
@@ -732,7 +822,6 @@ export class ApplicationsService {
       (a) => a.status === 'ADOPTION_COMPLETED',
     );
 
-    // Pet mà applicant đang sở hữu, đến từ chính shelter này
     const currentPets = await this.prisma.pet.findMany({
       where: { ownerId: userId, shelterId },
       select: {
@@ -745,7 +834,6 @@ export class ApplicationsService {
       },
     });
 
-    // Note trải trên mọi đơn của applicant này tại shelter hiện tại
     const notes = await this.prisma.applicationNote.findMany({
       where: { application: { userId, pet: { shelterId } } },
       include: { author: { select: { id: true, name: true, avatarUrl: true } } },
@@ -800,7 +888,12 @@ export class ApplicationsService {
       })),
     };
   }
-  async scheduleAppointment(shelterId: string, applicationId: string, dto: ScheduleAppointmentDto) {
+
+  async scheduleAppointment(
+    shelterId: string,
+    applicationId: string,
+    dto: ScheduleAppointmentDto,
+  ) {
     const app = await this.assertOwnsApplication(shelterId, applicationId);
 
     const scheduledAt = new Date(dto.scheduledAt);
@@ -818,37 +911,38 @@ export class ApplicationsService {
     let meetLink: string | null = null;
     let googleEventId: string | null = existing?.googleEventId ?? null;
 
-    // 👇 MỚI: gom email hợp lệ từ danh sách thành viên
     const attendeeEmails = (dto.members || [])
       .map((m) => m.email?.trim())
       .filter((e): e is string => !!e && /\S+@\S+\.\S+/.test(e));
 
     if (dto.format === 'Online') {
-      // 👇 BỎ nhánh "dùng lại link FE gửi lên" — luôn tạo/cập nhật thật theo giờ hẹn + email thành viên
       try {
         const result = googleEventId
           ? await this.googleMeetService.updateMeetEvent(googleEventId, {
-            title: dto.title,
-            description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
-            startAt: scheduledAt,
-            endAt: endsAt,
-            attendeeEmails, // 👈 mới
-          })
+              title: dto.title,
+              description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
+              startAt: scheduledAt,
+              endAt: endsAt,
+              attendeeEmails,
+            })
           : await this.googleMeetService.createMeetEvent({
-            title: dto.title,
-            description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
-            startAt: scheduledAt,
-            endAt: endsAt,
-            attendeeEmails, // 👈 mới
-          });
+              title: dto.title,
+              description: `Phỏng vấn nhận nuôi ${app.pet.name} — đơn #${applicationId}`,
+              startAt: scheduledAt,
+              endAt: endsAt,
+              attendeeEmails,
+            });
         meetLink = result.meetLink;
         googleEventId = result.eventId;
       } catch (err) {
-        this.logger.warn(`Tạo/cập nhật Google Meet thất bại cho đơn ${applicationId}`, err as Error);
-        meetLink = existing?.meetLink || null; // fallback: giữ link cũ nếu có, không dùng dto.meetingLink nữa
+        this.logger.warn(
+          `Tạo/cập nhật Google Meet thất bại cho đơn ${applicationId}`,
+          err as Error,
+        );
+        meetLink = existing?.meetLink || null;
       }
     } else if (googleEventId) {
-      await this.googleMeetService.cancelMeetEvent(googleEventId).catch(() => { });
+      await this.googleMeetService.cancelMeetEvent(googleEventId).catch(() => {});
       googleEventId = null;
     }
 
@@ -880,13 +974,13 @@ export class ApplicationsService {
             startTime: toHHmm(scheduledAt),
             endTime: toHHmm(endsAt),
             type: dto.format === 'Online' ? AppointmentType.ONLINE : AppointmentType.IN_PERSON,
-            status: dto.completed ? AppointmentStatus.COMPLETED : AppointmentStatus.PENDING, // đổi lịch -> chờ xác nhận lại
+            status: dto.completed ? AppointmentStatus.COMPLETED : AppointmentStatus.PENDING,
             location: dto.format === 'Offline' ? dto.location : null,
             meetLink,
             googleEventId,
             members: dto.members as any,
             reminderMinutesBefore: dto.reminderMinutesBefore ?? 10,
-            reminderSentAt: null, // reset để cron tính lại mốc nhắc mới
+            reminderSentAt: null,
           },
         }),
         this.prisma.adoptionApplication.update({
@@ -899,7 +993,9 @@ export class ApplicationsService {
       ]);
 
       if (!app.pet.shelter) {
-        this.logger.warn(`Đơn ${applicationId} có pet không gắn shelter — bỏ qua gửi email xác nhận.`);
+        this.logger.warn(
+          `Đơn ${applicationId} có pet không gắn shelter — bỏ qua gửi email xác nhận.`,
+        );
         await this.redisService.del(`pet:detail:${app.petId}`);
         return appointment;
       }
@@ -921,23 +1017,28 @@ export class ApplicationsService {
         this.mailerService
           .sendMail({ to: app.user.email, subject, html })
           .catch((err) =>
-            this.logger.warn(`Gửi email xác nhận phỏng vấn thất bại cho ${app.user.email}`, err),
+            this.logger.warn(
+              `Gửi email xác nhận phỏng vấn thất bại cho ${app.user.email}`,
+              err,
+            ),
           );
       }
 
-      // Gửi cho từng thành viên trạm có email được phân công
       for (const email of attendeeEmails) {
         this.mailerService
           .sendMail({ to: email, subject: `[Nội bộ] ${subject}`, html })
-          .catch((err) => this.logger.warn(`Gửi email nội bộ thất bại cho ${email}`, err));
+          .catch((err) =>
+            this.logger.warn(`Gửi email nội bộ thất bại cho ${email}`, err),
+          );
       }
-
 
       await this.redisService.del(`pet:detail:${app.petId}`);
       return appointment;
     } catch (err: any) {
       if (err.code === 'P2002' && err.meta?.target?.includes?.('uniq_shelter_slot')) {
-        throw new BadRequestException('Khung giờ này trạm đã có lịch hẹn khác, vui lòng chọn giờ khác.');
+        throw new BadRequestException(
+          'Khung giờ này trạm đã có lịch hẹn khác, vui lòng chọn giờ khác.',
+        );
       }
       throw err;
     }
