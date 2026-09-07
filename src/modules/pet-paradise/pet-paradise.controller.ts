@@ -30,6 +30,10 @@ export class PetParadiseController {
     async getReviews(@Param('id') id: string, @Query('userId') userId?: string) {
         return this.paradiseService.getReviews(id, userId);
     }
+    @Get('by-country/:countryId')
+    async getByCountry(@Param('countryId') countryId: string) {
+        return this.paradiseService.getByCountry(countryId);
+    }
 
     @UseGuards(JwtAuthGuard)
     @Post('reviews')

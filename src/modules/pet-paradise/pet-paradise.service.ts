@@ -120,7 +120,12 @@ export class PetParadiseService {
             };
         });
     }
-
+    async getByCountry(countryId: string) {
+        return this.prisma.petParadise.findMany({
+            where: { countryId },
+            orderBy: { createdAt: 'desc' },
+        });
+    }
     async createReview(userId: string, dto: CreateReviewDto) {
         const user = await this.prisma.user.findUnique({ where: { id: userId } });
         if (!user) throw new NotFoundException('User not found');
