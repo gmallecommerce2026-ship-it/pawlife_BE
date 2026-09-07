@@ -130,6 +130,19 @@ export class PetParadiseService {
         const user = await this.prisma.user.findUnique({ where: { id: userId } });
         if (!user) throw new NotFoundException('User not found');
 
+        // 🌟 THÊM ĐOẠN NÀY: Chặn mỗi account chỉ được đánh giá 1 lần
+        const existingReview = await this.prisma.petParadiseReview.findFirst({
+            where: {
+                paradiseId: dto.paradiseId,
+                userId,
+            },
+        });
+
+        if (existingReview) {
+            throw new BadRequestException('Bạn đã gửi đánh giá cho địa điểm này rồi. Mỗi tài khoản chỉ được đánh giá 1 lần.');
+        }
+
+        // Phần tạo review và bắn socket giữ nguyên vẹn 100% của bạn
         const review = await this.prisma.petParadiseReview.create({
             data: {
                 paradiseId: dto.paradiseId,
