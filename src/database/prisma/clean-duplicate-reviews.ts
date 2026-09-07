@@ -3,64 +3,34 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-async function cleanAndRename() {
-  console.log('================================================================');
-  console.log('🧹 BẮT ĐẦU DỌN DẸP REVIEW TRÙNG LẶP & ĐỔI TÊN ĐỊA ĐIỂM');
-  console.log('================================================================\n');
+async function cleanAllDuplicates() {
+  console.log('🧹 BẮT ĐẦU QUÉT VÀ XÓA TẤT CẢ REVIEW TRÙNG LẶP TRONG DATABASE...');
 
-  // 1. CẬP NHẬT TÊN GỌN GÀNG TRONG DATABASE
-  console.log('🏷️ [1/2] Đang cập nhật tên các địa điểm trong MySQL...');
-
-  await prisma.petParadise.updateMany({
-    where: { OR: [{ id: '1' }, { name: { contains: 'Tashirojima' } }] },
-    data: { name: 'Đảo Tashirojima' },
-  });
-  console.log('   ✅ Đã đổi tên -> "Đảo Tashirojima"');
-
-  await prisma.petParadise.updateMany({
-    where: { OR: [{ id: '2' }, { name: { contains: 'Okunoshima' } }] },
-    data: { name: 'Đảo Okunoshima' },
-  });
-  console.log('   ✅ Đã đổi tên -> "Đảo Okunoshima"');
-
-  await prisma.petParadise.updateMany({
-    where: { OR: [{ id: '3' }, { name: { contains: 'Zao' } }] },
-    data: { name: 'Làng cáo Zao' },
-  });
-  console.log('   ✅ Đã đổi tên -> "Làng cáo Zao"\n');
-
-  // 2. LỌC VÀ XÓA CÁC BÀI REVIEW TRÙNG LẶP CỦA TỪNG USER
-  console.log('🔍 [2/2] Đang quét và xóa review trùng lặp của từng tài khoản...');
   const paradises = await prisma.petParadise.findMany();
   let totalDeleted = 0;
 
   for (const p of paradises) {
-    // Lấy các bài review do người dùng tạo (không phải review từ Google Maps)
-    const userReviews = await prisma.petParadiseReview.findMany({
-      where: {
-        paradiseId: p.id,
-        isFromGoogle: false,
-      },
-      orderBy: { createdAt: 'desc' }, // Bài mới nhất lên đầu
+    // Lấy tất cả review của địa điểm
+    const allReviews = await prisma.petParadiseReview.findMany({
+      where: { paradiseId: p.id },
+      orderBy: { createdAt: 'desc' },
     });
 
-    const seenUsers = new Set<string>();
+    const seen = new Set<string>();
     const duplicateIdsToDelete: string[] = [];
 
-    for (const rev of userReviews) {
-      const userKey = rev.userId || rev.authorName;
+    for (const rev of allReviews) {
+      // Khóa định danh: tên tác giả + 30 ký tự đầu của bài viết
+      const uniqueKey = `${rev.authorName}_${rev.content.trim().slice(0, 40)}`;
 
-      if (seenUsers.has(userKey)) {
-        duplicateIdsToDelete.push(rev.id); // Bài cũ hơn bị đưa vào danh sách xóa
+      if (seen.has(uniqueKey)) {
+        duplicateIdsToDelete.push(rev.id); // Bài trùng phía sau bị xóa
       } else {
-        seenUsers.add(userKey); // Giữ lại bài đầu tiên (bài mới nhất)
+        seen.add(uniqueKey); // Giữ lại bài duy nhất
       }
     }
 
     if (duplicateIdsToDelete.length > 0) {
-      console.log(`   ⚠️ Tìm thấy ${duplicateIdsToDelete.length} review trùng tại "${p.name}".`);
-
-      // Xóa các reactions và reports liên kết trước để an toàn
       await prisma.petParadiseReviewReaction.deleteMany({
         where: { reviewId: { in: duplicateIdsToDelete } },
       });
@@ -68,35 +38,25 @@ async function cleanAndRename() {
         where: { reviewId: { in: duplicateIdsToDelete } },
       });
 
-      const deleteResult = await prisma.petParadiseReview.deleteMany({
+      const del = await prisma.petParadiseReview.deleteMany({
         where: { id: { in: duplicateIdsToDelete } },
       });
 
-      totalDeleted += deleteResult.count;
-      console.log(`   🗑️ Đã xóa ${deleteResult.count} review trùng lặp.`);
-    } else {
-      console.log(`   ✨ Địa điểm "${p.name}" không có review trùng.`);
+      totalDeleted += del.count;
+      console.log(`   🗑️ Đã xóa ${del.count} bài review trùng tại "${p.name}".`);
     }
 
-    // Cập nhật lại số lượng review thực tế cho địa điểm
-    const totalCount = await prisma.petParadiseReview.count({
-      where: { paradiseId: p.id },
-    });
+    // Cập nhật lại số lượng reviewsCount chuẩn
+    const realCount = await prisma.petParadiseReview.count({ where: { paradiseId: p.id } });
     await prisma.petParadise.update({
       where: { id: p.id },
-      data: { reviewsCount: totalCount },
+      data: { reviewsCount: realCount },
     });
   }
 
-  console.log(`\n🎉 ĐÃ XÓA TỔNG CỘNG ${totalDeleted} REVIEW TRÙNG LẶP & ĐỔI TÊN THÀNH CÔNG!`);
-  console.log('================================================================');
+  console.log(`\n🎉 HOÀN TẤT! Đã xóa sạch ${totalDeleted} bản ghi trùng lặp trong MySQL.`);
 }
 
-cleanAndRename()
-  .catch((e) => {
-    console.error('❌ Lỗi:', e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+cleanAllDuplicates()
+  .catch((e) => console.error(e))
+  .finally(() => prisma.$disconnect());
