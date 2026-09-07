@@ -22,6 +22,10 @@ export class PetParadiseController {
         }
         return { success: false, message: 'Địa điểm này chưa có googlePlaceId' };
     }
+    @Get(':id/related')
+    async getRelated(@Param('id') id: string) {
+        return this.paradiseService.getRelatedParadises(id);
+    }
     @Get(':id/reviews')
     async getReviews(@Param('id') id: string, @Query('userId') userId?: string) {
         return this.paradiseService.getReviews(id, userId);
