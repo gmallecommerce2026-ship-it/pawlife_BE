@@ -4,54 +4,60 @@ import { RedisService } from '../../database/redis/redis.service';
 
 @Injectable()
 export class ProceduresService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly redisService: RedisService,
-  ) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly redisService: RedisService,
+    ) { }
 
-  async getAllCountries() {
-    const cacheKey = 'procedures:countries';
-    const cached = await this.redisService.get<any[]>(cacheKey);
-    if (cached) return cached;
+    async getAllCountries() {
+        const cacheKey = 'procedures:countries';
+        const cached = await this.redisService.get<any[]>(cacheKey);
+        if (cached) return cached;
 
-    const countries = await this.prisma.countryProcedure.findMany({
-      orderBy: { sortOrder: 'asc' },
-    });
+        const countries = await this.prisma.countryProcedure.findMany({
+            orderBy: { sortOrder: 'asc' },
+        });
 
-    await this.redisService.set(cacheKey, countries, 3600); // cache 1 giờ
-    return countries;
-  }
+        await this.redisService.set(cacheKey, countries, 3600); // cache 1 giờ
+        return countries;
+    }
 
-  async getCountryMilestones(countryId: string) {
-    const cacheKey = `procedures:milestones:${countryId}`;
-    const cached = await this.redisService.get<any[]>(cacheKey);
-    if (cached) return cached;
+    async getCountryMilestones(countryId: string) {
+        const cacheKey = `procedures:milestones:${countryId}`;
+        const cached = await this.redisService.get<any[]>(cacheKey);
+        if (cached) return cached;
 
-    const milestones = await this.prisma.procedureMilestone.findMany({
-      where: { countryId },
-      orderBy: { sortOrder: 'asc' },
-      include: {
-        steps: {
-          orderBy: { sortOrder: 'asc' },
-        },
-      },
-    });
+        const milestones = await this.prisma.procedureMilestone.findMany({
+            where: { countryId },
+            orderBy: { sortOrder: 'asc' },
+            include: {
+                steps: {
+                    orderBy: { sortOrder: 'asc' },
+                },
+            },
+        });
 
-    await this.redisService.set(cacheKey, milestones, 3600);
-    return milestones;
-  }
+        await this.redisService.set(cacheKey, milestones, 3600);
+        return milestones;
+    }
 
-  async getCountryDocuments(countryId: string) {
-    const cacheKey = `procedures:documents:${countryId}`;
-    const cached = await this.redisService.get<any[]>(cacheKey);
-    if (cached) return cached;
+    async getCountryDocuments(countryId: string) {
+        const cacheKey = `procedures:documents:${countryId}`;
+        const cached = await this.redisService.get<any[]>(cacheKey);
+        if (cached) return cached;
 
-    const documents = await this.prisma.procedureDocument.findMany({
-      where: { countryId },
-      orderBy: { sortOrder: 'asc' },
-    });
+        // Lấy tài liệu của nước này VÀ tài liệu xuất khẩu từ Việt Nam
+        const documents = await this.prisma.procedureDocument.findMany({
+            where: {
+                OR: [
+                    { countryId },
+                    { category: 'VIETNAM' }, // Tài liệu phía Việt Nam luôn cần cho mọi chuyến bay
+                ],
+            },
+            orderBy: { sortOrder: 'asc' },
+        });
 
-    await this.redisService.set(cacheKey, documents, 3600);
-    return documents;
-  }
+        await this.redisService.set(cacheKey, documents, 3600);
+        return documents;
+    }
 }
