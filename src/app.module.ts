@@ -29,6 +29,8 @@ import { IngredientsModule } from './modules/ingredients/ingredients.module';
 import { AppointmentsModule } from './modules/appointments/appointment.module';
 import { SupportModule } from './modules/support/support.module';
 import { ShelterTeamModule } from './modules/shelter-team/shelter-team.module';
+import { PetParadiseModule } from './modules/pet-paradise/pet-paradise.module';
+import { ProceduresModule } from './modules/procedures/procedures.module';
 
 @Module({
   imports: [
@@ -111,6 +113,8 @@ import { ShelterTeamModule } from './modules/shelter-team/shelter-team.module';
     StorageModule,
     PetsModule,
     SheltersModule,
+    PetParadiseModule,
+    ProceduresModule,
     UserInteractionsModule,
     EventsModule,
     TagsModule,
