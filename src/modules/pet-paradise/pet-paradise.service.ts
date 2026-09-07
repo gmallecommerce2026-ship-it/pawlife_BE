@@ -204,40 +204,19 @@ export class PetParadiseService {
             where: { id: { not: excludeId } },
             take: limit,
             orderBy: { createdAt: 'desc' },
+            select: {
+                id: true,
+                name: true,
+                heroImage: true,
+                introText: true,
+                rating: true,
+                reviewsCount: true,
+            },
         });
 
-        if (paradises.length === 0) return [];
-
-        const ids = paradises.map((p) => p.id);
-
-        // Tính rating trung bình + số lượng review thật từ bảng petParadiseReview
-        const reviewAggregates = await this.prisma.petParadiseReview.groupBy({
-            by: ['paradiseId'],
-            where: { paradiseId: { in: ids } },
-            _avg: { rating: true },
-            _count: { _all: true },
-        });
-
-        const aggMap = new Map(
-            reviewAggregates.map((a) => [
-                a.paradiseId,
-                { avgRating: a._avg.rating ?? 0, count: a._count._all },
-            ]),
-        );
-
-        return paradises.map((p) => {
-            const agg = aggMap.get(p.id) || { avgRating: 0, count: 0 };
-            return {
-                id: p.id,
-                name: p.name,
-                heroImage: (p as any).heroImage,
-                introText: (p as any).introText,
-                rating: Number(agg.avgRating.toFixed(1)),
-                reviewsCount: agg.count,
-            };
-        });
+        return paradises;
     }
-    
+
     async reportReview(reviewId: string, reporterId: string, dto: ReportReviewDto) {
         const report = await this.prisma.petParadiseReviewReport.create({
             data: {
