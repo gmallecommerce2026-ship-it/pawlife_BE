@@ -416,6 +416,183 @@ model PetNote {
 
   @@index([petId])
 }
+// =========================================================================
+// 1. MODULE THỦ TỤC NHẬP CẢNH (ENTRY PROCEDURES)
+// =========================================================================
+model CountryProcedure {
+  id          String   @id // 'japan', 'china', 'vietnam',...
+  nameVi      String
+  nameEn      String
+  flag        String
+  durationVi  String
+  durationEn  String
+  imageUrl    String
+  anchorX     Float    @default(0)
+  anchorY     Float    @default(0)
+  anchorScale Float    @default(1.05)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  milestones   ProcedureMilestone[]
+  documents    ProcedureDocument[]
+  petParadises PetParadise[]
+
+  @@map("country_procedures")
+}
+
+model ProcedureMilestone {
+  id         String           @id @default(cuid())
+  countryId  String
+  country    CountryProcedure @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  dateLabel  String           // 'Ngày 0', 'Ngày 30 - 40',...
+  sortOrder  Int              @default(0)
+  createdAt  DateTime         @default(now())
+
+  steps ProcedureStep[]
+
+  @@index([countryId])
+  @@map("procedure_milestones")
+}
+
+model ProcedureStep {
+  id          String             @id @default(cuid())
+  milestoneId String
+  milestone   ProcedureMilestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  stepCode    String?            // 's_microchip_std', 's_flight_booking',...
+  title       String
+  subtitle    String
+  desc        String             @db.Text
+  notes       Json?              // string[]
+  hasButton   Boolean            @default(true)
+  borderColor String?
+  sortOrder   Int                @default(0)
+  createdAt   DateTime           @default(now())
+
+  @@index([milestoneId])
+  @@map("procedure_steps")
+}
+
+enum ProcedureDocType {
+  PDF
+  DOCX
+}
+
+model ProcedureDocument {
+  id          String           @id @default(cuid())
+  countryId   String
+  country     CountryProcedure @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  titleVi     String
+  titleEn     String
+  meta        String           // '3 trang • 2.5MB'
+  type        ProcedureDocType @default(PDF)
+  fileUrl     String
+  category    String           @default("GENERAL") // 'VIETNAM', 'DOG', 'CAT', 'GENERAL'
+  sortOrder   Int              @default(0)
+  createdAt   DateTime         @default(now())
+
+  @@index([countryId])
+  @@map("procedure_documents")
+}
+
+// =========================================================================
+// 2. MODULE THIÊN ĐƯỜNG THÚ CƯNG (PET PARADISE)
+// =========================================================================
+model PetParadise {
+  id            String            @id @default(cuid())
+  countryId     String?
+  country       CountryProcedure? @relation(fields: [countryId], references: [id], onDelete: SetNull)
+  name          String
+  categoryVi    String            @default("Đảo nhỏ ngoài khơi")
+  categoryEn    String            @default("Small offshore island")
+  statusTextVi  String            @default("Đang mở")
+  statusTextEn  String            @default("Opening")
+  introText     String            @db.Text
+  areaVi        String?
+  areaEn        String?
+  howToGetVi    String?           @db.Text
+  howToGetEn    String?           @db.Text
+  addressVi     String
+  addressEn     String
+  mapPreviewUrl String?
+  latitude      Float?
+  longitude     Float?
+  googlePlaceId String?           @unique // Liên kết với Google Places API
+  rating        Float             @default(5.0)
+  reviewsCount  Int               @default(0)
+  heroImage     String
+  galleryImages Json?             // string[]
+  experiences   Json?             // [{ titleVi, titleEn, descVi, descEn }]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  reviews PetParadiseReview[]
+
+  @@index([countryId])
+  @@map("pet_paradises")
+}
+
+model PetParadiseReview {
+  id            String      @id @default(cuid())
+  paradiseId    String
+  paradise      PetParadise @relation(fields: [paradiseId], references: [id], onDelete: Cascade)
+  userId        String?
+  googleReviewId String?    @unique // Đánh dấu nếu là review kéo từ Google Maps
+  authorName    String
+  authorAvatar  String?
+  rating        Int         @default(5)
+  dateText      String      // '12 ngày trước' hoặc 'Vừa xong'
+  content       String      @db.Text
+  images        Json?       // string[]
+  isFromGoogle  Boolean     @default(false)
+  
+  // Reaction counts
+  huuichCount   Int         @default(0)
+  camonCount    Int         @default(0)
+  huhuCount     Int         @default(0)
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  reactions PetParadiseReviewReaction[]
+  reports   PetParadiseReviewReport[]
+
+  @@index([paradiseId])
+  @@map("pet_paradise_reviews")
+}
+
+enum ParadiseReactionType {
+  HUUICH
+  CAMON
+  HUHU
+}
+
+model PetParadiseReviewReaction {
+  id        String               @id @default(cuid())
+  reviewId  String
+  review    PetParadiseReview    @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  userId    String
+  type      ParadiseReactionType
+  createdAt DateTime             @default(now())
+
+  @@unique([reviewId, userId, type])
+  @@index([reviewId])
+  @@map("pet_paradise_review_reactions")
+}
+
+model PetParadiseReviewReport {
+  id         String            @id @default(cuid())
+  reviewId   String
+  review     PetParadiseReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reporterId String
+  reason     String
+  details    String?           @db.Text
+  status     String            @default("PENDING")
+  createdAt  DateTime          @default(now())
+
+  @@index([reviewId])
+  @@map("pet_paradise_review_reports")
+}
 model Appointment {
   id                   String              @id @default(cuid())
   applicationId        String              @unique
