@@ -19,7 +19,7 @@ export class PetParadiseService {
     this.googleApiKey = this.configService.get<string>('GOOGLE_MAPS_API_KEY') || '';
   }
 
-  async getDetail(id: string) {
+  async getDetail(id: string): Promise<any> {
     const cacheKey = `paradise:detail:${id}`;
     const cached = await this.redisService.get(cacheKey);
     if (cached) return cached;

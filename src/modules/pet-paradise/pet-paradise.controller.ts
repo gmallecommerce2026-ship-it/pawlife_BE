@@ -15,7 +15,7 @@ export class PetParadiseController {
     }
     @Post(':id/sync-google')
     async syncGoogle(@Param('id') id: string) {
-        const paradise = await this.paradiseService.getDetail(id);
+        const paradise: any = await this.paradiseService.getDetail(id);
         if (paradise.googlePlaceId) {
             await this.paradiseService.syncGoogleReviews(paradise.id, paradise.googlePlaceId);
             return { success: true, message: 'Đã đồng bộ đánh giá mới nhất từ Google Maps!' };
