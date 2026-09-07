@@ -520,7 +520,7 @@ model PetParadise {
   googlePlaceId String?           @unique // Liên kết với Google Places API
   rating        Float             @default(5.0)
   reviewsCount  Int               @default(0)
-  heroImage     String
+  heroImage     String @db.Text
   galleryImages Json?             // string[]
   experiences   Json?             // [{ titleVi, titleEn, descVi, descEn }]
   createdAt     DateTime          @default(now())
@@ -539,7 +539,7 @@ model PetParadiseReview {
   userId        String?
   googleReviewId String?    @unique // Đánh dấu nếu là review kéo từ Google Maps
   authorName    String
-  authorAvatar  String?
+  authorAvatar  String? @db.Text
   rating        Int         @default(5)
   dateText      String      // '12 ngày trước' hoặc 'Vừa xong'
   content       String      @db.Text
