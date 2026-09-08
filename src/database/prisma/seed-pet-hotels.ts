@@ -353,7 +353,9 @@ export async function seedPetHotels() {
       sortOrder: 5,
     },
   ];
-
+  console.log('Cleaning up old pet hotels...');
+  await prisma.petHotel.deleteMany({});
+  
   console.log('Seeding 12 countries Pet Hotels...');
   for (const hotel of HOTELS_DATA) {
     await prisma.petHotel.create({
