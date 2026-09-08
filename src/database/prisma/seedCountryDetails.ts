@@ -263,3 +263,11 @@ export async function seedCountryDetails() {
 
     console.log('Done seeding country details!');
 }
+seedCountryDetails()    
+  .catch((e) => {
+    console.error('❌ Lỗi khi seed PetHotels:', e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
