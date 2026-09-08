@@ -730,16 +730,16 @@ const ALL_PROCEDURE_DOCUMENTS: DocumentSeedItem[] = [
 ];
 
 // =========================================================================
-// 6. DANH SÁCH ĐỊA ĐIỂM PET PARADISE THEO ĐẤT NƯỚC (PET PARADISES)
+// 6. DANH SÁCH ĐỊA ĐIỂM PET PARADISE (ĐỦ 3 ĐỊA ĐIỂM NHẬT BẢN & CÁC NƯỚC)
 // =========================================================================
 const ALL_PET_PARADISES: PetParadiseSeedItem[] = [
-  // --- NHẬT BẢN ---
+  // --- NHẬT BẢN (3 ĐỊA ĐIỂM CHUẨN) ---
   {
     id: 'jp_tashirojima',
     countryId: 'japan',
     name: 'Đảo Tashirojima (Đảo Mèo)',
-    categoryVi: 'Đảo nhỏ ngoài khơi',
-    categoryEn: 'Small offshore island',
+    categoryVi: 'Đảo nhỏ ngoài khơi & vương quốc mèo',
+    categoryEn: 'Small offshore island & Cat Kingdom',
     statusTextVi: 'Đang mở',
     statusTextEn: 'Opening',
     introText: 'Hòn đảo nhỏ hòa mình với biển xanh, làng chài yên bình và cả một "vương quốc mèo" thân thiện.',
@@ -751,7 +751,7 @@ const ALL_PET_PARADISES: PetParadiseSeedItem[] = [
     addressEn: 'Ishinomaki City, Miyagi Prefecture, Japan',
     latitude: 38.2974,
     longitude: 141.4172,
-    googlePlaceKeyword: 'Tashirojima Island Ishinomaki Miyagi Japan',
+    googlePlaceKeyword: 'Tashirojima Island Ishinomaki Miyagi',
     googlePlaceId: 'ChIJVXk4F3bZgzURaU1x9Xw5o-g',
     rating: 4.8,
     reviewsCount: 145,
@@ -766,6 +766,74 @@ const ALL_PET_PARADISES: PetParadiseSeedItem[] = [
         titleEn: 'Cat Kingdom',
         descVi: 'Số lượng mèo ở đây lớn hơn rất nhiều so với người dân, được xem là biểu tượng may mắn.',
         descEn: 'The cat population far outnumbers local residents and is regarded as a symbol of good luck.',
+      },
+    ],
+  },
+  {
+    id: 'jp_okunoshima',
+    countryId: 'japan',
+    name: 'Đảo thỏ Ōkunoshima',
+    categoryVi: 'Đảo hoang dã & thiên đường thỏ',
+    categoryEn: 'Wild Island & Rabbit Haven',
+    statusTextVi: 'Đang mở',
+    statusTextEn: 'Opening',
+    introText: 'Hòn đảo thỏ nổi tiếng thế giới tại tỉnh Hiroshima với hàng trăm chú thỏ hoang dã dạn dĩ, quấn quýt bên du khách.',
+    areaVi: 'Chu vi bờ biển quanh đảo khoảng 4.3 km',
+    areaEn: 'Island circumference approx 4.3 km',
+    howToGetVi: 'Đi phà biển từ cảng Tadanoumi (thành phố Takehara) mất khoảng 15 phút.',
+    howToGetEn: '15-minute ferry ride from Tadanoumi Port in Takehara City.',
+    addressVi: 'Thị trấn Takehara, Tỉnh Hiroshima, Nhật Bản',
+    addressEn: 'Takehara City, Hiroshima Prefecture, Japan',
+    latitude: 34.3094,
+    longitude: 132.9934,
+    googlePlaceKeyword: 'Okunoshima Island Takehara Hiroshima',
+    rating: 4.7,
+    reviewsCount: 235,
+    heroImage: 'https://images.unsplash.com/photo-1585110396000-c9ffd4e4b308?q=80&w=1200&auto=format&fit=crop',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1585110396000-c9ffd4e4b308?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1535268647677-300dbf3d78d1?q=80&w=800&auto=format&fit=crop',
+    ],
+    experiences: [
+      {
+        titleVi: 'Cho đàn thỏ hoang dã ăn',
+        titleEn: 'Feed the friendly wild rabbits',
+        descVi: 'Đàn thỏ chạy tung tăng khắp đảo, rất dạn người và sẵn sàng ăn cỏ non từ tay bạn.',
+        descEn: 'Hundreds of friendly wild rabbits roam freely and welcome treats from visitors.',
+      },
+    ],
+  },
+  {
+    id: 'jp_zao_fox_village',
+    countryId: 'japan',
+    name: 'Làng cáo Zao (Zao Fox Village)',
+    categoryVi: 'Khu bảo tồn sinh thái loài cáo',
+    categoryEn: 'Fox Sanctuary & Nature Park',
+    statusTextVi: 'Đang mở đến 04:00 PM',
+    statusTextEn: 'Open until 04:00 PM',
+    introText: 'Ngôi làng bảo tồn độc đáo nằm sâu giữa cánh rừng núi tuyết Miyagi, nơi sinh sống của hơn 100 cá thể cáo tự do.',
+    areaVi: 'Khuôn viên rừng tự nhiên rộng lớn',
+    areaEn: 'Expansive open-air forest habitat',
+    howToGetVi: 'Từ ga Shiroishi-Zao đi xe buýt hoặc taxi khoảng 20-30 phút lên núi.',
+    howToGetEn: '20-30 minute bus or taxi ride from JR Shiroishi-Zao Station.',
+    addressVi: 'Shiroishi, Tỉnh Miyagi, Nhật Bản',
+    addressEn: 'Shiroishi, Miyagi Prefecture, Japan',
+    latitude: 38.0408,
+    longitude: 140.5298,
+    googlePlaceKeyword: 'Zao Fox Village Shiroishi Miyagi',
+    rating: 4.6,
+    reviewsCount: 390,
+    heroImage: 'https://images.unsplash.com/photo-1516934024742-b461fba47600?q=80&w=1200&auto=format&fit=crop',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1516934024742-b461fba47600?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1474511320723-9a56873867b5?q=80&w=800&auto=format&fit=crop',
+    ],
+    experiences: [
+      {
+        titleVi: 'Ngắm nhìn loài cáo đỏ và cáo tuyết',
+        titleEn: 'Observe red and Arctic foxes',
+        descVi: 'Quan sát tập tính tự nhiên của loài cáo trong không gian rừng thông bạt ngàn.',
+        descEn: 'Witness multiple fox breeds interacting naturally in a pine forest setting.',
       },
     ],
   },
@@ -1396,7 +1464,7 @@ const ALL_PET_PARADISES: PetParadiseSeedItem[] = [
 ];
 
 // =========================================================================
-// 7. MOCK REVIEWS CHO CÁC ĐỊA ĐIỂM (OFFLINE FALLBACK HOẶC DỮ LIỆU CỘNG ĐỒNG)
+// 7. MOCK REVIEWS CHO CÁC ĐỊA ĐIỂM
 // =========================================================================
 function generateMockReviewsForPlace(paradiseId: string, placeName: string) {
   return [
@@ -1520,7 +1588,7 @@ async function findFreshPlaceId(query: string, apiKey: string): Promise<string |
 }
 
 // =========================================================================
-// 9. QUY TRÌNH SEED TỔNG HỢP (SEED PROCEDURES, PLACES & REVIEWS)
+// 9. QUY TRÌNH SEED TỔNG HỢP VÀ TỰ ĐỘNG LẤY ẢNH / AVATAR TỪ GOOGLE MAPS
 // =========================================================================
 export async function seedAll() {
   console.log('================================================================');
@@ -1626,16 +1694,16 @@ export async function seedAll() {
       });
     }
 
-    console.log(`  ➕ [${p.countryId.toUpperCase()}] "${p.name}" (Kèm ${mockReviews.length} reviews mẫu)`);
+    console.log(`  ➕ [${p.countryId.toUpperCase()}] "${p.name}" (Đã nạp ${mockReviews.length} reviews mẫu)`);
   }
 
-  // --- BƯỚC 6: Tự động đồng bộ Google Reviews & Photos (Nếu có GOOGLE_MAPS_API_KEY) ---
+  // --- BƯỚC 6: Tự động tải ảnh từ Google Maps làm Avatar & đồng bộ Reviews thực ---
   if (!GOOGLE_API_KEY) {
     console.log('\n💡 THÔNG BÁO: Chưa tìm thấy GOOGLE_MAPS_API_KEY trong file .env.');
-    console.log('👉 Đã sử dụng toàn bộ hình ảnh và reviews mẫu offline chất lượng cao.');
+    console.log('👉 Đã hoàn tất với toàn bộ hình ảnh và reviews mẫu chất lượng cao.');
   } else {
     console.log('\n================================================================');
-    console.log('🌐 PHÁT HIỆN GOOGLE MAPS API KEY: TIẾN HÀNH ĐỒNG BỘ GOOGLE PLACES THỰC TẾ');
+    console.log('🌐 PHÁT HIỆN GOOGLE MAPS API KEY: TIẾN HÀNH ĐỒNG BỘ ẢNH GỐC & SET AVATAR');
     console.log('================================================================\n');
 
     for (const p of ALL_PET_PARADISES) {
@@ -1653,7 +1721,7 @@ export async function seedAll() {
       }
 
       if (!activePlaceId) {
-        console.warn(`  ⚠️ Không tìm thấy Place ID cho keyword "${p.googlePlaceKeyword}". Giữ nguyên dữ liệu seed.`);
+        console.warn(`  ⚠️ Không tìm thấy Place ID cho keyword "${p.googlePlaceKeyword}". Giữ nguyên ảnh mặc định.`);
         continue;
       }
 
@@ -1669,14 +1737,14 @@ export async function seedAll() {
           const userRatingsTotal = result.user_ratings_total || p.reviewsCount;
           const openingStatus = calculateOpeningStatus(result.current_opening_hours || result.opening_hours);
 
-          // Lấy tối đa 8 ảnh CDN độ phân giải cao
+          // Lấy tối đa 10 ảnh chất lượng cao từ CDN Google Maps
           const googlePhotoUrls: string[] = [];
-          for (let idx = 0; idx < Math.min(rawPhotos.length, 8); idx++) {
+          for (let idx = 0; idx < Math.min(rawPhotos.length, 10); idx++) {
             const directUrl = await getDirectGooglePhotoUrl(rawPhotos[idx].photo_reference, GOOGLE_API_KEY);
             googlePhotoUrls.push(directUrl);
           }
 
-          // Cập nhật lại Pet Paradise theo dữ liệu thực từ Google
+          // 🌟 TỰ ĐỘNG SET ẢNH ĐẦU TIÊN CỦA GOOGLE LÀM AVATAR (heroImage) & NẠP VÀO ALBUM (galleryImages)
           await prisma.petParadise.update({
             where: { id: p.id },
             data: {
@@ -1685,13 +1753,18 @@ export async function seedAll() {
               statusTextVi: openingStatus.vi,
               statusTextEn: openingStatus.en,
               ...(googlePhotoUrls.length > 0 && {
-                heroImage: googlePhotoUrls[0],
-                galleryImages: googlePhotoUrls,
+                heroImage: googlePhotoUrls[0], // 👈 Tự động set ảnh Google làm Avatar
+                galleryImages: googlePhotoUrls, // 👈 Toàn bộ album ảnh thực tế từ Google
               }),
             },
           });
 
-          // Lưu các Google Reviews thực tế
+          if (googlePhotoUrls.length > 0) {
+            console.log(`  🖼️ [Avatar Mới từ Google]: ${googlePhotoUrls[0].slice(0, 75)}...`);
+            console.log(`  📁 [Album Ảnh]: Đã nạp ${googlePhotoUrls.length} ảnh thực tế vào gallery.`);
+          }
+
+          // Lưu các bài review thực tế từ Google Maps
           for (let i = 0; i < reviews.length; i++) {
             const gr = reviews[i];
             const reviewUniqueKey = `google_${p.id}_${gr.time}_${Buffer.from(gr.author_name).toString('hex').slice(0, 8)}`;
@@ -1723,20 +1796,20 @@ export async function seedAll() {
             });
           }
 
-          console.log(`  ✨ [Đồng bộ thành công] "${p.name}": ${googlePhotoUrls.length} ảnh CDN & ${reviews.length} reviews Google.`);
+          console.log(`  💬 Đã lưu ${reviews.length} đánh giá Google thực tế cho "${p.name}".\n`);
         }
       } catch (err: any) {
-        console.error(`  ❌ Lỗi khi tải dữ liệu Google cho "${p.name}":`, err.message);
+        console.error(`  ❌ Lỗi khi nạp ảnh/review từ Google cho "${p.name}":`, err.message);
       }
     }
   }
 
-  console.log('\n================================================================');
-  console.log('🎉 HOÀN THÀNH TẤT CẢ CÁC BƯỚC SEED VÀ ĐỒNG BỘ DỮ LIỆU THÀNH CÔNG!');
+  console.log('================================================================');
+  console.log('🎉 TOÀN BỘ PROCEDURES, ĐỊA ĐIỂM PET PARADISE, AVATAR & REVIEWS ĐÃ SEED THÀNH CÔNG!');
   console.log('================================================================');
 }
 
-// Thực thi file
+// Chạy trực tiếp script
 seedAll()
   .catch((e) => {
     console.error('❌ Lỗi trong quá trình chạy seed:', e);
