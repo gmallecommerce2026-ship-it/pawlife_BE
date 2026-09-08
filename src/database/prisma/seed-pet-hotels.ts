@@ -362,3 +362,12 @@ export async function seedPetHotels() {
   }
   console.log('Done seeding Pet Hotels!');
 }
+
+seedPetHotels()
+  .catch((e) => {
+    console.error('LỖI KHI SEED:', e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
