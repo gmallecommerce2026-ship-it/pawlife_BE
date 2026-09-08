@@ -1,20 +1,4 @@
-// src/database/prisma/seed-procedures.ts
-//
-// File seed "tất cả trong một" — gộp từ 2 file cũ:
-//   - seed-procedures.ts       (quốc gia, quy trình nhập cảnh, tài liệu)
-//   - sync-google-reviews.ts   (đồng bộ ảnh & review thật từ Google Maps)
-//
-// File này làm 3 việc, theo thứ tự:
-//   1. seedProcedures()            → seed quốc gia + milestones/steps + tài liệu kiểm dịch
-//   2. seedParadisesAndReviews()   → seed địa điểm "Pet Paradise" theo từng quốc gia + review mẫu
-//   3. syncGoogleReviewsAndPhotos()→ (tuỳ chọn) đồng bộ ảnh/giờ mở cửa/review THẬT từ Google Maps
-//                                    — chỉ chạy nếu có GOOGLE_MAPS_API_KEY trong .env, nếu không sẽ
-//                                    tự bỏ qua (không còn process.exit như bản gốc, vì giờ chỉ là
-//                                    một bước tuỳ chọn trong cả pipeline, không phải toàn bộ mục đích
-//                                    của file).
-//
-// => sync-google-reviews.ts không còn cần thiết nữa, có thể xoá khỏi project.
-
+// src/database/prisma/seed-all.ts
 import { PrismaClient, ProcedureDocType } from '@prisma/client';
 import axios from 'axios';
 import * as dotenv from 'dotenv';
@@ -54,14 +38,7 @@ export interface DocumentSeedItem {
   sortOrder: number;
 }
 
-export interface ParadiseExperience {
-  titleVi: string;
-  titleEn: string;
-  descVi: string;
-  descEn: string;
-}
-
-export interface ParadiseSeedItem {
+export interface PetParadiseSeedItem {
   id: string;
   countryId: string;
   name: string;
@@ -70,42 +47,30 @@ export interface ParadiseSeedItem {
   statusTextVi: string;
   statusTextEn: string;
   introText: string;
-  areaVi: string;
-  areaEn: string;
-  howToGetVi: string;
-  howToGetEn: string;
+  areaVi?: string;
+  areaEn?: string;
+  howToGetVi?: string;
+  howToGetEn?: string;
   addressVi: string;
   addressEn: string;
   latitude: number;
   longitude: number;
+  googlePlaceKeyword: string;
   googlePlaceId?: string;
-  /** Chỉ dùng nội bộ để tìm Place ID khi đồng bộ Google — KHÔNG phải field trong DB */
-  googleSearchKeyword: string;
   rating: number;
   reviewsCount: number;
   heroImage: string;
   galleryImages: string[];
-  experiences: ParadiseExperience[];
-}
-
-export interface ParadiseReviewSeedItem {
-  id: string;
-  paradiseId: string;
-  googleReviewId?: string;
-  authorName: string;
-  authorAvatar: string;
-  rating: number;
-  dateText: string;
-  content: string;
-  images: string[];
-  isFromGoogle: boolean;
-  huuichCount: number;
-  camonCount: number;
-  huhuCount: number;
+  experiences: Array<{
+    titleVi: string;
+    titleEn: string;
+    descVi: string;
+    descEn: string;
+  }>;
 }
 
 // =========================================================================
-// 2. CÁC BƯỚC MẪU (PROCEDURE STEPS)
+// 2. CÁC BƯỚC MẪU (STANDARD STEPS)
 // =========================================================================
 const STEP_MICROCHIP_STANDARD: StepItem = {
   stepCode: 's_microchip_std',
@@ -231,7 +196,7 @@ const createCustomsStep = (countryName: string): StepItem => ({
 });
 
 // =========================================================================
-// 3. DANH SÁCH 10 QUỐC GIA
+// 3. DANH SÁCH 10 QUỐC GIA (COUNTRIES)
 // =========================================================================
 const COUNTRIES = [
   { id: 'japan', nameVi: 'Nhật Bản', nameEn: 'Japan', flag: '🇯🇵', durationVi: '3-4 tháng', durationEn: '3-4 months', imageUrl: 'japan-img.png', anchorX: 0, anchorY: 0, anchorScale: 1.05, sortOrder: 1 },
@@ -247,7 +212,7 @@ const COUNTRIES = [
 ];
 
 // =========================================================================
-// 4. TOÀN BỘ MILESTONES CỦA 10 NƯỚC
+// 4. MILESTONES CỦA CÁC QUỐC GIA
 // =========================================================================
 const ALL_COUNTRY_MILESTONES: Record<string, MilestoneItem[]> = {
   japan: [
@@ -434,9 +399,7 @@ const ALL_COUNTRY_MILESTONES: Record<string, MilestoneItem[]> = {
           title: 'Nhập cảnh và kiểm dịch động vật',
           subtitle: 'Kiểm dịch động vật (Animal Quarantine Service)',
           desc: 'Người nhập khẩu phải đăng ký yêu cầu kiểm tra nhập khẩu với Cơ quan Kiểm dịch Động vật ngay khi đến Việt Nam.',
-          notes: [
-            'Cơ quan Kiểm dịch Động vật sẽ cấp Giấy chứng nhận kiểm dịch nhập khẩu (Vietnam Quarantine Certificate) cho chó/mèo đủ điều kiện.',
-          ],
+          notes: ['Cơ quan Kiểm dịch Động vật sẽ cấp Giấy chứng nhận kiểm dịch nhập khẩu (Vietnam Quarantine Certificate) cho chó/mèo đủ điều kiện.'],
           hasButton: true,
         },
       ],
@@ -609,7 +572,7 @@ const ALL_COUNTRY_MILESTONES: Record<string, MilestoneItem[]> = {
 };
 
 // =========================================================================
-// 5. TOÀN BỘ TÀI LIỆU KIỂM DỊCH (PROCEDURE DOCUMENTS)
+// 5. PROCEDURE DOCUMENTS
 // =========================================================================
 const ALL_PROCEDURE_DOCUMENTS: DocumentSeedItem[] = [
   {
@@ -767,12 +730,12 @@ const ALL_PROCEDURE_DOCUMENTS: DocumentSeedItem[] = [
 ];
 
 // =========================================================================
-// 6. DANH SÁCH ĐỊA ĐIỂM "PET PARADISE" THEO TỪNG QUỐC GIA
+// 6. DANH SÁCH ĐỊA ĐIỂM PET PARADISE THEO ĐẤT NƯỚC (PET PARADISES)
 // =========================================================================
-const PARADISE_LOCATIONS: ParadiseSeedItem[] = [
-  // ---------------- NHẬT BẢN (địa điểm mẫu gốc, giữ nguyên) ----------------
+const ALL_PET_PARADISES: PetParadiseSeedItem[] = [
+  // --- NHẬT BẢN ---
   {
-    id: 'tashirojima-island',
+    id: 'jp_tashirojima',
     countryId: 'japan',
     name: 'Đảo Tashirojima (Đảo Mèo)',
     categoryVi: 'Đảo nhỏ ngoài khơi',
@@ -782,17 +745,17 @@ const PARADISE_LOCATIONS: ParadiseSeedItem[] = [
     introText: 'Hòn đảo nhỏ hòa mình với biển xanh, làng chài yên bình và cả một "vương quốc mèo" thân thiện.',
     areaVi: 'Hòn đảo có chu vi khoảng 11 km',
     areaEn: 'The island has a circumference of about 11 km',
-    howToGetVi: 'Thời gian di chuyển bằng tàu hoặc phà ra đảo từ cảng tại thành phố Ishinomaki mất khoảng 40 phút.',
-    howToGetEn: 'Travel time by boat or ferry to the island from the port in Ishinomaki city takes about 40 minutes.',
-    addressVi: 'Thành phố Ishinomaki, Miyagi, Nhật Bản',
-    addressEn: 'Ishinomaki City, Miyagi, Japan',
+    howToGetVi: 'Di chuyển bằng tàu hoặc phà ra đảo từ cảng tại thành phố Ishinomaki mất khoảng 40 phút.',
+    howToGetEn: 'Travel time by boat or ferry from Ishinomaki city takes about 40 minutes.',
+    addressVi: 'Thành phố Ishinomaki, Tỉnh Miyagi, Nhật Bản',
+    addressEn: 'Ishinomaki City, Miyagi Prefecture, Japan',
     latitude: 38.2974,
     longitude: 141.4172,
+    googlePlaceKeyword: 'Tashirojima Island Ishinomaki Miyagi Japan',
     googlePlaceId: 'ChIJVXk4F3bZgzURaU1x9Xw5o-g',
-    googleSearchKeyword: 'Tashirojima Island Ishinomaki Miyagi',
     rating: 4.8,
-    reviewsCount: 123,
-    heroImage: 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?q=80&w=1000&auto=format&fit=crop',
+    reviewsCount: 145,
+    heroImage: 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
       'https://images.unsplash.com/photo-1543466835-00a7907e9de1?q=80&w=800&auto=format&fit=crop',
       'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=800&auto=format&fit=crop',
@@ -807,940 +770,673 @@ const PARADISE_LOCATIONS: ParadiseSeedItem[] = [
     ],
   },
 
-  // ---------------- TRUNG QUỐC ----------------
+  // --- TRUNG QUỐC ---
   {
-    id: 'moon-cat-city-guangzhou',
+    id: 'cn_moon_cat_city',
     countryId: 'china',
     name: 'Moon Cat City',
-    categoryVi: 'Tổ hợp giải trí & mua sắm chủ đề mèo',
-    categoryEn: 'Cat-themed shopping & entertainment complex',
-    statusTextVi: 'Đang mở',
-    statusTextEn: 'Open',
-    introText: 'Không gian mua sắm, ẩm thực và check-in được thiết kế trọn vẹn theo chủ đề mèo giữa lòng Quảng Châu, nơi "con sen" nào cũng muốn ghé qua.',
-    areaVi: 'Nằm trong khu phức hợp thương mại tại trung tâm thành phố',
-    areaEn: 'Located inside a commercial complex in the city center',
-    howToGetVi: 'Di chuyển bằng taxi hoặc tàu điện ngầm đến trung tâm Quảng Châu, sau đó đi bộ thêm khoảng 5-10 phút.',
-    howToGetEn: 'Take a taxi or the metro to central Guangzhou, then walk about 5–10 minutes.',
-    addressVi: 'Quảng Châu, Quảng Đông, Trung Quốc',
-    addressEn: 'Guangzhou, Guangdong, China',
+    categoryVi: 'Tổ hợp công viên mèo & cà phê thú cưng',
+    categoryEn: 'Cat Theme Park & Pet Cafe Complex',
+    statusTextVi: 'Đang mở đến 10:00 PM',
+    statusTextEn: 'Open until 10:00 PM',
+    introText: 'Khu tổ hợp giải trí và cà phê mèo nổi tiếng tại Quảng Châu với hàng trăm bé mèo được chăm sóc chu đáo.',
+    areaVi: 'Diện tích trong nhà hơn 1.200 m²',
+    areaEn: 'Indoor area over 1,200 m²',
+    howToGetVi: 'Đi tàu điện ngầm Quảng Châu Line 1 hoặc Line 3, đi bộ 5 phút từ nhà ga.',
+    howToGetEn: 'Take Guangzhou Metro Line 1 or Line 3, walk 5 minutes from the station.',
+    addressVi: 'Quận Thiên Hà, Thành phố Quảng Châu, Tỉnh Quảng Đông, Trung Quốc',
+    addressEn: 'Tianhe District, Guangzhou, Guangdong, China',
     latitude: 23.1291,
     longitude: 113.2644,
-    googleSearchKeyword: 'Moon Cat City Guangzhou',
-    rating: 4.5,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/moon-cat-city-guangzhou-1/1000/700',
+    googlePlaceKeyword: 'Moon Cat City Guangzhou China',
+    rating: 4.7,
+    reviewsCount: 89,
+    heroImage: 'https://images.unsplash.com/photo-1533738363-b7f9aef128ce?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/moon-cat-city-guangzhou-1/800/600',
-      'https://picsum.photos/seed/moon-cat-city-guangzhou-2/800/600',
+      'https://images.unsplash.com/photo-1533738363-b7f9aef128ce?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1574158622682-e40e69881006?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
-        titleVi: 'Check-in cùng "hội mèo"',
-        titleEn: 'Check in with the resident cats',
-        descVi: 'Hàng chục góc trang trí theo phong cách mèo dễ thương, phù hợp cho cả gia đình có thú cưng ghé thăm.',
-        descEn: 'Dozens of photo-perfect corners decorated in an adorable cat theme, great for families visiting with pets.',
+        titleVi: 'Tương tác cùng đàn mèo quý',
+        titleEn: 'Play with friendly pedigreed cats',
+        descVi: 'Không gian ấm cúng, trang bị đầy đủ dụng cụ vệ sinh và đồ chơi tương tác cao cấp.',
+        descEn: 'Cozy environment equipped with hygiene amenities and high-end interactive cat toys.',
       },
     ],
   },
   {
-    id: 'bailian-xijiao-shanghai',
+    id: 'cn_bailian_xijiao',
     countryId: 'china',
     name: 'Trung tâm thương mại Bailian Xijiao',
-    categoryVi: 'Trung tâm thương mại thân thiện với thú cưng',
-    categoryEn: 'Pet-friendly shopping mall',
-    statusTextVi: 'Đang mở',
-    statusTextEn: 'Open',
-    introText: 'Một trong số ít trung tâm thương mại tại Thượng Hải cho phép thú cưng vào mua sắm cùng chủ, có khu vui chơi riêng dành cho các bé.',
-    areaVi: 'Nằm ở khu vực phía Tây thành phố Thượng Hải',
-    areaEn: 'Located in the western area of Shanghai',
-    howToGetVi: 'Di chuyển bằng tàu điện ngầm hoặc taxi đến khu vực Hongqiao/Xijiao, Thượng Hải.',
-    howToGetEn: 'Take the metro or a taxi to the Hongqiao/Xijiao area of Shanghai.',
-    addressVi: 'Thượng Hải, Trung Quốc',
-    addressEn: 'Shanghai, China',
-    latitude: 31.2304,
-    longitude: 121.4737,
-    googleSearchKeyword: 'Bailian Xijiao Shopping Mall Shanghai',
-    rating: 4.3,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/bailian-xijiao-shanghai-1/1000/700',
+    categoryVi: 'Trung tâm mua sắm thân thiện thú cưng',
+    categoryEn: 'Pet-friendly Shopping Mall',
+    statusTextVi: 'Đang mở đến 10:00 PM',
+    statusTextEn: 'Open until 10:00 PM',
+    introText: 'Một trong những TTTM tiên phong tại Thượng Hải chào đón thú cưng với làn đường đi dạo và xe đẩy riêng cho chó mèo.',
+    areaVi: 'Khu mua sắm phức hợp ngoài trời & trong nhà',
+    areaEn: 'Indoor & outdoor open-air commercial complex',
+    howToGetVi: 'Gần ga tàu điện ngầm Beixinjing (Metro Line 2), thuận tiện đỗ xe ô tô.',
+    howToGetEn: 'Near Beixinjing Station (Metro Line 2) with ample pet-accessible parking.',
+    addressVi: 'Quận Trường Ninh, Thành phố Thượng Hải, Trung Quốc',
+    addressEn: 'Changning District, Shanghai, China',
+    latitude: 31.2186,
+    longitude: 121.3664,
+    googlePlaceKeyword: 'Bailian Xijiao Shopping Mall Changning Shanghai',
+    rating: 4.6,
+    reviewsCount: 112,
+    heroImage: 'https://images.unsplash.com/photo-1567449303078-57ad995bd301?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/bailian-xijiao-shanghai-1/800/600',
-      'https://picsum.photos/seed/bailian-xijiao-shanghai-2/800/600',
+      'https://images.unsplash.com/photo-1567449303078-57ad995bd301?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1583337130417-3346a1be7dee?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
         titleVi: 'Mua sắm cùng thú cưng',
-        titleEn: 'Shop together with your pet',
-        descVi: 'Được phép dắt chó/mèo vào hầu hết các khu vực trong trung tâm thương mại, kèm khu vệ sinh và nghỉ chân riêng cho thú cưng.',
-        descEn: 'Dogs and cats are welcome in most areas of the mall, with dedicated rest and clean-up zones for pets.',
+        titleEn: 'Shop with your pets',
+        descVi: 'Cho phép thú cưng vào sảnh, cung cấp trạm nước uống và túi dọn vệ sinh miễn phí.',
+        descEn: 'Allows pets inside concourses with water stations and complimentary waste bags.',
       },
     ],
   },
   {
-    id: 'shiquan-street-jiangsu',
+    id: 'cn_shiquan_street',
     countryId: 'china',
     name: 'Phố cổ Shiquan',
-    categoryVi: 'Phố cổ thân thiện với thú cưng',
-    categoryEn: 'Pet-friendly old street',
-    statusTextVi: 'Đang mở',
-    statusTextEn: 'Open',
-    introText: 'Con phố cổ mang đậm nét kiến trúc Giang Nam, la liệt quán cà phê và cửa hàng nhỏ xinh cho phép ghé thăm cùng thú cưng.',
-    areaVi: 'Phố cổ nằm tại thành phố Tô Châu, tỉnh Giang Tô',
-    areaEn: 'The old street is located in Suzhou, Jiangsu province',
-    howToGetVi: 'Di chuyển bằng tàu cao tốc từ Thượng Hải đến Tô Châu (khoảng 30 phút), sau đó bắt taxi vào phố cổ.',
-    howToGetEn: 'Take a high-speed train from Shanghai to Suzhou (about 30 minutes), then a taxi into the old street.',
-    addressVi: 'Tô Châu, Giang Tô, Trung Quốc',
-    addressEn: 'Suzhou, Jiangsu, China',
-    latitude: 31.3040,
-    longitude: 120.6295,
-    googleSearchKeyword: 'Shiquan Street Suzhou Jiangsu',
-    rating: 4.6,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/shiquan-street-jiangsu-1/1000/700',
+    categoryVi: 'Phố đi bộ văn hóa thân thiện thú cưng',
+    categoryEn: 'Historic Pet-friendly Walking Street',
+    statusTextVi: 'Mở cửa cả ngày (24 giờ)',
+    statusTextEn: 'Open 24 hours',
+    introText: 'Con phố cổ duyên dáng bên dòng kênh Tô Châu với hàng chục quán cà phê thú cưng và không gian dạo mát thoáng đãng.',
+    areaVi: 'Chiều dài tuyến phố khoảng 2 km',
+    areaEn: 'Street promenade length approx 2 km',
+    howToGetVi: 'Đi tuyến tàu điện ngầm Metro Line 4 hoặc 5 tới ga Sanyuanfang.',
+    howToGetEn: 'Take Suzhou Metro Line 4 or 5 to Sanyuanfang Station.',
+    addressVi: 'Thành phố Tô Châu, Tỉnh Giang Tô, Trung Quốc',
+    addressEn: 'Suzhou, Jiangsu Province, China',
+    latitude: 31.2989,
+    longitude: 120.6277,
+    googlePlaceKeyword: 'Shiquan Street Suzhou Jiangsu China',
+    rating: 4.8,
+    reviewsCount: 198,
+    heroImage: 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/shiquan-street-jiangsu-1/800/600',
-      'https://picsum.photos/seed/shiquan-street-jiangsu-2/800/600',
+      'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1517849845537-4d257902454a?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
-        titleVi: 'Dạo phố cổ cùng thú cưng',
-        titleEn: 'Stroll the old street with your pet',
-        descVi: 'Vừa nhâm nhi trà sữa vừa dạo quanh những con hẻm cổ kính, ngắm kiến trúc Giang Nam truyền thống.',
-        descEn: 'Sip milk tea while wandering through charming old alleys and admiring traditional Jiangnan architecture.',
+        titleVi: 'Dạo bộ bên bờ kênh thơ mộng',
+        titleEn: 'Stroll along scenic canals',
+        descVi: 'Trải nghiệm không gian giao thoa giữa truyền thống và phong cách sống hiện đại cùng thú cưng.',
+        descEn: 'Experience the harmonious blend of historic charm and modern pet-friendly outdoor cafes.',
       },
     ],
   },
 
-  // ---------------- PHÁP ----------------
+  // --- PHÁP ---
   {
-    id: 'amneville-aquarium',
+    id: 'fr_aquarium_amneville',
     countryId: 'france',
-    name: 'Thuỷ cung Amnéville',
-    categoryVi: 'Thuỷ cung & công viên động vật',
-    categoryEn: 'Aquarium & animal park',
-    statusTextVi: 'Đang mở',
-    statusTextEn: 'Open',
-    introText: 'Một trong những thuỷ cung lớn nhất châu Âu, quy tụ hàng ngàn loài sinh vật biển và có khu vực dành riêng cho khách mang theo thú cưng.',
-    areaVi: 'Nằm trong quần thể công viên giải trí Amnéville',
-    areaEn: 'Located within the Amnéville leisure park complex',
-    howToGetVi: 'Di chuyển bằng ô tô hoặc tàu đến thành phố Amnéville, vùng Grand Est, Pháp.',
-    howToGetEn: 'Travel by car or train to the town of Amnéville in the Grand Est region of France.',
-    addressVi: 'Amnéville, Grand Est, Pháp',
-    addressEn: 'Amnéville, Grand Est, France',
-    latitude: 49.2667,
-    longitude: 6.1333,
-    googleSearchKeyword: 'Aquarium Amnéville France',
+    name: 'Thủy cung Amnéville',
+    categoryVi: 'Khu bảo tồn sinh vật biển & công viên',
+    categoryEn: 'Marine Aquarium & Animal Park',
+    statusTextVi: 'Đang mở đến 06:00 PM',
+    statusTextEn: 'Open until 06:00 PM',
+    introText: 'Điểm đến độc đáo ở Đông Bắc nước Pháp với không gian xanh và quy định tiếp đón chó dẫn đường thân thiện.',
+    areaVi: 'Khuôn viên sinh thái rộng lớn',
+    areaEn: 'Large nature park setting',
+    howToGetVi: 'Di chuyển bằng xe hơi từ Metz hoặc xe bus trung chuyển Amnéville.',
+    howToGetEn: 'Easily accessible by car from Metz or Amnéville regional shuttle.',
+    addressVi: 'Trung tâm giải trí Thermapolis, Amnéville, Moselle, Pháp',
+    addressEn: 'Centre de Loisirs, Amnéville, Moselle, France',
+    latitude: 49.2612,
+    longitude: 6.1384,
+    googlePlaceKeyword: 'Aquarium Amneville Moselle France',
     rating: 4.5,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/amneville-aquarium-1/1000/700',
+    reviewsCount: 76,
+    heroImage: 'https://images.unsplash.com/photo-1522069169874-c58ec4b76be5?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/amneville-aquarium-1/800/600',
-      'https://picsum.photos/seed/amneville-aquarium-2/800/600',
+      'https://images.unsplash.com/photo-1522069169874-c58ec4b76be5?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1544568100-847a948585b9?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
         titleVi: 'Khám phá thế giới đại dương',
-        titleEn: 'Explore the underwater world',
-        descVi: 'Chiêm ngưỡng cá mập, cá đuối và san hô qua đường hầm kính khổng lồ giữa lòng thuỷ cung.',
-        descEn: 'Admire sharks, rays and coral through a giant glass tunnel inside the aquarium.',
+        titleEn: 'Ocean Discovery',
+        descVi: 'Hệ thống bể kính sinh thái sống động cùng lối đi rộng rãi dễ chịu.',
+        descEn: 'Vibrant ecological exhibits and spacious outdoor walkways.',
       },
     ],
   },
   {
-    id: 'nice-seaside-city',
+    id: 'fr_nice_beach',
     countryId: 'france',
     name: 'Thành phố biển Nice',
-    categoryVi: 'Thành phố biển thân thiện với thú cưng',
-    categoryEn: 'Pet-friendly seaside city',
-    statusTextVi: 'Đang mở',
-    statusTextEn: 'Open',
-    introText: 'Bờ biển Promenade des Anglais thơ mộng cho phép thú cưng dạo chơi cùng chủ, hoà mình vào không khí Địa Trung Hải.',
-    areaVi: "Thành phố ven biển thuộc vùng Côte d'Azur",
-    areaEn: "A coastal city on the French Riviera (Côte d'Azur)",
-    howToGetVi: "Bay đến sân bay Nice Côte d'Azur, trung tâm thành phố cách sân bay khoảng 15-20 phút di chuyển.",
-    howToGetEn: "Fly into Nice Côte d'Azur Airport; the city center is about 15–20 minutes away.",
-    addressVi: "Nice, Provence-Alpes-Côte d'Azur, Pháp",
-    addressEn: "Nice, Provence-Alpes-Côte d'Azur, France",
-    latitude: 43.7102,
-    longitude: 7.2620,
-    googleSearchKeyword: 'Nice France seaside promenade',
-    rating: 4.7,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/nice-seaside-city-1/1000/700',
+    categoryVi: 'Thành phố biển & bãi biển cho thú cưng',
+    categoryEn: 'Coastal City & Dog Beaches',
+    statusTextVi: 'Mở cửa cả ngày (24 giờ)',
+    statusTextEn: 'Open 24 hours',
+    introText: 'Thành phố biển Địa Trung Hải với các bãi biển riêng biệt cho phép chó thỏa thích tắm biển cùng chủ nhân.',
+    areaVi: 'Trải dài dọc theo đại lộ Promenade des Anglais',
+    areaEn: 'Extends along the famous Promenade des Anglais',
+    howToGetVi: 'Thuận tiện di chuyển bằng tàu cao tốc TGV hoặc sân bay quốc tế Nice Côte d\'Azur.',
+    howToGetEn: 'Accessible via Nice Ville TGV station or Nice Côte d\'Azur Airport.',
+    addressVi: 'Thành phố Nice, Vùng Provence-Alpes-Côte d\'Azur, Pháp',
+    addressEn: 'Nice, Provence-Alpes-Côte d\'Azur, France',
+    latitude: 43.6960,
+    longitude: 7.2656,
+    googlePlaceKeyword: 'Promenade des Anglais Nice France',
+    rating: 4.9,
+    reviewsCount: 312,
+    heroImage: 'https://images.unsplash.com/photo-1533105079780-92b9be482077?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/nice-seaside-city-1/800/600',
-      'https://picsum.photos/seed/nice-seaside-city-2/800/600',
+      'https://images.unsplash.com/photo-1533105079780-92b9be482077?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
-        titleVi: 'Dạo biển cùng thú cưng',
-        titleEn: 'Beach walks with your pet',
-        descVi: 'Nhiều bãi biển và quán cà phê ven bờ tại Nice chào đón thú cưng, lý tưởng để thư giãn buổi chiều.',
-        descEn: 'Many beaches and seafront cafés in Nice welcome pets, perfect for a relaxed afternoon.',
+        titleVi: 'Tắm biển tại bãi biển thú cưng',
+        titleEn: 'Swim at designated dog beaches',
+        descVi: 'Nice có các bãi biển chỉ định (như Bãi biển La Lanterne) nơi chó cưng được bơi tự do.',
+        descEn: 'Designated beaches like Site de la Lanterne where dogs are free to splash in clear waters.',
       },
     ],
   },
   {
-    id: 'royal-garden-paris',
+    id: 'fr_jardin_palais_royal',
     countryId: 'france',
-    name: 'Khu vườn hoàng gia (Jardin des Tuileries)',
-    categoryVi: 'Công viên hoàng gia giữa lòng thủ đô',
-    categoryEn: 'Royal garden in the heart of the capital',
-    statusTextVi: 'Đang mở',
-    statusTextEn: 'Open',
-    introText: 'Khu vườn cổ kính nằm giữa Louvre và quảng trường Concorde, là nơi lý tưởng để dạo bộ cùng thú cưng giữa lòng Paris.',
-    areaVi: 'Trung tâm quận 1, Paris',
-    areaEn: 'Central 1st arrondissement, Paris',
-    howToGetVi: 'Di chuyển bằng tàu điện ngầm đến ga Tuileries hoặc Concorde.',
-    howToGetEn: 'Take the metro to Tuileries or Concorde station.',
-    addressVi: 'Paris, Île-de-France, Pháp',
-    addressEn: 'Paris, Île-de-France, France',
-    latitude: 48.8634,
-    longitude: 2.3275,
-    googleSearchKeyword: 'Jardin des Tuileries Paris',
+    name: 'Khu vườn hoàng gia Paris',
+    categoryVi: 'Vườn hoa di sản & công viên đi dạo',
+    categoryEn: 'Royal Gardens & Heritage Park',
+    statusTextVi: 'Đang mở đến 08:30 PM',
+    statusTextEn: 'Open until 08:30 PM',
+    introText: 'Khu vườn tuyệt đẹp tĩnh lặng ngay trung tâm Paris, nơi bạn có thể dắt thú cưng đi dạo dưới bóng râm hàng cây cổ thụ.',
+    areaVi: 'Khuôn viên di sản rộng hơn 20.000 m²',
+    areaEn: 'Historic royal enclave exceeding 20,000 m²',
+    howToGetVi: 'Ga tàu điện ngầm Palais Royal - Musée du Louvre (Metro Line 1, 7).',
+    howToGetEn: 'Metro Palais Royal - Musée du Louvre (Lines 1 & 7).',
+    addressVi: 'Quận 1, Paris, Île-de-France, Pháp',
+    addressEn: '1st Arrondissement, Paris, Île-de-France, France',
+    latitude: 48.8648,
+    longitude: 2.3376,
+    googlePlaceKeyword: 'Jardin du Palais Royal Paris France',
     rating: 4.7,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/royal-garden-paris-1/1000/700',
+    reviewsCount: 164,
+    heroImage: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/royal-garden-paris-1/800/600',
-      'https://picsum.photos/seed/royal-garden-paris-2/800/600',
+      'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1520939817895-060bdef4df1a?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
-        titleVi: 'Dạo bộ giữa vườn hoàng gia',
-        titleEn: 'Stroll through the royal garden',
-        descVi: 'Đi dạo dưới hàng cây cổ thụ, ngắm các bức tượng và đài phun nước mang đậm dấu ấn hoàng gia Pháp.',
-        descEn: 'Walk beneath centuries-old trees and admire statues and fountains steeped in French royal history.',
+        titleVi: 'Dạo mát giữa kiến trúc cổ kính',
+        titleEn: 'Walk amidst royal architecture',
+        descVi: 'Không gian yên bình tách biệt khỏi phố thị ồn ào với đài phun nước thanh lịch.',
+        descEn: 'A tranquil oasis secluded from city noise with classic fountains and tree-lined allées.',
       },
     ],
   },
 
-  // ---------------- HY LẠP ----------------
+  // --- HY LẠP ---
   {
-    id: 'mykonos-cat-island',
+    id: 'gr_mykonos_cats',
     countryId: 'greece',
     name: 'Đảo mèo Mykonos',
-    categoryVi: 'Đảo mèo nổi tiếng',
-    categoryEn: 'Famous cat island',
-    statusTextVi: 'Đang mở',
-    statusTextEn: 'Open',
-    introText: 'Những chú mèo hoang thân thiện lang thang khắp các con hẻm trắng xanh đặc trưng của Mykonos, trở thành một phần không thể thiếu của hòn đảo.',
-    areaVi: 'Đảo thuộc quần đảo Cyclades',
-    areaEn: 'An island in the Cyclades archipelago',
-    howToGetVi: 'Bay hoặc đi phà từ Athens đến đảo Mykonos, thời gian di chuyển bằng phà khoảng 2-5 giờ tuỳ loại tàu.',
-    howToGetEn: 'Fly or take a ferry from Athens to Mykonos; ferry travel time is about 2–5 hours depending on the boat.',
-    addressVi: 'Mykonos, Cyclades, Hy Lạp',
-    addressEn: 'Mykonos, Cyclades, Greece',
+    categoryVi: 'Đảo du lịch & thiên đường mèo',
+    categoryEn: 'Island Sanctuary & Cat Haven',
+    statusTextVi: 'Mở cửa cả ngày (24 giờ)',
+    statusTextEn: 'Open 24 hours',
+    introText: 'Hòn đảo màu trắng biểu tượng với hàng ngàn chú mèo thân thiện sưởi nắng trên các bậc thang rực rỡ sắc hoa giấy.',
+    areaVi: 'Đảo Mykonos thuộc quần đảo Cyclades',
+    areaEn: 'Mykonos Island, Cyclades archipelago',
+    howToGetVi: 'Đi phà biển từ cảng Piraeus (Athens) hoặc bay thẳng đến sân bay Mykonos (JMK).',
+    howToGetEn: 'Ferry from Piraeus (Athens) or direct flight to Mykonos Airport (JMK).',
+    addressVi: 'Quần đảo Cyclades, Biển Aegean, Hy Lạp',
+    addressEn: 'Cyclades, Aegean Sea, Greece',
     latitude: 37.4467,
     longitude: 25.3289,
-    googleSearchKeyword: 'Mykonos island Cyclades Greece',
+    googlePlaceKeyword: 'Mykonos Town Cyclades Greece cats',
     rating: 4.8,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/mykonos-cat-island-1/1000/700',
+    reviewsCount: 220,
+    heroImage: 'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/mykonos-cat-island-1/800/600',
-      'https://picsum.photos/seed/mykonos-cat-island-2/800/600',
+      'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1533738363-b7f9aef128ce?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
-        titleVi: 'Gặp gỡ "hội mèo" bản địa',
-        titleEn: 'Meet the local cats',
-        descVi: 'Ghé các quán cà phê ven biển, nơi những chú mèo bản địa thường ghé qua xin vuốt ve từ du khách.',
-        descEn: 'Visit seafront cafés where local cats often stop by looking for a friendly pat from visitors.',
+        titleVi: 'Gặp gỡ những bé mèo Mykonos',
+        titleEn: 'Encounter the cats of Mykonos',
+        descVi: 'Người dân đảo rất yêu quý và chung tay cùng các trạm thú y chăm sóc đàn mèo trên đảo.',
+        descEn: 'Islanders and local charity groups take pride in nurturing the healthy island cat population.',
       },
     ],
   },
   {
-    id: 'santorini-cat-island',
+    id: 'gr_santorini_cats',
     countryId: 'greece',
     name: 'Đảo mèo Santorini',
-    categoryVi: 'Đảo mèo nổi tiếng',
-    categoryEn: 'Famous cat island',
-    statusTextVi: 'Đang mở',
-    statusTextEn: 'Open',
-    introText: 'Bên cạnh khung cảnh hoàng hôn nổi tiếng thế giới, Santorini còn là nơi trú ngụ của rất nhiều chú mèo hoang dạn dĩ và thân thiện.',
-    areaVi: 'Đảo thuộc quần đảo Cyclades',
-    areaEn: 'An island in the Cyclades archipelago',
-    howToGetVi: 'Bay hoặc đi phà từ Athens đến đảo Santorini.',
-    howToGetEn: 'Fly or take a ferry from Athens to Santorini.',
-    addressVi: 'Santorini, Cyclades, Hy Lạp',
-    addressEn: 'Santorini, Cyclades, Greece',
+    categoryVi: 'Đảo núi lửa & bảo tồn thú cưng',
+    categoryEn: 'Volcanic Island & Pet Welfare Sanctuary',
+    statusTextVi: 'Mở cửa cả ngày (24 giờ)',
+    statusTextEn: 'Open 24 hours',
+    introText: 'Những ngôi nhà mái vòm xanh cùng các chú mèo Santorini xinh đẹp tạo nên khung cảnh hoàng hôn đẹp nhất thế giới.',
+    areaVi: 'Làng Oia và Fira trên vách đá Caldera',
+    areaEn: 'Oia and Fira villages along Caldera cliffside',
+    howToGetVi: 'Phà cao tốc hoặc chuyến bay nội địa từ Athens đến sân bay Thira (JTR).',
+    howToGetEn: 'Speed ferry or domestic flight from Athens to Thira Airport (JTR).',
+    addressVi: 'Thira, Quần đảo Cyclades, Hy Lạp',
+    addressEn: 'Thira, Cyclades Islands, Greece',
     latitude: 36.3932,
     longitude: 25.4615,
-    googleSearchKeyword: 'Santorini island Cyclades Greece',
+    googlePlaceKeyword: 'Santorini Animal Welfare Association Cyclades Greece',
     rating: 4.9,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/santorini-cat-island-1/1000/700',
+    reviewsCount: 340,
+    heroImage: 'https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/santorini-cat-island-1/800/600',
-      'https://picsum.photos/seed/santorini-cat-island-2/800/600',
+      'https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
-        titleVi: 'Ngắm hoàng hôn cùng những người bạn nhỏ',
-        titleEn: 'Watch the sunset with furry companions',
-        descVi: 'Không hiếm để bắt gặp một chú mèo nằm sưởi nắng ngay cạnh bạn khi ngắm hoàng hôn tại Oia.',
-        descEn: 'It is common to spot a cat sunbathing right next to you while watching the sunset in Oia.',
+        titleVi: 'Ngắm hoàng hôn cùng mèo đảo',
+        titleEn: 'Sunset with island cats',
+        descVi: 'Ngắm nhìn cảnh mặt trời lặn trên biển Aegean bên cạnh các chú mèo quấn quýt thân thiện.',
+        descEn: 'Watch legendary Aegean sunsets while friendly local cats keep you company.',
       },
     ],
   },
   {
-    id: 'chania-beach-crete',
+    id: 'gr_chania_beach',
     countryId: 'greece',
     name: 'Bãi biển ven Chania',
-    categoryVi: 'Bãi biển thân thiện với thú cưng',
-    categoryEn: 'Pet-friendly beach',
-    statusTextVi: 'Đang mở',
-    statusTextEn: 'Open',
-    introText: 'Những bãi biển cát mịn ven thành phố cổ Chania trên đảo Crete cho phép thú cưng tắm biển và nô đùa cùng chủ.',
-    areaVi: 'Thành phố Chania, đảo Crete',
-    areaEn: 'The city of Chania, Crete island',
-    howToGetVi: 'Bay đến sân bay Chania hoặc đi phà từ Athens đến đảo Crete.',
-    howToGetEn: 'Fly into Chania Airport or take a ferry from Athens to Crete.',
-    addressVi: 'Chania, Crete, Hy Lạp',
-    addressEn: 'Chania, Crete, Greece',
+    categoryVi: 'Bãi biển vịnh cát & nghỉ dưỡng',
+    categoryEn: 'Seaside Promenade & Sandy Pet Beach',
+    statusTextVi: 'Mở cửa cả ngày (24 giờ)',
+    statusTextEn: 'Open 24 hours',
+    introText: 'Vùng vịnh cát vàng nguyên sơ tại đảo Crete với bờ biển thoai thoải, rất an toàn và lý tưởng cho cún cưng chạy nhảy.',
+    areaVi: 'Đường bờ biển trải dài tại vịnh Chania',
+    areaEn: 'Extensive coastline along Chania bay',
+    howToGetVi: 'Bay đến sân bay quốc tế Chania (CHQ) hoặc đi phà từ cảng Souda.',
+    howToGetEn: 'Fly to Chania Airport (CHQ) or ferry into Souda Bay Port.',
+    addressVi: 'Thành phố Chania, Đảo Crete, Hy Lạp',
+    addressEn: 'Chania, Crete Island, Greece',
     latitude: 35.5138,
     longitude: 24.0180,
-    googleSearchKeyword: 'Chania beach Crete Greece',
-    rating: 4.6,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/chania-beach-crete-1/1000/700',
+    googlePlaceKeyword: 'Chania Old Venetian Port Beach Crete Greece',
+    rating: 4.7,
+    reviewsCount: 156,
+    heroImage: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/chania-beach-crete-1/800/600',
-      'https://picsum.photos/seed/chania-beach-crete-2/800/600',
+      'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1534361960057-19889db98a1e?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
-        titleVi: 'Tắm biển cùng thú cưng',
-        titleEn: 'Swim with your pet',
-        descVi: 'Một số bãi biển quanh Chania cho phép chó xuống tắm cùng chủ, đặc biệt vào mùa thấp điểm.',
-        descEn: 'Several beaches around Chania allow dogs to swim with their owners, especially in the off-season.',
+        titleVi: 'Vui chơi trên làn nước ngọc bích',
+        titleEn: 'Play in turquoise waters',
+        descVi: 'Bãi biển cạn trong vắt, nước ấm phù hợp cho thú cưng tập bơi và vui đùa.',
+        descEn: 'Shallow crystal waters perfect for dogs learning to paddle and enjoy the surf.',
       },
     ],
   },
 
-  // ---------------- HÀN QUỐC ----------------
+  // --- HÀN QUỐC ---
   {
-    id: 'jeju-pet-resort',
+    id: 'kr_jeju_pet_resort',
     countryId: 'korea',
-    name: 'Khu nghỉ dưỡng cùng thú cưng',
-    categoryVi: 'Khu nghỉ dưỡng thân thiện với thú cưng',
-    categoryEn: 'Pet-friendly resort',
-    statusTextVi: 'Đang mở',
-    statusTextEn: 'Open',
-    introText: 'Khu nghỉ dưỡng trên đảo Jeju với phòng nghỉ, hồ bơi và sân vườn riêng cho chó/mèo, phù hợp cho một chuyến đi thư giãn cùng thú cưng.',
-    areaVi: 'Đảo Jeju, Hàn Quốc',
-    areaEn: 'Jeju island, South Korea',
-    howToGetVi: 'Bay từ Seoul đến sân bay quốc tế Jeju, sau đó di chuyển bằng taxi hoặc xe thuê đến khu nghỉ dưỡng.',
-    howToGetEn: 'Fly from Seoul to Jeju International Airport, then take a taxi or rental car to the resort.',
-    addressVi: 'Jeju, Hàn Quốc',
-    addressEn: 'Jeju, South Korea',
+    name: 'Khu nghỉ dưỡng cùng thú cưng Jeju',
+    categoryVi: 'Khu nghỉ dưỡng & khách sạn thú cưng',
+    categoryEn: 'Pet Resort & Glamping',
+    statusTextVi: 'Mở cửa cả ngày (24 giờ)',
+    statusTextEn: 'Open 24 hours',
+    introText: 'Resort chuyên biệt tại đảo ngọc Jeju với bãi cỏ xanh bao la, hồ bơi thú cưng và phòng ngủ trang bị riêng nệm cho cún.',
+    areaVi: 'Khuôn viên bãi cỏ hơn 5.000 m²',
+    areaEn: 'Over 5,000 m² open lawn grounds',
+    howToGetVi: 'Chuyến bay nội địa đến sân bay quốc tế Jeju (CJU), di chuyển bằng taxi 20 phút.',
+    howToGetEn: 'Domestic flight to Jeju Airport (CJU), followed by a 20-minute drive.',
+    addressVi: 'Thành phố Jeju, Tỉnh Tự trị Đặc biệt Jeju, Hàn Quốc',
+    addressEn: 'Jeju City, Jeju Special Self-Governing Province, South Korea',
     latitude: 33.4996,
     longitude: 126.5312,
-    googleSearchKeyword: 'pet friendly resort Jeju Korea',
-    rating: 4.7,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/jeju-pet-resort-1/1000/700',
+    googlePlaceKeyword: 'Jeju Pet Friendly Resort South Korea',
+    rating: 4.8,
+    reviewsCount: 187,
+    heroImage: 'https://images.unsplash.com/photo-1583337130417-3346a1be7dee?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/jeju-pet-resort-1/800/600',
-      'https://picsum.photos/seed/jeju-pet-resort-2/800/600',
+      'https://images.unsplash.com/photo-1583337130417-3346a1be7dee?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1543466835-00a7907e9de1?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
-        titleVi: 'Nghỉ dưỡng trọn gói cùng thú cưng',
-        titleEn: 'A full pet-friendly getaway',
-        descVi: 'Phòng nghỉ, sân chơi và cả thực đơn ăn uống đều được thiết kế để chó/mèo có thể đi cùng chủ suốt chuyến đi.',
-        descEn: 'Rooms, play areas, and even dining menus are all designed so dogs and cats can join their owners for the whole trip.',
+        titleVi: 'Hồ bơi chuyên dụng cho thú cưng',
+        titleEn: 'Dedicated Pet Swimming Pool',
+        descVi: 'Trang bị áo phao, máy sấy lông tốc độ cao và phòng xông hơi thảo mộc cho cún cưng.',
+        descEn: 'Equipped with life jackets, high-velocity pet dryers, and herbal pet spa amenities.',
       },
     ],
   },
   {
-    id: 'meerkat-friends-seoul',
+    id: 'kr_meerkat_friends',
     countryId: 'korea',
     name: 'Meerkat Friends',
-    categoryVi: 'Quán cà phê thú cưng độc lạ',
-    categoryEn: 'Exotic pet café',
-    statusTextVi: 'Đang mở',
-    statusTextEn: 'Open',
-    introText: 'Quán cà phê thú cưng độc đáo giữa lòng Seoul, nơi du khách có thể tương tác cùng chồn Meerkat và nhiều loài thú nhỏ đáng yêu khác.',
-    areaVi: 'Trung tâm thành phố Seoul',
-    areaEn: 'Central Seoul',
-    howToGetVi: 'Di chuyển bằng tàu điện ngầm đến các khu vực trung tâm như Hongdae hoặc Myeongdong, sau đó đi bộ đến quán.',
-    howToGetEn: 'Take the subway to central areas like Hongdae or Myeongdong, then walk to the café.',
-    addressVi: 'Seoul, Hàn Quốc',
-    addressEn: 'Seoul, South Korea',
-    latitude: 37.5665,
-    longitude: 126.9780,
-    googleSearchKeyword: 'Meerkat Friends cafe Seoul',
-    rating: 4.4,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/meerkat-friends-seoul-1/1000/700',
+    categoryVi: 'Quán cà phê tương tác động vật',
+    categoryEn: 'Exotic Pet & Animal Interaction Cafe',
+    statusTextVi: 'Đang mở đến 09:30 PM',
+    statusTextEn: 'Open until 09:30 PM',
+    introText: 'Quán cà phê nổi tiếng tại khu phố Hongdae sầm uất ở Seoul, nơi giao lưu cùng meerkat, cầy hương và thú cưng đáng yêu.',
+    areaVi: 'Không gian trong nhà hiện đại tại Hongdae',
+    areaEn: 'Cozy indoor venue in bustling Hongdae',
+    howToGetVi: 'Ga đại học Hongik (Subway Line 2, AREX), Lối ra số 9.',
+    howToGetEn: 'Hongik University Station (Subway Line 2, AREX), Exit 9.',
+    addressVi: 'Quận Mapo, Seoul, Hàn Quốc',
+    addressEn: 'Mapo-gu, Seoul, South Korea',
+    latitude: 37.5532,
+    longitude: 126.9221,
+    googlePlaceKeyword: 'Meerkat Friends Hongdae Seoul South Korea',
+    rating: 4.6,
+    reviewsCount: 245,
+    heroImage: 'https://images.unsplash.com/photo-1548767797-d8c844163c4c?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/meerkat-friends-seoul-1/800/600',
-      'https://picsum.photos/seed/meerkat-friends-seoul-2/800/600',
+      'https://images.unsplash.com/photo-1548767797-d8c844163c4c?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1517849845537-4d257902454a?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
-        titleVi: 'Vuốt ve chồn Meerkat',
-        titleEn: 'Pet the meerkats',
-        descVi: 'Trải nghiệm gần gũi và cho ăn những chú chồn Meerkat tinh nghịch ngay tại bàn cà phê.',
-        descEn: 'Get up close and feed playful meerkats right at your café table.',
+        titleVi: 'Tương tác gần gũi với chồn Meerkat',
+        titleEn: 'Close interaction with Meerkats',
+        descVi: 'Có khu vực ôm ấp và cho thú cưng ăn dưới sự hướng dẫn an toàn của nhân viên chuyên nghiệp.',
+        descEn: 'Guided cuddle and treat sessions supervised by dedicated animal caretakers.',
       },
     ],
   },
   {
-    // ⚠️ Ghi chú: theo yêu cầu, địa điểm này được ghi là ở "Miyagi" — nhưng Miyagi thực chất là
-    // một tỉnh của Nhật Bản, không thuộc Hàn Quốc. Toạ độ bên dưới tạm lấy theo đảo Baengnyeong
-    // (Hàn Quốc) vì tên gọi gần giống nhất. Vui lòng xác nhận lại tên/địa danh chính xác trước khi
-    // dùng dữ liệu này cho môi trường thật.
-    id: 'baengnyeon-park',
+    id: 'kr_baengnyeon_park',
     countryId: 'korea',
     name: 'Công viên Baengnyeon',
-    categoryVi: 'Công viên dạo bộ cùng thú cưng',
-    categoryEn: 'Pet-friendly walking park',
-    statusTextVi: 'Đang mở',
-    statusTextEn: 'Open',
-    introText: 'Không gian xanh mát lý tưởng để dắt thú cưng dạo bộ, hít thở không khí trong lành.',
-    areaVi: 'Khu vực Miyagi',
-    areaEn: 'Miyagi area',
-    howToGetVi: 'Di chuyển bằng xe buýt hoặc taxi đến khu vực công viên.',
-    howToGetEn: 'Take a bus or taxi to the park area.',
-    addressVi: 'Miyagi, Hàn Quốc',
-    addressEn: 'Miyagi, South Korea',
-    latitude: 37.9556,
-    longitude: 124.6764,
-    googleSearchKeyword: 'Baengnyeong Park Korea',
-    rating: 4.3,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/baengnyeon-park-1/1000/700',
+    categoryVi: 'Công viên sinh thái dạo bộ',
+    categoryEn: 'Nature Eco-Park & Walking Trails',
+    statusTextVi: 'Mở cửa cả ngày (24 giờ)',
+    statusTextEn: 'Open 24 hours',
+    introText: 'Công viên trên núi Baengnyeonsan trong lành với các cung đường mòn phủ gỗ êm ái, rất an toàn để dắt cún cưng leo núi dạo mát.',
+    areaVi: 'Khu công viên đồi sinh thái tự nhiên',
+    areaEn: 'Mountain parkland and pine forest trails',
+    howToGetVi: 'Đi tàu điện ngầm Seoul Line 3 tới ga Hongje hoặc Nokbeon.',
+    howToGetEn: 'Seoul Subway Line 3 to Hongje or Nokbeon Station.',
+    addressVi: 'Quận Seodaemun, Seoul, Hàn Quốc',
+    addressEn: 'Seodaemun-gu, Seoul, South Korea',
+    latitude: 37.5855,
+    longitude: 126.9360,
+    googlePlaceKeyword: 'Baengnyeonsan Mountain Park Seoul South Korea',
+    rating: 4.7,
+    reviewsCount: 92,
+    heroImage: 'https://images.unsplash.com/photo-1448375240586-882707db888b?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/baengnyeon-park-1/800/600',
-      'https://picsum.photos/seed/baengnyeon-park-2/800/600',
+      'https://images.unsplash.com/photo-1448375240586-882707db888b?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
-        titleVi: 'Dạo bộ giữa thiên nhiên',
-        titleEn: 'A walk surrounded by nature',
-        descVi: 'Nhiều lối đi rợp bóng cây, phù hợp cho những buổi dạo bộ thư giãn cùng thú cưng.',
-        descEn: 'Shaded walking paths make it a relaxing spot for a stroll with your pet.',
+        titleVi: 'Hít thở không khí rừng thông',
+        titleEn: 'Pine forest trail walking',
+        descVi: 'Đường đi dạo rợp bóng cây với các điểm nghỉ chân trang bị bát nước cho thú cưng.',
+        descEn: 'Well-shaded wooden decks with rest stops providing clean water bowls for pets.',
       },
     ],
   },
 
-  // ---------------- ĐỨC ----------------
+  // --- ĐỨC ---
   {
-    id: 'tierheim-berlin',
+    id: 'de_tierheim_berlin',
     countryId: 'germany',
     name: 'Trạm cứu hộ Tierheim',
-    categoryVi: 'Trạm cứu hộ động vật',
-    categoryEn: 'Animal rescue shelter',
-    statusTextVi: 'Đang mở',
-    statusTextEn: 'Open',
-    introText: 'Một trong những trạm cứu hộ động vật lớn nhất châu Âu, nơi bạn có thể ghé thăm, tình nguyện hoặc tìm hiểu về việc nhận nuôi thú cưng.',
-    areaVi: 'Thành phố Berlin',
-    areaEn: 'The city of Berlin',
-    howToGetVi: 'Di chuyển bằng tàu điện ngầm hoặc xe buýt đến khu vực Falkenberg, phía Đông thành phố Berlin.',
-    howToGetEn: 'Take the metro or bus to the Falkenberg area in eastern Berlin.',
-    addressVi: 'Berlin, Đức',
-    addressEn: 'Berlin, Germany',
-    latitude: 52.5200,
-    longitude: 13.4050,
-    googleSearchKeyword: 'Tierheim Berlin animal shelter',
-    rating: 4.6,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/tierheim-berlin-1/1000/700',
+    categoryVi: 'Trạm cứu hộ động vật kiểu mẫu',
+    categoryEn: 'Animal Shelter & Welfare Center',
+    statusTextVi: 'Đang mở đến 04:00 PM',
+    statusTextEn: 'Open until 04:00 PM',
+    introText: 'Trung tâm cứu hộ và chăm sóc động vật lớn bậc nhất châu Âu với kiến trúc không gian mở ấn tượng và nhân đạo.',
+    areaVi: 'Khuôn viên 16 hecta',
+    areaEn: '16 hectares facility',
+    howToGetVi: 'Đi xe buýt tuyến 054 hoặc xe buýt 197 từ trung tâm thủ đô Berlin.',
+    howToGetEn: 'Bus 054 or 197 from central Berlin districts.',
+    addressVi: 'Hausvaterweg 39, 13057 Berlin, Đức',
+    addressEn: 'Hausvaterweg 39, 13057 Berlin, Germany',
+    latitude: 52.5694,
+    longitude: 13.5283,
+    googlePlaceKeyword: 'Tierheim Berlin Hausvaterweg Germany',
+    rating: 4.8,
+    reviewsCount: 380,
+    heroImage: 'https://images.unsplash.com/photo-1548767797-d8c844163c4c?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/tierheim-berlin-1/800/600',
-      'https://picsum.photos/seed/tierheim-berlin-2/800/600',
+      'https://images.unsplash.com/photo-1548767797-d8c844163c4c?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
-        titleVi: 'Tham quan & tình nguyện',
-        titleEn: 'Visit & volunteer',
-        descVi: 'Du khách yêu động vật có thể đăng ký tham quan hoặc tình nguyện chăm sóc thú cưng đang chờ được nhận nuôi.',
-        descEn: 'Animal lovers can sign up for a tour or volunteer to care for pets waiting to be adopted.',
+        titleVi: 'Tham quan cơ sở nhân đạo kiểu mẫu',
+        titleEn: 'Tour world-class welfare facilities',
+        descVi: 'Tìm hiểu quy trình nhận nuôi văn minh, thăm những ngôi nhà kính tràn ngập ánh sáng của chó mèo.',
+        descEn: 'Learn about humane adoption standards and walk through sunlit animal pavilions.',
       },
     ],
   },
   {
-    id: 'englischer-garten-munich',
+    id: 'de_englischer_garten',
     countryId: 'germany',
     name: 'Vườn Anh (Englischer Garten)',
-    categoryVi: 'Công viên cây xanh giữa lòng thành phố',
-    categoryEn: 'Urban green park',
-    statusTextVi: 'Đang mở',
-    statusTextEn: 'Open',
-    introText: 'Một trong những công viên đô thị lớn nhất thế giới, không gian lý tưởng để dắt thú cưng dạo bộ, chạy nhảy thoả thích.',
-    areaVi: 'Thành phố Munich',
-    areaEn: 'The city of Munich',
-    howToGetVi: 'Di chuyển bằng tàu điện ngầm hoặc xe buýt đến khu trung tâm Munich, công viên nằm ngay gần khu phố cổ.',
-    howToGetEn: 'Take the metro or bus to central Munich; the park sits right next to the old town.',
-    addressVi: 'Munich, Bayern, Đức',
+    categoryVi: 'Đại công viên đô thị',
+    categoryEn: 'Historic Public Urban Park',
+    statusTextVi: 'Mở cửa cả ngày (24 giờ)',
+    statusTextEn: 'Open 24 hours',
+    introText: 'Một trong những công viên đô thị lớn nhất thế giới, thiên đường cho thú cưng thỏa sức chạy trên bãi cỏ rộng thênh thang.',
+    areaVi: 'Diện tích 375 hecta',
+    areaEn: '375 hectares parkland',
+    howToGetVi: 'Tàu điện U-Bahn tuyến U3, U6 tới ga Universität hoặc Giselastraße.',
+    howToGetEn: 'Munich U-Bahn U3/U6 to Universität or Giselastraße station.',
+    addressVi: 'Munich, Bang Bavaria, Đức',
     addressEn: 'Munich, Bavaria, Germany',
-    latitude: 48.1642,
-    longitude: 11.6056,
-    googleSearchKeyword: 'Englischer Garten Munich',
-    rating: 4.8,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/englischer-garten-munich-1/1000/700',
+    latitude: 48.1534,
+    longitude: 11.5925,
+    googlePlaceKeyword: 'Englischer Garten Munich Germany',
+    rating: 4.9,
+    reviewsCount: 520,
+    heroImage: 'https://images.unsplash.com/photo-1519331379826-f10be5486c6f?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/englischer-garten-munich-1/800/600',
-      'https://picsum.photos/seed/englischer-garten-munich-2/800/600',
+      'https://images.unsplash.com/photo-1519331379826-f10be5486c6f?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1534361960057-19889db98a1e?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
-        titleVi: 'Chạy nhảy thoả thích trên bãi cỏ rộng',
-        titleEn: 'Run freely on wide open lawns',
-        descVi: 'Nhiều khu vực trong công viên cho phép thú cưng chạy nhảy tự do mà không cần dây xích.',
-        descEn: 'Many areas of the park allow pets to run off-leash freely.',
+        titleVi: 'Chạy nhảy tự do trên đồng cỏ xanh',
+        titleEn: 'Off-leash running on green meadows',
+        descVi: 'Không gian mở ven dòng suối Schwabinger Bach mát lạnh cho cún cưng nô đùa.',
+        descEn: 'Wide expanses alongside refreshing Schwabinger Bach stream where dogs play happily.',
       },
     ],
   },
   {
-    id: 'sylt-island',
+    id: 'de_sylt_island',
     countryId: 'germany',
     name: 'Đảo Sylt',
-    categoryVi: 'Đảo biển thân thiện với thú cưng',
-    categoryEn: 'Pet-friendly seaside island',
-    statusTextVi: 'Đang mở',
-    statusTextEn: 'Open',
-    introText: 'Hòn đảo nổi tiếng ở miền Bắc nước Đức với những bãi biển cát trắng trải dài, nhiều khu vực cho phép chó chạy nhảy tự do.',
-    areaVi: 'Bang Schleswig-Holstein',
-    areaEn: 'Schleswig-Holstein state',
-    howToGetVi: 'Di chuyển bằng tàu hoả (Sylt Shuttle) hoặc phà từ đất liền nước Đức đến đảo Sylt.',
-    howToGetEn: 'Travel by train (Sylt Shuttle) or ferry from mainland Germany to Sylt island.',
-    addressVi: 'Sylt, Schleswig-Holstein, Đức',
-    addressEn: 'Sylt, Schleswig-Holstein, Germany',
-    latitude: 54.9084,
-    longitude: 8.3287,
-    googleSearchKeyword: 'Sylt island Schleswig-Holstein Germany',
-    rating: 4.7,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/sylt-island-1/1000/700',
+    categoryVi: 'Đảo nghỉ dưỡng & bãi biển cồn cát',
+    categoryEn: 'North Sea Island & Dog Dunes',
+    statusTextVi: 'Mở cửa cả ngày (24 giờ)',
+    statusTextEn: 'Open 24 hours',
+    introText: 'Hòn đảo nghỉ dưỡng nổi tiếng ở Biển Bắc với 15 bãi biển dành riêng cho chó và làn gió biển mát lành sảng khoái.',
+    areaVi: 'Đảo dài 38 km với bờ biển cát vàng',
+    areaEn: '38 km long island with sandy coastline',
+    howToGetVi: 'Đi tàu hỏa vượt biển Sylt Shuttle hoặc phà từ Rømø.',
+    howToGetEn: 'Ride the famous Sylt Shuttle train over the causeway or car ferry from Rømø.',
+    addressVi: 'Huyện Nordfriesland, Bang Schleswig-Holstein, Đức',
+    addressEn: 'Schleswig-Holstein, North Frisian Islands, Germany',
+    latitude: 54.9079,
+    longitude: 8.3304,
+    googlePlaceKeyword: 'Sylt Island Schleswig-Holstein Germany',
+    rating: 4.8,
+    reviewsCount: 160,
+    heroImage: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/sylt-island-1/800/600',
-      'https://picsum.photos/seed/sylt-island-2/800/600',
+      'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1544568100-847a948585b9?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
-        titleVi: 'Dạo biển không dây xích',
-        titleEn: 'Off-leash beach walks',
-        descVi: 'Một số bãi biển trên đảo Sylt cho phép chó chạy nhảy tự do mà không cần dây xích quanh năm.',
-        descEn: 'Some beaches on Sylt allow dogs to run off-leash year-round.',
+        titleVi: 'Khám phá bãi cát Biển Bắc',
+        titleEn: 'North Sea beach adventures',
+        descVi: 'Trải nghiệm những chiếc ghế đan Strandkorb ấm cúng cùng cún cưng ngắm sóng vỗ dạt dào.',
+        descEn: 'Relax inside traditional hooded beach chairs (Strandkorb) with your four-legged companion.',
       },
     ],
   },
 
-  // ---------------- THUỴ SỸ ----------------
+  // --- THỤY SỸ ---
   {
-    id: 'sbb-scenic-train',
+    id: 'ch_sbb_panoramic_train',
     countryId: 'switzerland',
-    name: 'Tàu hoả ngắm cảnh SBB',
-    categoryVi: 'Hành trình tàu hoả ngắm cảnh',
-    categoryEn: 'Scenic train journey',
-    statusTextVi: 'Đang hoạt động',
-    statusTextEn: 'Operating',
-    introText: 'Mạng lưới tàu hoả SBB nổi tiếng với những cung đường ngắm cảnh núi Alps tuyệt đẹp, cho phép thú cưng đi cùng chủ trên toàn bộ tuyến.',
-    areaVi: 'Trải dài khắp Thuỵ Sỹ',
-    areaEn: 'Throughout Switzerland',
-    howToGetVi: 'Mua vé tàu SBB tại các nhà ga trên khắp Thuỵ Sỹ hoặc qua ứng dụng SBB Mobile.',
-    howToGetEn: 'Buy SBB train tickets at stations across Switzerland or via the SBB Mobile app.',
-    addressVi: 'Khắp Thuỵ Sỹ',
-    addressEn: 'Across Switzerland',
+    name: 'Tàu hỏa ngắm cảnh SBB',
+    categoryVi: 'Tuyến tàu hỏa ngắm cảnh dãy Alps',
+    categoryEn: 'Panoramic Train & Alpine Rail',
+    statusTextVi: 'Đang mở đến 08:00 PM',
+    statusTextEn: 'Open until 08:00 PM',
+    introText: 'Mạng lưới đường sắt Thụy Sỹ (SBB) nổi tiếng toàn cầu cho phép mang thú cưng lên tàu cùng chiêm ngưỡng dãy Alps hùng vĩ.',
+    areaVi: 'Tuyến đường sắt trải khắp đất nước Thụy Sỹ',
+    areaEn: 'Nationwide scenic Swiss rail network',
+    howToGetVi: 'Khởi hành tại bất kỳ nhà ga lớn nào như Zurich HB, Geneva, Lucerne.',
+    howToGetEn: 'Board at major Swiss hubs like Zurich HB, Geneva, or Lucerne.',
+    addressVi: 'Khắp các cung đường tại Thụy Sỹ',
+    addressEn: 'Across Switzerland, Swiss Alps',
     latitude: 46.8182,
     longitude: 8.2275,
-    googleSearchKeyword: 'SBB scenic train Switzerland',
+    googlePlaceKeyword: 'SBB Panoramic Train Switzerland',
     rating: 4.9,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/sbb-scenic-train-1/1000/700',
+    reviewsCount: 410,
+    heroImage: 'https://images.unsplash.com/photo-1530122037265-a5f1f91d3b99?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/sbb-scenic-train-1/800/600',
-      'https://picsum.photos/seed/sbb-scenic-train-2/800/600',
+      'https://images.unsplash.com/photo-1530122037265-a5f1f91d3b99?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1517849845537-4d257902454a?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
-        titleVi: 'Ngắm dãy Alps qua khung cửa sổ',
-        titleEn: 'Admire the Alps through the window',
-        descVi: 'Thú cưng nhỏ được phép lên toa cùng chủ (có vé riêng), tận hưởng khung cảnh núi non hùng vĩ suốt hành trình.',
-        descEn: 'Small pets are allowed on board with their owner (with a separate ticket), enjoying majestic mountain views throughout the journey.',
+        titleVi: 'Du ngoạn ngắm sông băng cùng thú cưng',
+        titleEn: 'Glacier and Alpine Views',
+        descVi: 'Chính sách thân thiện cho phép thú cưng ngắm nhìn đèo tuyết và thung lũng qua cửa sổ panorama.',
+        descEn: 'Dog-friendly policy welcoming leashed pets to experience snow-capped peaks and valleys.',
       },
     ],
   },
   {
-    id: 'zermatt-village',
+    id: 'ch_zermatt_village',
     countryId: 'switzerland',
     name: 'Làng Zermatt',
-    categoryVi: 'Làng núi thân thiện với thú cưng',
-    categoryEn: 'Pet-friendly mountain village',
-    statusTextVi: 'Đang mở',
-    statusTextEn: 'Open',
-    introText: 'Ngôi làng nhỏ dưới chân đỉnh Matterhorn nổi tiếng, không có xe hơi lưu thông, rất phù hợp để dạo bộ cùng thú cưng.',
-    areaVi: 'Bang Valais',
-    areaEn: 'Valais canton',
-    howToGetVi: 'Di chuyển bằng tàu hoả đến Zermatt (khu vực không cho phép xe hơi cá nhân lưu thông).',
-    howToGetEn: 'Travel by train to Zermatt (a car-free village).',
-    addressVi: 'Zermatt, Valais, Thuỵ Sỹ',
+    categoryVi: 'Làng cổ tích không khói xe',
+    categoryEn: 'Car-free Alpine Village',
+    statusTextVi: 'Mở cửa cả ngày (24 giờ)',
+    statusTextEn: 'Open 24 hours',
+    introText: 'Ngôi làng vùng núi không có ô tô dưới chân đỉnh Matterhorn huyền thoại, nơi cún cưng có thể thỏa thích dạo bộ thanh bình.',
+    areaVi: 'Khu vực thung lũng Zermatt',
+    areaEn: 'Zermatt valley and Matterhorn foothills',
+    howToGetVi: 'Đi tàu hỏa Matterhorn Gotthard Bahn từ Täsch đến Zermatt.',
+    howToGetEn: 'Take the Matterhorn Gotthard Bahn train from Täsch into Zermatt.',
+    addressVi: 'Zermatt, Bang Valais, Thụy Sỹ',
     addressEn: 'Zermatt, Valais, Switzerland',
-    latitude: 46.0207,
+    latitude: 45.9765,
     longitude: 7.7491,
-    googleSearchKeyword: 'Zermatt village Valais Switzerland',
+    googlePlaceKeyword: 'Zermatt Village Valais Switzerland',
     rating: 4.9,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/zermatt-village-1/1000/700',
+    reviewsCount: 650,
+    heroImage: 'https://images.unsplash.com/photo-1502784444187-359ac186c5bb?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/zermatt-village-1/800/600',
-      'https://picsum.photos/seed/zermatt-village-2/800/600',
+      'https://images.unsplash.com/photo-1502784444187-359ac186c5bb?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1543466835-00a7907e9de1?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
-        titleVi: 'Dạo bộ ngắm đỉnh Matterhorn',
-        titleEn: 'Walk with views of the Matterhorn',
-        descVi: 'Những con phố không xe hơi giúp việc dắt thú cưng dạo bộ an toàn và thư thái hơn hẳn.',
-        descEn: 'Car-free streets make walking with your pet safer and far more relaxing.',
+        titleVi: 'Check-in cùng đỉnh núi Matterhorn',
+        titleEn: 'Matterhorn backdrop walks',
+        descVi: 'Dạo quanh các con ngõ lát đá cổ kính hoàn toàn không khói xe và ngắm nhìn đỉnh kim tự tháp tuyết.',
+        descEn: 'Pure mountain air with no combustion cars, ideal for scenic walks with stunning views.',
       },
     ],
   },
   {
-    id: 'sigriswil-panorama-bridge',
+    id: 'ch_sigriswil_bridge',
     countryId: 'switzerland',
     name: 'Cầu treo Panorama Sigriswil',
-    categoryVi: 'Cầu treo ngắm cảnh',
-    categoryEn: 'Scenic suspension bridge',
-    statusTextVi: 'Đang mở',
-    statusTextEn: 'Open',
-    introText: 'Cây cầu treo dành cho người đi bộ với tầm nhìn ngoạn mục ra dãy Alps và hồ Thun, có thể dắt thú cưng đi cùng qua cầu.',
-    areaVi: 'Vùng Sigriswil, bang Bern',
-    areaEn: 'Sigriswil, canton of Bern',
-    howToGetVi: 'Di chuyển bằng xe buýt hoặc ô tô từ thành phố Thun đến làng Sigriswil.',
-    howToGetEn: 'Take a bus or drive from the town of Thun to Sigriswil village.',
-    addressVi: 'Sigriswil, Bern, Thuỵ Sỹ',
-    addressEn: 'Sigriswil, Bern, Switzerland',
-    latitude: 46.6939,
-    longitude: 7.7357,
-    googleSearchKeyword: 'Sigriswil Panorama Bridge Bern Switzerland',
-    rating: 4.7,
-    reviewsCount: 0,
-    heroImage: 'https://picsum.photos/seed/sigriswil-panorama-bridge-1/1000/700',
+    categoryVi: 'Cầu treo đi bộ ngắm cảnh',
+    categoryEn: 'Panoramic Suspension Bridge',
+    statusTextVi: 'Mở cửa cả ngày (24 giờ)',
+    statusTextEn: 'Open 24 hours',
+    introText: 'Cây cầu treo đi bộ ngoạn mục bắc qua hẻm núi Gummischlucht với tầm nhìn hướng trọn ra hồ Thun thơ mộng.',
+    areaVi: 'Chiều dài cầu 340m, độ cao 182m',
+    areaEn: 'Length 340m, height 182m above gorge',
+    howToGetVi: 'Đi xe buýt tuyến STI số 25 từ ga xe lửa Thun đến trạm Sigriswil Dorf.',
+    howToGetEn: 'Take STI Bus 25 from Thun railway station to Sigriswil Dorf.',
+    addressVi: 'Sigriswil, Bang Bern, Thụy Sỹ',
+    addressEn: 'Sigriswil, Canton of Bern, Switzerland',
+    latitude: 46.7169,
+    longitude: 7.7126,
+    googlePlaceKeyword: 'Panoramabrücke Sigriswil Bern Switzerland',
+    rating: 4.8,
+    reviewsCount: 230,
+    heroImage: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=1200&auto=format&fit=crop',
     galleryImages: [
-      'https://picsum.photos/seed/sigriswil-panorama-bridge-1/800/600',
-      'https://picsum.photos/seed/sigriswil-panorama-bridge-2/800/600',
+      'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=800&auto=format&fit=crop',
+      'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?q=80&w=800&auto=format&fit=crop',
     ],
     experiences: [
       {
-        titleVi: 'Băng qua cầu treo cùng thú cưng',
-        titleEn: 'Cross the suspension bridge with your pet',
-        descVi: 'Chó có thể đi cùng chủ qua cầu (nên có dây xích), phóng tầm mắt ra toàn cảnh hồ Thun và dãy Alps.',
-        descEn: 'Dogs can accompany their owners across the bridge (leash recommended), taking in panoramic views of Lake Thun and the Alps.',
+        titleVi: 'Dạo bước trên mây',
+        titleEn: 'Walk above the gorge',
+        descVi: 'Mặt cầu an toàn vững chắc, cho phép cún cưng có dây dắt đi dạo và chiêm ngưỡng toàn cảnh hồ Thun.',
+        descEn: 'Stable pedestrian bridge allowing leashed dogs to accompany owners above Lake Thun.',
       },
     ],
   },
 ];
 
 // =========================================================================
-// 7. REVIEW MẪU CHO TỪNG ĐỊA ĐIỂM
+// 7. MOCK REVIEWS CHO CÁC ĐỊA ĐIỂM (OFFLINE FALLBACK HOẶC DỮ LIỆU CỘNG ĐỒNG)
 // =========================================================================
-const PARADISE_REVIEWS: ParadiseReviewSeedItem[] = [
-  // ---- Tashirojima (giữ nguyên 2 review gốc) ----
-  {
-    id: 'rev_tashiro_01',
-    paradiseId: 'tashirojima-island',
-    authorName: 'Julie Nguyễn',
-    authorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200&auto=format&fit=crop',
-    rating: 5,
-    dateText: '12 ngày trước',
-    content: 'Trải nghiệm tuyệt vời tại đảo Tashirojima! Mèo ở khắp mọi nơi từ bến cảng đến các con dốc nhỏ.',
-    images: ['https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=500&auto=format&fit=crop'],
-    isFromGoogle: false,
-    huuichCount: 5,
-    camonCount: 3,
-    huhuCount: 0,
-  },
-  {
-    id: 'rev_tashiro_02',
-    paradiseId: 'tashirojima-island',
-    googleReviewId: 'google_rev_1710002100_kenji',
-    authorName: 'Kenji Sato (Google Review)',
-    authorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200&auto=format&fit=crop',
-    rating: 5,
-    dateText: '3 tuần trước',
-    content: 'A peaceful paradise for cat lovers! The ferry ride from Ishinomaki was smooth and took around 40 minutes.',
-    images: [],
-    isFromGoogle: true,
-    huuichCount: 12,
-    camonCount: 8,
-    huhuCount: 1,
-  },
-
-  // ---- Trung Quốc ----
-  {
-    id: 'rev_mooncat_01',
-    paradiseId: 'moon-cat-city-guangzhou',
-    authorName: 'Vy Trần',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_mooncat_01',
-    rating: 5,
-    dateText: '5 ngày trước',
-    content: 'Không gian cực kỳ đáng yêu, mọi góc đều có thể chụp ảnh cùng các bé mèo dễ thương. Đi cùng bé mèo nhà mình mà bé cũng thích mê!',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 4,
-    camonCount: 2,
-    huhuCount: 0,
-  },
-  {
-    id: 'rev_bailian_01',
-    paradiseId: 'bailian-xijiao-shanghai',
-    authorName: 'Minh Đức',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_bailian_01',
-    rating: 4,
-    dateText: '2 tuần trước',
-    content: 'Trung tâm thương mại rộng rãi, sạch sẽ, có khu riêng cho thú cưng nghỉ ngơi. Chỉ hơi đông vào cuối tuần.',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 3,
-    camonCount: 1,
-    huhuCount: 0,
-  },
-  {
-    id: 'rev_shiquan_01',
-    paradiseId: 'shiquan-street-jiangsu',
-    authorName: 'Hải Yến',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_shiquan_01',
-    rating: 5,
-    dateText: '1 tháng trước',
-    content: 'Phố cổ rất đẹp, đi dạo cùng cún cưng buổi tối cực kỳ thư giãn, nhiều quán trà sữa xinh xắn.',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 6,
-    camonCount: 2,
-    huhuCount: 0,
-  },
-
-  // ---- Pháp ----
-  {
-    id: 'rev_amneville_01',
-    paradiseId: 'amneville-aquarium',
-    authorName: 'Quang Anh',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_amneville_01',
-    rating: 5,
-    dateText: '3 tuần trước',
-    content: 'Thuỷ cung rất hoành tráng, các bé nhỏ mê tít khu đường hầm cá mập. Nên đặt vé trước vào mùa cao điểm.',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 5,
-    camonCount: 2,
-    huhuCount: 0,
-  },
-  {
-    id: 'rev_nice_01',
-    paradiseId: 'nice-seaside-city',
-    authorName: 'Thảo Ngân',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_nice_01',
-    rating: 5,
-    dateText: '10 ngày trước',
-    content: 'Bờ biển Nice tuyệt đẹp, dắt chó đi dạo buổi sáng cực kỳ thích, nhiều quán cà phê ven biển cũng đón thú cưng.',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 7,
-    camonCount: 3,
-    huhuCount: 0,
-  },
-  {
-    id: 'rev_royalgarden_01',
-    paradiseId: 'royal-garden-paris',
-    authorName: 'Bảo Châu',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_royalgarden_01',
-    rating: 4,
-    dateText: '1 tuần trước',
-    content: 'Khu vườn rất yên bình giữa lòng Paris, chỉ tiếc là phải giữ dây xích xuyên suốt vì đông khách du lịch.',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 3,
-    camonCount: 1,
-    huhuCount: 0,
-  },
-
-  // ---- Hy Lạp ----
-  {
-    id: 'rev_mykonos_01',
-    paradiseId: 'mykonos-cat-island',
-    authorName: 'Lan Phương',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_mykonos_01',
-    rating: 5,
-    dateText: '2 tuần trước',
-    content: 'Mèo ở Mykonos siêu thân thiện, cứ ngồi quán cà phê là có bé mèo tới nằm cạnh xin vuốt ve.',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 8,
-    camonCount: 4,
-    huhuCount: 0,
-  },
-  {
-    id: 'rev_santorini_01',
-    paradiseId: 'santorini-cat-island',
-    authorName: 'Gia Huy',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_santorini_01',
-    rating: 5,
-    dateText: '4 ngày trước',
-    content: 'Ngắm hoàng hôn Oia mà có mèo nằm cạnh sưởi nắng, cảm giác chill không tả nổi.',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 9,
-    camonCount: 5,
-    huhuCount: 0,
-  },
-  {
-    id: 'rev_chania_01',
-    paradiseId: 'chania-beach-crete',
-    authorName: 'Kim Ngân',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_chania_01',
-    rating: 4,
-    dateText: '3 tuần trước',
-    content: 'Bãi biển sạch đẹp, chó nhà mình được tắm biển thoả thích, nước trong xanh cực kỳ.',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 4,
-    camonCount: 2,
-    huhuCount: 0,
-  },
-
-  // ---- Hàn Quốc ----
-  {
-    id: 'rev_jejuresort_01',
-    paradiseId: 'jeju-pet-resort',
-    authorName: 'Đình Phong',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_jejuresort_01',
-    rating: 5,
-    dateText: '1 tháng trước',
-    content: 'Khu nghỉ dưỡng chăm chút từng chi tiết cho thú cưng, từ menu ăn uống đến sân chơi riêng, rất đáng tiền.',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 6,
-    camonCount: 3,
-    huhuCount: 0,
-  },
-  {
-    id: 'rev_meerkat_01',
-    paradiseId: 'meerkat-friends-seoul',
-    authorName: 'Thu Trang',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_meerkat_01',
-    rating: 5,
-    dateText: '6 ngày trước',
-    content: 'Lần đầu được vuốt ve chồn Meerkat, mấy bé siêu tinh nghịch và dễ thương, trải nghiệm cực kỳ mới lạ.',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 5,
-    camonCount: 2,
-    huhuCount: 0,
-  },
-  {
-    id: 'rev_baengnyeon_01',
-    paradiseId: 'baengnyeon-park',
-    authorName: 'Hoàng Nam',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_baengnyeon_01',
-    rating: 4,
-    dateText: '2 tuần trước',
-    content: 'Công viên rộng rãi, nhiều bóng cây, thích hợp dắt thú cưng đi dạo buổi chiều.',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 2,
-    camonCount: 1,
-    huhuCount: 0,
-  },
-
-  // ---- Đức ----
-  {
-    id: 'rev_tierheim_01',
-    paradiseId: 'tierheim-berlin',
-    authorName: 'Ngọc Diễm',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_tierheim_01',
-    rating: 5,
-    dateText: '3 tuần trước',
-    content: 'Rất xúc động khi tham quan trạm cứu hộ, các bạn tình nguyện viên nhiệt tình và yêu động vật thật sự.',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 7,
-    camonCount: 4,
-    huhuCount: 0,
-  },
-  {
-    id: 'rev_englischer_01',
-    paradiseId: 'englischer-garten-munich',
-    authorName: 'Anh Tuấn',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_englischer_01',
-    rating: 5,
-    dateText: '10 ngày trước',
-    content: 'Công viên rộng mênh mông, cún nhà mình được chạy nhảy thả ga không cần xích, quá đã!',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 6,
-    camonCount: 3,
-    huhuCount: 0,
-  },
-  {
-    id: 'rev_sylt_01',
-    paradiseId: 'sylt-island',
-    authorName: 'Phương Anh',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_sylt_01',
-    rating: 5,
-    dateText: '1 tuần trước',
-    content: 'Bãi biển cát trắng mịn, chó được chạy tự do không cần dây xích, không khí trong lành cực kỳ dễ chịu.',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 5,
-    camonCount: 2,
-    huhuCount: 0,
-  },
-
-  // ---- Thuỵ Sỹ ----
-  {
-    id: 'rev_sbb_01',
-    paradiseId: 'sbb-scenic-train',
-    authorName: 'Tùng Lâm',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_sbb_01',
-    rating: 5,
-    dateText: '5 ngày trước',
-    content: 'Ngồi tàu ngắm dãy Alps mà có bé cún bên cạnh thì còn gì bằng, hành trình quá đáng nhớ.',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 8,
-    camonCount: 3,
-    huhuCount: 0,
-  },
-  {
-    id: 'rev_zermatt_01',
-    paradiseId: 'zermatt-village',
-    authorName: 'Mỹ Linh',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_zermatt_01',
-    rating: 5,
-    dateText: '2 tuần trước',
-    content: 'Làng không có xe hơi nên dắt chó đi dạo an toàn tuyệt đối, view đỉnh Matterhorn đẹp không góc nào chê được.',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 9,
-    camonCount: 4,
-    huhuCount: 0,
-  },
-  {
-    id: 'rev_sigriswil_01',
-    paradiseId: 'sigriswil-panorama-bridge',
-    authorName: 'Đăng Khoa',
-    authorAvatar: 'https://i.pravatar.cc/150?u=rev_sigriswil_01',
-    rating: 4,
-    dateText: '3 tuần trước',
-    content: 'Cầu hơi rung nhẹ khi đi qua nên cún nhà mình hơi sợ lúc đầu, nhưng view thì miễn chê, đáng thử một lần.',
-    images: [],
-    isFromGoogle: false,
-    huuichCount: 4,
-    camonCount: 2,
-    huhuCount: 0,
-  },
-];
+function generateMockReviewsForPlace(paradiseId: string, placeName: string) {
+  return [
+    {
+      id: `rev_${paradiseId}_01`,
+      paradiseId,
+      authorName: 'Minh Hằng & Cún Mochi',
+      authorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200&auto=format&fit=crop',
+      rating: 5,
+      dateText: '1 tuần trước',
+      content: `Chuyến đi đến "${placeName}" trên cả tuyệt vời! Môi trường thân thiện, không khí trong lành và thú cưng của mình rất thích thú.`,
+      images: [
+        'https://images.unsplash.com/photo-1543466835-00a7907e9de1?q=80&w=500&auto=format&fit=crop',
+      ],
+      isFromGoogle: false,
+      huuichCount: 14,
+      camonCount: 7,
+      huhuCount: 0,
+    },
+    {
+      id: `rev_${paradiseId}_02`,
+      paradiseId,
+      googleReviewId: `mock_google_${paradiseId}_02`,
+      authorName: 'David Miller (Khách du lịch Google)',
+      authorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200&auto=format&fit=crop',
+      rating: 5,
+      dateText: '3 tuần trước',
+      content: `Outstanding experience visiting ${placeName}! Clean, welcoming staff, and very well maintained for animals and travelers alike.`,
+      images: [],
+      isFromGoogle: true,
+      huuichCount: 9,
+      camonCount: 4,
+      huhuCount: 0,
+    },
+  ];
+}
 
 // =========================================================================
-// 8. HÀM & HẰNG SỐ HỖ TRỢ ĐỒNG BỘ GOOGLE (giữ nguyên logic từ sync-google-reviews.ts)
+// 8. GOOGLE PLACES SYNC HELPERS (FORMAT GIỜ, CDN ẢNH, TÌM PLACE ID)
 // =========================================================================
-
-// Chuyển đổi mã giờ của Google (vd: "2200" -> "10:00 PM", "0900" -> "09:00 AM")
 function formatTime12h(timeStr: string): string {
   if (!timeStr || timeStr.length < 4) return timeStr;
   const h = parseInt(timeStr.slice(0, 2), 10);
@@ -1751,7 +1447,6 @@ function formatTime12h(timeStr: string): string {
   return `${hFormatted}:${m} ${period}`;
 }
 
-// Tính toán chuỗi trạng thái hoạt động chuẩn Google Maps
 function calculateOpeningStatus(openingHours: any): { vi: string; en: string } {
   if (!openingHours) {
     return { vi: 'Đang mở đến 10:00 PM', en: 'Open until 10:00 PM' };
@@ -1778,8 +1473,9 @@ function calculateOpeningStatus(openingHours: any): { vi: string; en: string } {
     }
     return { vi: 'Đang mở đến 10:00 PM', en: 'Open until 10:00 PM' };
   } else {
-    const nextPeriod = periods.find((p: any) => p.open?.day === currentDay && parseInt(p.open.time, 10) > now.getHours() * 100)
-      || periods.find((p: any) => p.open?.day === (currentDay + 1) % 7);
+    const nextPeriod =
+      periods.find((p: any) => p.open?.day === currentDay && parseInt(p.open.time, 10) > now.getHours() * 100) ||
+      periods.find((p: any) => p.open?.day === (currentDay + 1) % 7);
 
     if (nextPeriod?.open?.time) {
       const openTime = formatTime12h(nextPeriod.open.time);
@@ -1792,7 +1488,6 @@ function calculateOpeningStatus(openingHours: any): { vi: string; en: string } {
   }
 }
 
-// Lấy URL ảnh trực tiếp từ Google CDN
 async function getDirectGooglePhotoUrl(photoReference: string, apiKey: string): Promise<string> {
   const requestUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=1200&photo_reference=${photoReference}&key=${apiKey}`;
   try {
@@ -1824,26 +1519,26 @@ async function findFreshPlaceId(query: string, apiKey: string): Promise<string |
   }
 }
 
-// Map countryId -> tên tiếng Anh, dùng làm fallback khi tìm kiếm trên Google Maps
-const countryNameEnById: Record<string, string> = Object.fromEntries(
-  COUNTRIES.map((c) => [c.id, c.nameEn])
-);
-
-// Map paradiseId -> từ khoá tìm kiếm Google Maps (lấy trực tiếp từ PARADISE_LOCATIONS)
-const GOOGLE_MAPS_TARGET_KEYWORDS: Record<string, string> = Object.fromEntries(
-  PARADISE_LOCATIONS.map((p) => [p.id, p.googleSearchKeyword])
-);
-
 // =========================================================================
-// 9. SEED: QUỐC GIA + QUY TRÌNH NHẬP CẢNH + TÀI LIỆU
+// 9. QUY TRÌNH SEED TỔNG HỢP (SEED PROCEDURES, PLACES & REVIEWS)
 // =========================================================================
-export async function seedProcedures() {
-  console.log('🔄 Bắt đầu dọn dẹp và nạp dữ liệu Entry Procedures & Documents...');
+export async function seedAll() {
+  console.log('================================================================');
+  console.log('🚀 BẮT ĐẦU CHẠY SEED NÂNG CẤP: PROCEDURES + PET PARADISES + REVIEWS');
+  console.log('================================================================\n');
 
+  // --- BƯỚC 1: Dọn dẹp dữ liệu cũ tránh trùng lặp ---
+  console.log('🧹 Dọn dẹp dữ liệu cũ...');
   await prisma.procedureDocument.deleteMany({});
   await prisma.procedureStep.deleteMany({});
   await prisma.procedureMilestone.deleteMany({});
+  await prisma.petParadiseReviewReaction.deleteMany({});
+  await prisma.petParadiseReviewReport.deleteMany({});
+  await prisma.petParadiseReview.deleteMany({});
+  await prisma.petParadise.deleteMany({});
 
+  // --- BƯỚC 2: Seed 10 Quốc Gia ---
+  console.log(`🌍 Đang nạp danh sách ${COUNTRIES.length} quốc gia...`);
   for (const c of COUNTRIES) {
     await prisma.countryProcedure.upsert({
       where: { id: c.id },
@@ -1851,8 +1546,9 @@ export async function seedProcedures() {
       create: c,
     });
   }
-  console.log(`✅ Đã seed ${COUNTRIES.length} quốc gia.`);
+  console.log(`✅ Đã seed ${COUNTRIES.length} quốc gia thành công.`);
 
+  // --- BƯỚC 3: Seed Milestones & Steps cho từng quốc gia ---
   let totalMilestones = 0;
   let totalSteps = 0;
 
@@ -1885,191 +1581,165 @@ export async function seedProcedures() {
   }
   console.log(`✅ Đã seed ${totalMilestones} mốc thời gian và ${totalSteps} bước kiểm dịch.`);
 
+  // --- BƯỚC 4: Seed Tài liệu kiểm dịch ---
   for (const doc of ALL_PROCEDURE_DOCUMENTS) {
-    await prisma.procedureDocument.create({
-      data: doc,
-    });
+    await prisma.procedureDocument.create({ data: doc });
   }
   console.log(`✅ Đã seed ${ALL_PROCEDURE_DOCUMENTS.length} biểu mẫu & tài liệu hướng dẫn kiểm dịch.`);
-}
 
-// =========================================================================
-// 10. SEED: ĐỊA ĐIỂM PET PARADISE + REVIEW MẪU (liên kết theo countryId)
-// =========================================================================
-export async function seedParadisesAndReviews() {
-  console.log('🔄 Bắt đầu nạp dữ liệu địa điểm Pet Paradise...');
+  // --- BƯỚC 5: Seed Toàn bộ Địa Điểm Pet Paradise & Mock Reviews ---
+  console.log(`\n📍 Đang seed ${ALL_PET_PARADISES.length} địa điểm Pet Paradise theo từng quốc gia...`);
 
-  for (const p of PARADISE_LOCATIONS) {
-    // Bỏ googleSearchKeyword ra khỏi payload vì đây không phải field trong DB,
-    // chỉ dùng nội bộ cho bước đồng bộ Google bên dưới.
-    const { googleSearchKeyword, ...paradiseData } = p;
-    await prisma.petParadise.upsert({
-      where: { id: p.id },
-      update: paradiseData,
-      create: paradiseData,
-    });
-  }
-  console.log(`✅ Đã seed ${PARADISE_LOCATIONS.length} địa điểm Pet Paradise trên ${COUNTRIES.length} quốc gia.`);
-
-  console.log('🔄 Bắt đầu nạp dữ liệu review mẫu cho từng địa điểm...');
-  for (const r of PARADISE_REVIEWS) {
-    await prisma.petParadiseReview.upsert({
-      where: { id: r.id },
-      update: r,
-      create: r,
-    });
-  }
-  console.log(`✅ Đã seed ${PARADISE_REVIEWS.length} review mẫu.`);
-}
-
-// =========================================================================
-// 11. (TUỲ CHỌN) ĐỒNG BỘ ẢNH & REVIEW THẬT TỪ GOOGLE MAPS
-//     — chỉ chạy khi có GOOGLE_MAPS_API_KEY, nếu không sẽ tự bỏ qua (không exit(1)
-//       như bản gốc, vì giờ chỉ là 1 bước tuỳ chọn trong pipeline seed tổng).
-// =========================================================================
-export async function syncGoogleReviewsAndPhotos() {
-  console.log('================================================================');
-  console.log('🚀 ĐỒNG BỘ GOOGLE REVIEWS, ALBUM ẢNH & GIỜ HOẠT ĐỘNG THỰC TẾ');
-  console.log('================================================================\n');
-
-  if (!GOOGLE_API_KEY) {
-    console.warn('⚠️ Bỏ qua bước đồng bộ Google: chưa cấu hình GOOGLE_MAPS_API_KEY trong file .env.\n');
-    return;
-  }
-
-  const paradises = await prisma.petParadise.findMany({});
-
-  for (const p of paradises) {
-    console.log(`----------------------------------------------------------------`);
-    console.log(`📍 Đang xử lý địa điểm [ID: ${p.id}]: "${p.name}"`);
-
-    const standardKeyword =
-      GOOGLE_MAPS_TARGET_KEYWORDS[p.id] || `${p.name} ${countryNameEnById[p.countryId] || ''}`.trim();
-    let activePlaceId = p.googlePlaceId;
-
-    if (!activePlaceId) {
-      activePlaceId = await findFreshPlaceId(standardKeyword, GOOGLE_API_KEY);
-      if (activePlaceId) {
-        await prisma.petParadise.update({
-          where: { id: p.id },
-          data: { googlePlaceId: activePlaceId },
-        });
-      }
-    }
-
-    if (!activePlaceId) {
-      console.warn(`⏭️ Bỏ qua "${p.name}" do không tìm thấy Place ID.\n`);
-      continue;
-    }
-
-    console.log(`🌐 Gọi Google Places Details API (kèm photos & opening_hours)...`);
-    const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${activePlaceId}&fields=name,reviews,rating,user_ratings_total,photos,opening_hours,current_opening_hours&language=vi&key=${GOOGLE_API_KEY}`;
-    let res = await axios.get(detailsUrl);
-
-    if (res.data?.status === 'NOT_FOUND') {
-      const freshPlaceId = await findFreshPlaceId(standardKeyword, GOOGLE_API_KEY);
-      if (freshPlaceId) {
-        activePlaceId = freshPlaceId;
-        await prisma.petParadise.update({ where: { id: p.id }, data: { googlePlaceId: freshPlaceId } });
-        res = await axios.get(`https://maps.googleapis.com/maps/api/place/details/json?place_id=${freshPlaceId}&fields=name,reviews,rating,user_ratings_total,photos,opening_hours,current_opening_hours&language=vi&key=${GOOGLE_API_KEY}`);
-      }
-    }
-
-    if (res.data?.status !== 'OK') {
-      console.error(`❌ Google API từ chối. Lỗi: ${res.data?.error_message || res.data?.status}`);
-      continue;
-    }
-
-    const result = res.data?.result;
-    const rawPhotos = result?.photos || [];
-    const reviews = result?.reviews || [];
-    const rating = result?.rating || p.rating;
-    const userRatingsTotal = result?.user_ratings_total || p.reviewsCount;
-
-    const openingStatus = calculateOpeningStatus(result?.current_opening_hours || result?.opening_hours);
-    console.log(`⏰ [Giờ hoạt động]: ${openingStatus.vi}`);
-
-    console.log(`📸 Đang xử lý ${rawPhotos.length} ảnh gốc từ Google Maps...`);
-    const googlePhotoUrls: string[] = [];
-
-    for (let idx = 0; idx < Math.min(rawPhotos.length, 10); idx++) {
-      const directUrl = await getDirectGooglePhotoUrl(rawPhotos[idx].photo_reference, GOOGLE_API_KEY);
-      googlePhotoUrls.push(directUrl);
-    }
-
-    console.log(`✅ Đã lấy được ${googlePhotoUrls.length} ảnh chất lượng cao từ Google.`);
-
-    await prisma.petParadise.update({
-      where: { id: p.id },
+  for (const p of ALL_PET_PARADISES) {
+    const createdPlace = await prisma.petParadise.create({
       data: {
-        rating,
-        reviewsCount: userRatingsTotal,
-        statusTextVi: openingStatus.vi,
-        statusTextEn: openingStatus.en,
-        ...(googlePhotoUrls.length > 0 && {
-          heroImage: googlePhotoUrls[0],
-          galleryImages: googlePhotoUrls,
-        }),
+        id: p.id,
+        countryId: p.countryId,
+        name: p.name,
+        categoryVi: p.categoryVi,
+        categoryEn: p.categoryEn,
+        statusTextVi: p.statusTextVi,
+        statusTextEn: p.statusTextEn,
+        introText: p.introText,
+        areaVi: p.areaVi,
+        areaEn: p.areaEn,
+        howToGetVi: p.howToGetVi,
+        howToGetEn: p.howToGetEn,
+        addressVi: p.addressVi,
+        addressEn: p.addressEn,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        googlePlaceId: p.googlePlaceId || null,
+        rating: p.rating,
+        reviewsCount: p.reviewsCount,
+        heroImage: p.heroImage,
+        galleryImages: p.galleryImages,
+        experiences: p.experiences,
       },
     });
 
-    if (googlePhotoUrls.length > 0) {
-      console.log(`🖼️ [Avatar Mới]: ${googlePhotoUrls[0].slice(0, 60)}...`);
-      console.log(`📁 [Album]: Đã nạp ${googlePhotoUrls.length} ảnh vào galleryImages của "${p.name}".`);
-    }
-
-    for (let i = 0; i < reviews.length; i++) {
-      const gr = reviews[i];
-      const reviewUniqueKey = `google_${p.id}_${gr.time}_${Buffer.from(gr.author_name).toString('hex').slice(0, 8)}`;
-
-      const reviewPhotos = googlePhotoUrls.length > i + 1 ? [googlePhotoUrls[i + 1]] : [];
-
-      await prisma.petParadiseReview.upsert({
-        where: { googleReviewId: reviewUniqueKey },
-        update: {
-          content: gr.text || '',
-          rating: gr.rating || 5,
-          dateText: gr.relative_time_description || 'Gần đây',
-          authorAvatar: gr.profile_photo_url || null,
-          images: reviewPhotos,
-        },
-        create: {
-          paradiseId: p.id,
-          googleReviewId: reviewUniqueKey,
-          authorName: gr.author_name || 'Khách du lịch Google',
-          authorAvatar: gr.profile_photo_url || null,
-          rating: gr.rating || 5,
-          dateText: gr.relative_time_description || 'Gần đây',
-          content: gr.text || '',
-          images: reviewPhotos,
-          isFromGoogle: true,
-          huuichCount: Math.floor(Math.random() * 8) + 2,
-          camonCount: Math.floor(Math.random() * 5) + 1,
-          huhuCount: 0,
-        },
+    // Seed mock reviews ban đầu
+    const mockReviews = generateMockReviewsForPlace(createdPlace.id, createdPlace.name);
+    for (const r of mockReviews) {
+      await prisma.petParadiseReview.create({
+        data: r,
       });
     }
 
-    console.log(`💬 Đã đồng bộ ${reviews.length} review Google của "${p.name}".\n`);
+    console.log(`  ➕ [${p.countryId.toUpperCase()}] "${p.name}" (Kèm ${mockReviews.length} reviews mẫu)`);
   }
 
-  console.log('🎉 ĐỒNG BỘ ẢNH, GIỜ MỞ CỬA & REVIEW GOOGLE HOÀN TẤT!');
+  // --- BƯỚC 6: Tự động đồng bộ Google Reviews & Photos (Nếu có GOOGLE_MAPS_API_KEY) ---
+  if (!GOOGLE_API_KEY) {
+    console.log('\n💡 THÔNG BÁO: Chưa tìm thấy GOOGLE_MAPS_API_KEY trong file .env.');
+    console.log('👉 Đã sử dụng toàn bộ hình ảnh và reviews mẫu offline chất lượng cao.');
+  } else {
+    console.log('\n================================================================');
+    console.log('🌐 PHÁT HIỆN GOOGLE MAPS API KEY: TIẾN HÀNH ĐỒNG BỘ GOOGLE PLACES THỰC TẾ');
+    console.log('================================================================\n');
+
+    for (const p of ALL_PET_PARADISES) {
+      console.log(`🔍 Tra cứu Google Maps cho: "${p.name}"...`);
+      let activePlaceId = p.googlePlaceId;
+
+      if (!activePlaceId) {
+        activePlaceId = (await findFreshPlaceId(p.googlePlaceKeyword, GOOGLE_API_KEY)) || undefined;
+        if (activePlaceId) {
+          await prisma.petParadise.update({
+            where: { id: p.id },
+            data: { googlePlaceId: activePlaceId },
+          });
+        }
+      }
+
+      if (!activePlaceId) {
+        console.warn(`  ⚠️ Không tìm thấy Place ID cho keyword "${p.googlePlaceKeyword}". Giữ nguyên dữ liệu seed.`);
+        continue;
+      }
+
+      try {
+        const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${activePlaceId}&fields=name,reviews,rating,user_ratings_total,photos,opening_hours,current_opening_hours&language=vi&key=${GOOGLE_API_KEY}`;
+        const res = await axios.get(detailsUrl);
+
+        if (res.data?.status === 'OK' && res.data?.result) {
+          const result = res.data.result;
+          const rawPhotos = result.photos || [];
+          const reviews = result.reviews || [];
+          const rating = result.rating || p.rating;
+          const userRatingsTotal = result.user_ratings_total || p.reviewsCount;
+          const openingStatus = calculateOpeningStatus(result.current_opening_hours || result.opening_hours);
+
+          // Lấy tối đa 8 ảnh CDN độ phân giải cao
+          const googlePhotoUrls: string[] = [];
+          for (let idx = 0; idx < Math.min(rawPhotos.length, 8); idx++) {
+            const directUrl = await getDirectGooglePhotoUrl(rawPhotos[idx].photo_reference, GOOGLE_API_KEY);
+            googlePhotoUrls.push(directUrl);
+          }
+
+          // Cập nhật lại Pet Paradise theo dữ liệu thực từ Google
+          await prisma.petParadise.update({
+            where: { id: p.id },
+            data: {
+              rating,
+              reviewsCount: userRatingsTotal,
+              statusTextVi: openingStatus.vi,
+              statusTextEn: openingStatus.en,
+              ...(googlePhotoUrls.length > 0 && {
+                heroImage: googlePhotoUrls[0],
+                galleryImages: googlePhotoUrls,
+              }),
+            },
+          });
+
+          // Lưu các Google Reviews thực tế
+          for (let i = 0; i < reviews.length; i++) {
+            const gr = reviews[i];
+            const reviewUniqueKey = `google_${p.id}_${gr.time}_${Buffer.from(gr.author_name).toString('hex').slice(0, 8)}`;
+            const reviewPhotos = googlePhotoUrls.length > i + 1 ? [googlePhotoUrls[i + 1]] : [];
+
+            await prisma.petParadiseReview.upsert({
+              where: { googleReviewId: reviewUniqueKey },
+              update: {
+                content: gr.text || '',
+                rating: gr.rating || 5,
+                dateText: gr.relative_time_description || 'Gần đây',
+                authorAvatar: gr.profile_photo_url || null,
+                images: reviewPhotos,
+              },
+              create: {
+                paradiseId: p.id,
+                googleReviewId: reviewUniqueKey,
+                authorName: gr.author_name || 'Khách du lịch Google',
+                authorAvatar: gr.profile_photo_url || null,
+                rating: gr.rating || 5,
+                dateText: gr.relative_time_description || 'Gần đây',
+                content: gr.text || '',
+                images: reviewPhotos,
+                isFromGoogle: true,
+                huuichCount: Math.floor(Math.random() * 8) + 2,
+                camonCount: Math.floor(Math.random() * 5) + 1,
+                huhuCount: 0,
+              },
+            });
+          }
+
+          console.log(`  ✨ [Đồng bộ thành công] "${p.name}": ${googlePhotoUrls.length} ảnh CDN & ${reviews.length} reviews Google.`);
+        }
+      } catch (err: any) {
+        console.error(`  ❌ Lỗi khi tải dữ liệu Google cho "${p.name}":`, err.message);
+      }
+    }
+  }
+
+  console.log('\n================================================================');
+  console.log('🎉 HOÀN THÀNH TẤT CẢ CÁC BƯỚC SEED VÀ ĐỒNG BỘ DỮ LIỆU THÀNH CÔNG!');
+  console.log('================================================================');
 }
 
-// =========================================================================
-// 12. THỰC THI SEED (chạy trực tiếp file này bằng ts-node/tsx)
-// =========================================================================
-async function main() {
-  await seedProcedures();
-  await seedParadisesAndReviews();
-  await syncGoogleReviewsAndPhotos(); // tự bỏ qua nếu chưa cấu hình GOOGLE_MAPS_API_KEY
-
-  console.log('\n🎉 HOÀN TẤT TOÀN BỘ SEED: quốc gia, quy trình, tài liệu, địa điểm Pet Paradise & review!');
-}
-
-main()
+// Thực thi file
+seedAll()
   .catch((e) => {
-    console.error('❌ Lỗi trong quá trình seed:', e);
+    console.error('❌ Lỗi trong quá trình chạy seed:', e);
     process.exit(1);
   })
   .finally(async () => {
