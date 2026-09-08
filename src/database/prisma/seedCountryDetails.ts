@@ -1,6 +1,5 @@
 // prisma/seedCountryDetails.ts
 import { PrismaClient } from '@prisma/client';
-import Redis from 'ioredis'; // hoặc client bạn đang dùng trong RedisService
 
 const prisma = new PrismaClient();
 
@@ -264,10 +263,6 @@ export async function seedCountryDetails() {
     }
 
     console.log('Done seeding country details!');
-    const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
-    await redis.del('procedures:countries');
-    await redis.quit();
-    console.log('🧹 Cleared Redis cache: procedures:countries');
 }
 seedCountryDetails()
     .catch((e) => {
