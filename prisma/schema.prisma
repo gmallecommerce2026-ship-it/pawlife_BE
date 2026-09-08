@@ -431,6 +431,18 @@ model CountryProcedure {
   anchorY     Float    @default(0)
   anchorScale Float    @default(1.05)
   sortOrder   Int      @default(0)
+  subtitleVi String? @db.Text
+  subtitleEn String? @db.Text
+  prepDaysVi   String? // VD: "220 ngày"
+  prepDaysEn   String? // VD: "220 days"
+  costLevelVi  String? // VD: "Cao", "Trung bình", "Thấp"
+  costLevelEn  String? // VD: "High", "Medium", "Low"
+  friendlyVi   String? // VD: "Rất tốt", "Tốt", "Vừa", "Thấp"
+  friendlyEn   String? // VD: "Excellent", "Good", "Moderate", "Low"
+  descriptionVi String? @db.Text
+  descriptionEn String? @db.Text
+  introGalleryImages Json?
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
