@@ -31,6 +31,7 @@ import { SupportModule } from './modules/support/support.module';
 import { ShelterTeamModule } from './modules/shelter-team/shelter-team.module';
 import { PetParadiseModule } from './modules/pet-paradise/pet-paradise.module';
 import { ProceduresModule } from './modules/procedures/procedures.module';
+import { PetHotelModule } from './modules/pet-hotel/pet-hotel.module';
 
 @Module({
   imports: [
@@ -109,6 +110,7 @@ import { ProceduresModule } from './modules/procedures/procedures.module';
     RedisModule,
     AuthModule,
     StoriesModule,
+    PetHotelModule,
     IngredientsModule,
     StorageModule,
     PetsModule,
