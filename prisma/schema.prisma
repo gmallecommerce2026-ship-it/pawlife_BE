@@ -437,8 +437,28 @@ model CountryProcedure {
   milestones   ProcedureMilestone[]
   documents    ProcedureDocument[]
   petParadises PetParadise[]
+  petHotels    PetHotel[]
 
   @@map("country_procedures")
+}
+
+model PetHotel {
+  id           String           @id @default(cuid())
+  countryId    String
+  country      CountryProcedure @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  name         String
+  cityVi       String           // VD: "Chiba, Nhật Bản"
+  cityEn       String           // VD: "Chiba, Japan"
+  rating       Float            @default(4.5)
+  reviewsCount Int              @default(0)
+  imageUrl     String           @db.Text
+  websiteUrl   String           @db.Text
+  sortOrder    Int              @default(0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([countryId])
+  @@map("pet_hotels")
 }
 
 model ProcedureMilestone {
