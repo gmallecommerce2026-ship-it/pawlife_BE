@@ -164,10 +164,17 @@ export class PetParadiseService {
     }
 
     async updateGallery(paradiseId: string, images: string[]) {
+        // 👉 1. Chặn ngay nếu paradiseId bị thiếu/undefined từ Controller gửi sang
+        if (!paradiseId || paradiseId === 'undefined') {
+            throw new BadRequestException('Not valid paradise Id');
+        }
+
         const paradise = await this.prisma.petParadise.update({
             where: { id: paradiseId },
-            data: { galleryImages: images },
+            // 👉 2. Dùng (images || []) để không bao giờ bị dính giá trị undefined
+            data: { galleryImages: images || [] },
         });
+
         // Xoá cache để màn hình chi tiết nhận ngay ảnh mới
         await this.redisService.del(`paradise:detail:${paradiseId}`);
         return paradise;

@@ -44,7 +44,10 @@ export class PetParadiseController {
 
     @UseGuards(JwtAuthGuard)
     @Patch(':id/gallery')
-    async updateGallery(@Param('id') id: string, @Body() images: string[]) {
+    async updateGallery(
+        @Param('id') id: string,          // 👉 BẮT BUỘC là 'id' để khớp với :id trên route
+        @Body('images') images: string[], // 👉 BẮT BUỘC là 'images' để khớp với { images: [...] } từ FE
+    ) {
         return this.paradiseService.updateGallery(id, images);
     }
 
