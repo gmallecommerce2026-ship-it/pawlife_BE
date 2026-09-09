@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Req, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, Req, Query, Patch } from '@nestjs/common';
 import { PetParadiseService } from './pet-paradise.service';
 import { CreateReviewDto, ToggleReactionDto, ReportReviewDto } from './dto/paradise.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
@@ -40,6 +40,12 @@ export class PetParadiseController {
     async createReview(@Body() dto: CreateReviewDto, @Req() req: any) {
         const userId = req.user?.id || 'demo_user_id';
         return this.paradiseService.createReview(userId, dto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Patch(':id/gallery')
+    async updateGallery(@Param('id') id: string, @Body() images: string[]) {
+        return this.paradiseService.updateGallery(id, images);
     }
 
     @UseGuards(JwtAuthGuard)

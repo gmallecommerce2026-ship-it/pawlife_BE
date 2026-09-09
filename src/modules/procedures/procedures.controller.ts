@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Patch } from '@nestjs/common';
 import { ProceduresService } from './procedures.service';
 
 @Controller('procedures')
@@ -13,6 +13,11 @@ export class ProceduresController {
   @Get(':countryId/milestones')
   async getMilestones(@Param('countryId') countryId: string) {
     return this.proceduresService.getCountryMilestones(countryId);
+  }
+
+  @Patch('countries/:id/gallery')
+  async updateCountryGallery(@Param('countryId') countryId: string, images: string[]) {
+    return this.proceduresService.updateCountryGallery(countryId, images);
   }
 
   @Get(':countryId/documents')

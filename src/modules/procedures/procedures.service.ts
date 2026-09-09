@@ -41,6 +41,16 @@ export class ProceduresService {
         return milestones;
     }
 
+    async updateCountryGallery(countryId: string, images: string[]) {
+        const country = await this.prisma.countryProcedure.update({
+            where: { id: countryId },
+            data: { introGalleryImages: images },
+        });
+        // Xoá cache danh sách quốc gia
+        await this.redisService.del('procedures:countries');
+        return country;
+    }
+
     async getCountryDocuments(countryId: string) {
         const cacheKey = `procedures:documents:${countryId}`;
         const cached = await this.redisService.get<any[]>(cacheKey);

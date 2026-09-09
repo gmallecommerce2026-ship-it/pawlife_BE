@@ -163,6 +163,16 @@ export class PetParadiseService {
         return review;
     }
 
+    async updateGallery(paradiseId: string, images: string[]) {
+        const paradise = await this.prisma.petParadise.update({
+            where: { id: paradiseId },
+            data: { galleryImages: images },
+        });
+        // Xoá cache để màn hình chi tiết nhận ngay ảnh mới
+        await this.redisService.del(`paradise:detail:${paradiseId}`);
+        return paradise;
+    }
+
     async toggleReaction(reviewId: string, userId: string, type: ReactionTypeDto) {
         const review = await this.prisma.petParadiseReview.findUnique({ where: { id: reviewId } });
         if (!review) throw new NotFoundException('Review not found');
