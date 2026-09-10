@@ -8,10 +8,69 @@ import { UpdateStoryDto } from './dto/update-story.dto';
 export class StoriesService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll() {
-    return this.prisma.story.findMany({
+  // 1. Lấy danh sách kèm số lượng like và trạng thái isLiked của user hiện tại
+  async findAll(currentUserId?: string) {
+    const stories = await this.prisma.story.findMany({
       orderBy: { date: 'asc' },
+      include: {
+        _count: {
+          select: { likes: true },
+        },
+        ...(currentUserId && {
+          likes: {
+            where: { userId: currentUserId },
+            select: { id: true },
+          },
+        }),
+      },
     });
+
+    return stories.map((story) => {
+      const { _count, likes, ...rest } = story as any;
+      return {
+        ...rest,
+        likes: _count?.likes ?? 0,
+        isLiked: Boolean(likes && likes.length > 0),
+      };
+    });
+  }
+
+  // 2. Toggle Like (nếu đã like thì bỏ like, chưa like thì tạo like)
+  async toggleLike(storyId: string, userId: string) {
+    const story = await this.prisma.story.findUnique({ where: { id: storyId } });
+    if (!story) throw new NotFoundException('Câu chuyện không tồn tại');
+
+    const existingLike = await this.prisma.storyLike.findUnique({
+      where: {
+        storyId_userId: { storyId, userId },
+      },
+    });
+
+    let isLiked = false;
+
+    if (existingLike) {
+      // Đã like -> Xoá like
+      await this.prisma.storyLike.delete({
+        where: { id: existingLike.id },
+      });
+      isLiked = false;
+    } else {
+      // Chưa like -> Tạo like
+      await this.prisma.storyLike.create({
+        data: { storyId, userId },
+      });
+      isLiked = true;
+    }
+
+    // Đếm lại tổng số like mới nhất
+    const totalLikes = await this.prisma.storyLike.count({
+      where: { storyId },
+    });
+
+    return {
+      isLiked,
+      likes: totalLikes,
+    };
   }
 
   async create(dto: CreateStoryDto) {

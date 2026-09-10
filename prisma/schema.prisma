@@ -198,6 +198,7 @@ model User {
   hiddenEvents         UserHiddenEvent[]
   blockedShelters      UserBlockedShelter[]
   hiddenPets           UserHiddenPet[]
+  storyLikes StoryLike[]
 }
 
 // Bảng lưu trữ việc chặn người dùng (Apple bắt buộc phải có)
@@ -1073,12 +1074,26 @@ model Story {
   fullContent Json // { vi: string[], en: string[] } — nội dung đầy đủ khi mở rộng
   quote      Json // { vi: string, en: string }
   afterQuote Json // { vi: string, en: string }
-
+  
   date   DateTime // Ngày của câu chuyện (không phải ngày tạo record)
   images Json // string[] — images[0] = ảnh thẻ, phần dư hiện "+N"
+  likes       StoryLike[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+model StoryLike {
+  id        String   @id @default(uuid())
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([storyId, userId]) // 👈 Đảm bảo 1 user chỉ like 1 story 1 lần
+  @@index([storyId])
+  @@index([userId])
+  @@map("story_likes")
 }
 model Ingredient {
   id           String   @id
