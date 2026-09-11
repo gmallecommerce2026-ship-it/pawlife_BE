@@ -189,7 +189,7 @@ export class UserInteractionsService {
 
     if (!isGoogleReview) {
       // Nếu là review nội bộ, kiểm tra xem review có tồn tại không
-      const reviewExists = await this.prisma.paradiseReview.findUnique({
+      const reviewExists = await this.prisma.petParadiseReview.findUnique({
         where: { id: reviewId },
       }).catch(() => null);
 
