@@ -1150,11 +1150,12 @@ export class PetsService {
     const {
       images, tagId, medicalRecords, adoptionRequirementKeys,
       personalityTags, traits, goodWith, badWith,
-      code, // 🆕 PawLife ID tuỳ chỉnh (web gửi lên), app không gửi thì undefined
+      code,
+      isPersonalPet, // 🆕 THÊM: app mobile gửi true khi user tự thêm pet của chính mình
       ...petData
     } = createPetDto;
+
     const normalizedTraits = normalizeTraitsList(traits ?? personalityTags);
-    // 🆕 Nếu có code hợp lệ thì dùng, không thì tự sinh như cũ
     const idSetByShelter = code?.trim()
       ? code.trim()
       : await this.generateUniqueShelterCode();
@@ -1174,19 +1175,22 @@ export class PetsService {
       }))
     } : undefined;
 
+    // 🆕 THÊM: chỉ gán vào kho shelter khi user CÓ shelterId VÀ KHÔNG yêu cầu thêm pet cá nhân
+    const assignToShelter = !!currentUser?.shelterId && !isPersonalPet;
+
     const buildData = (): any => ({
       ...(petData as any), ownerId: userId,
-      shelterId: currentUser?.shelterId ?? null,
-      status: petData.status || (currentUser?.shelterId ? 'AVAILABLE' : 'ADOPTED'),
-      adoptedAt: currentUser?.shelterId ? null : new Date(),
+      shelterId: assignToShelter ? currentUser.shelterId : null,           // 🆕 SỬA
+      status: petData.status || (assignToShelter ? 'AVAILABLE' : 'ADOPTED'), // 🆕 SỬA
+      adoptedAt: assignToShelter ? null : new Date(),                       // 🆕 SỬA
       dob: petData.dob ? new Date(petData.dob) : undefined,
-      idSetByShelter, // 🆕
+      idSetByShelter,
       ...(petData.vaccinationStatus !== undefined && {
         isVaccinated: petData.vaccinationStatus === 'VACCINATED',
       }),
       ...(normalizedTraits.length > 0 && {
-        traits: normalizedTraits,                       // cột Json — để web load lại khi edit
-        traitsList: { create: normalizedTraits },        // relation — để app đọc & hiển thị
+        traits: normalizedTraits,
+        traitsList: { create: normalizedTraits },
       }),
       ...(goodWith !== undefined && { goodWith: normalizeBilingualList(goodWith) }),
       ...(badWith !== undefined && { badWith: normalizeBilingualList(badWith) }),

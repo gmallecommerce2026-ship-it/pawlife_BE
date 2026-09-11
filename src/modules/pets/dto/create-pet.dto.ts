@@ -178,7 +178,7 @@ export class CreatePetDto {
 
   @IsString()
   @IsOptional()
-  code?: string; 
+  code?: string;
 
   @IsString()
   @IsOptional()
@@ -187,4 +187,8 @@ export class CreatePetDto {
   @IsEnum(VaccinationStatus)
   @IsOptional()
   vaccinationStatus?: VaccinationStatus;
+
+  @IsOptional()
+  @IsBoolean()
+  isPersonalPet?: boolean;
 }
