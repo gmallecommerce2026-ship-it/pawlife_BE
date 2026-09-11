@@ -14,12 +14,14 @@ import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { AdminEmailGuard } from '../ingredients/guards/admin-email.guard';
 import { CreateStoryDto } from './dto/story.dto';
 import { UpdateStoryDto } from './dto/update-story.dto';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt.guard';
 
 @Controller('stories')
 export class StoriesController {
   constructor(private readonly storiesService: StoriesService) {}
 
   // 1. LẤY DANH SÁCH — public (nhận token nếu có để check user đã like chưa)
+  @UseGuards(OptionalJwtAuthGuard)
   @Get()
   findAll(@Req() req: any) {
     // Nếu app có gắn user qua middleware/guard tuỳ chọn, lấy req.user?.id
