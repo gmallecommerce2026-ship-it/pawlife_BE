@@ -2,7 +2,7 @@ import { Controller, Post, Body, UseGuards, Request, Get } from '@nestjs/common'
 import { UserInteractionsService } from './user-interactions.service';
 import { SwipeAction } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
-
+import { ReportReviewDto } from './dto/report-review.dto'; // Import DTO
 @Controller('interactions')
 @UseGuards(JwtAuthGuard)
 export class UserInteractionsController {
@@ -56,5 +56,19 @@ export class UserInteractionsController {
     const userId = req.user?.id || 'TEST_USER_ID';
     const data = await this.interactionsService.toggleFollowShelter(userId, shelterId);
     return { success: true, data };
+  }
+
+  @Post('report-review')
+  async reportReview(
+    @Request() req,
+    @Body() dto: ReportReviewDto,
+  ) {
+    const userId = req.user?.id || 'TEST_USER_ID';
+    const data = await this.interactionsService.reportReview(userId, dto);
+    return {
+      success: true,
+      message: 'Báo cáo đánh giá đã được tiếp nhận thành công',
+      data,
+    };
   }
 }

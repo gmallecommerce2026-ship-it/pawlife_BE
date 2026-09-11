@@ -3,6 +3,7 @@ import { PrismaService } from '../../database/prisma/prisma.service';
 import { SwipeAction } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RedisService } from 'src/database/redis/redis.service';
+import { ReportReviewDto } from './dto/report-review.dto';
 
 // Added `!` to fix TS2564 error
 export class ShareLocationDto {
@@ -178,5 +179,49 @@ export class UserInteractionsService {
       });
       return { followed: true };
     }
+  }
+  async reportReview(userId: string, dto: ReportReviewDto) {
+    const { reviewId, reason, details } = dto;
+
+    // 1. Kiểm tra đánh giá có tồn tại hay không (tuỳ tên model trong schema của bạn, vd: paradiseReview hoặc review)
+    // Nếu review đến từ Google hoặc ID ảo (vd: 'r_g1'), có thể bỏ qua check DB hoặc kiểm tra bảng review
+    const isGoogleReview = reviewId.startsWith('r_g');
+
+    if (!isGoogleReview) {
+      // Nếu là review nội bộ, kiểm tra xem review có tồn tại không
+      const reviewExists = await this.prisma.paradiseReview.findUnique({
+        where: { id: reviewId },
+      }).catch(() => null);
+
+      // Nếu không tìm thấy trong DB nội bộ và không phải review Google
+      if (!reviewExists) {
+        // Tùy chọn: throw NotFoundException hoặc cho phép ghi nhận report với reviewId bên ngoài
+      }
+    }
+
+    // 2. Chống spam: Kiểm tra xem user này đã từng báo cáo review này trước đó chưa
+    const existingReport = await this.prisma.reviewReport.findFirst({
+      where: {
+        userId,
+        reviewId,
+      },
+    });
+
+    if (existingReport) {
+      throw new ConflictException('Bạn đã gửi báo cáo cho đánh giá này rồi. Đội ngũ kiểm duyệt đang xử lý.');
+    }
+
+    // 3. Tạo bản ghi báo cáo mới
+    const report = await this.prisma.reviewReport.create({
+      data: {
+        userId,
+        reviewId,
+        reason,
+        details: details || null,
+        status: 'PENDING', // PENDING | REVIEWED | DISMISSED | ACTIONED
+      },
+    });
+
+    return report;
   }
 }
