@@ -164,6 +164,7 @@ export class ShelterDashboardService {
             where: { id: applicationId },
             include: { pet: true, user: true },
         });
+        
         if (!application) throw new NotFoundException('Không tìm thấy đơn.');
         if (application.pet.shelterId !== shelterId) throw new ForbiddenException('Bạn không có quyền với đơn này.');
 
@@ -179,12 +180,7 @@ export class ShelterDashboardService {
         if (status === ApplicationStatus.APPROVED) {
             await this.prisma.pet.update({ where: { id: application.petId }, data: { status: 'PENDING' } });
         }
-        if (status === ApplicationStatus.ADOPTION_COMPLETED) {
-            await this.prisma.pet.update({
-                where: { id: application.petId },
-                data: { status: 'ADOPTED', ownerId: application.userId, adoptedAt: new Date() },
-            });
-        }
+        
         if (status === ApplicationStatus.CLOSED) {
             await this.prisma.pet.updateMany({
                 where: { id: application.petId, status: 'PENDING' },
@@ -192,6 +188,68 @@ export class ShelterDashboardService {
             });
         }
 
+        // =========================================================
+        // 🚀 LOGIC MỚI CHO TRẠNG THÁI HOÀN TẤT NHẬN NUÔI
+        // =========================================================
+        if (status === ApplicationStatus.ADOPTION_COMPLETED) {
+            // 1. Cập nhật trạng thái Pet thành ADOPTED
+            await this.prisma.pet.update({
+                where: { id: application.petId },
+                data: { status: 'ADOPTED', ownerId: application.userId, adoptedAt: new Date() },
+            });
+
+            // 2. Tìm TẤT CẢ các đơn khác của CÙNG PET này mà chưa bị đóng
+            const otherPendingApplications = await this.prisma.adoptionApplication.findMany({
+                where: {
+                    petId: application.petId,
+                    id: { not: applicationId }, // Loại trừ đơn hiện tại đang duyệt
+                    status: { notIn: [ApplicationStatus.CLOSED, ApplicationStatus.ADOPTION_COMPLETED] },
+                },
+            });
+
+            if (otherPendingApplications.length > 0) {
+                const autoCloseReason = 'Đã có người nhận nuôi';
+
+                // 3. Cập nhật hàng loạt các đơn này thành CLOSED
+                await this.prisma.adoptionApplication.updateMany({
+                    where: {
+                        id: { in: otherPendingApplications.map(app => app.id) }
+                    },
+                    data: {
+                        status: ApplicationStatus.CLOSED,
+                        reviewNote: autoCloseReason,
+                    },
+                });
+
+                // 4. Gửi thông báo & Bắn Socket Realtime cho TỪNG người bị từ chối
+                for (const otherApp of otherPendingApplications) {
+                    // Gửi In-app Notification cho user bị từ chối
+                    await this.notificationsService.createAndSendNotification({
+                        userId: otherApp.userId,
+                        title: '😔 Đơn nhận nuôi chưa được duyệt',
+                        body: `Lý do: ${autoCloseReason}`,
+                        type: NotificationType.SYSTEM,
+                        referenceId: application.petId,
+                        metadata: {
+                            applicationId: otherApp.id,
+                            status: ApplicationStatus.CLOSED,
+                            uiAction: 'navigate_application_status',
+                        },
+                    });
+
+                    // Bắn Socket về Frontend để Kanban tự động kéo thẻ này sang cột CLOSED
+                    await this.broadcastDocumentEvent(shelterId, otherApp.userId, 'application_updated', {
+                        applicationId: otherApp.id,
+                        petId: application.petId,
+                        status: ApplicationStatus.CLOSED,
+                        reviewNote: autoCloseReason,
+                    });
+                }
+            }
+        }
+        // =========================================================
+
+        // Gửi thông báo cho người dùng hiện tại (người vừa được cập nhật đơn)
         await this.notificationsService.createAndSendNotification({
             userId: application.userId,
             title: status === 'CLOSED' ? '😔 Đơn nhận nuôi chưa được duyệt' : '📬 Cập nhật đơn nhận nuôi',
@@ -202,17 +260,15 @@ export class ShelterDashboardService {
             type: NotificationType.SYSTEM,
             referenceId: application.petId,
             metadata: {
-                applicationId,          // 👈 dùng để FE điều hướng đúng đơn
+                applicationId,
                 status,
-                uiAction: 'navigate_application_status', // 🚀 THÊM DÒNG NÀY
+                uiAction: 'navigate_application_status',
             },
         });
 
         await this.redisService.del(`pet:detail:${application.petId}`);
 
-        // 🆕 FIX: đây là chỗ đang thiếu — app dùng luồng này để đổi trạng thái
-        // (approve/pending/interview_scheduled/need_more_info/closed) qua Kanban board,
-        // nhưng chưa từng bắn socket nên app không tự cập nhật timeline.
+        // Broadcast Socket cho người dùng hiện tại
         await this.broadcastDocumentEvent(shelterId, application.userId, 'application_updated', {
             applicationId,
             petId: application.petId,
