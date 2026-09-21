@@ -1,110 +1,191 @@
+/**
+ * Seed QR code (chế độ "seed thêm")
+ *  1. Xóa các tag QR cũ (OLD_PREFIXES) nào xóa được; tag đang được Pet tham chiếu thì giữ lại.
+ *  2. Thêm tag mới từ thư mục QR_Codes; tag đã có thì bỏ qua, không đổi status.
+ *  3. Chỉ upload lên R2 những file chưa có (thêm --force để upload lại tất cả).
+ *
+ * Chạy: npx ts-node src/database/prisma/seed-qr.ts [--force]
+ */
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 
 const prisma = new PrismaClient();
 
-// 1. Cấu hình Cloudflare R2 Client
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Thiếu biến môi trường ${name} (khai báo trong file .env)`);
+  return value;
+}
+
 const s3Client = new S3Client({
   region: 'auto',
-  endpoint: 'https://c9d5f5eea00514a9996556bae3e098d8.r2.cloudflarestorage.com', // Endpoint của bạn
+  endpoint: requireEnv('R2_ENDPOINT'), // https://<ACCOUNT_ID>.r2.cloudflarestorage.com (không kèm tên bucket)
+  forcePathStyle: true, // gọi <endpoint>/<bucket>/... thay vì <bucket>.<endpoint>
+  maxAttempts: 5,
   credentials: {
-    accessKeyId: 'abd4d87e215fef71990e437e5e60a714',
-    secretAccessKey: '4a21a869e74605e6506d7357c6ee9b1cff2b23a2df88e831129acebbab20d4fa',
+    accessKeyId: requireEnv('R2_ACCESS_KEY_ID'),
+    secretAccessKey: requireEnv('R2_SECRET_ACCESS_KEY'),
   },
 });
 
-const BUCKET_NAME = 'pawcare';
+const BUCKET_NAME = process.env.R2_BUCKET ?? 'pawcare';
+const R2_PREFIX = 'qr-codes/';
+const QR_DIR = path.join(process.cwd(), 'src/database/QR_Codes');
 
-async function main() {
-  console.log('🚀 Bắt đầu quá trình DỌN DẸP và ĐỒNG BỘ QR code mới...');
+// Tiền tố của các mã QR cũ cần dọn
+const OLD_PREFIXES = ['PLT_', 'PLT-', 'plt_', 'plt-'];
 
-  // =========================================================================
-  // BƯỚC 1: XÓA TOÀN BỘ MÃ QR CŨ BẮT ĐẦU BẰNG "PLT_" HOẶC "PLT-" TRONG DB
-  // =========================================================================
-  console.log('🗑️ Đang tiến hành xóa các mã QR cũ khỏi Database...');
+const CONCURRENCY = 20;
+const DELETE_BATCH = 500;
+const FORCE_UPLOAD = process.argv.includes('--force');
+
+const toTagId = (fileName: string) => fileName.replace(/\.svg$/i, '').trim().toUpperCase();
+
+// ---------------------------------------------------------------------------
+// BƯỚC 1: XÓA QR CŨ CÓ THỂ XÓA
+// ---------------------------------------------------------------------------
+type DeleteStats = { deleted: number; kept: string[] };
+
+// Xóa theo lô. Nếu lô có tag bị khóa ngoại (P2003) thì chia đôi lô và thử lại,
+// cho tới khi tìm ra đúng tag đang được tham chiếu -> giữ lại tag đó, xóa phần còn lại.
+async function deleteBatch(ids: string[], stats: DeleteStats): Promise<void> {
+  if (ids.length === 0) return;
   try {
-    const deleteResult = await prisma.tag.deleteMany({
-      where: {
-        OR: [
-          { id: { startsWith: 'PLT_' } },
-          { id: { startsWith: 'PLT-' } },
-          { id: { startsWith: 'plt_' } },
-          { id: { startsWith: 'plt-' } }
-        ]
-      }
+    const result = await prisma.tag.deleteMany({ where: { id: { in: ids } } });
+    stats.deleted += result.count;
+  } catch (e: any) {
+    if (e?.code !== 'P2003') throw e; // chỉ xử lý lỗi khóa ngoại, lỗi khác thì báo ra
+    if (ids.length === 1) {
+      stats.kept.push(ids[0]);
+      return;
+    }
+    const mid = Math.ceil(ids.length / 2);
+    await deleteBatch(ids.slice(0, mid), stats);
+    await deleteBatch(ids.slice(mid), stats);
+  }
+}
+
+async function cleanOldTags(): Promise<void> {
+  const candidates = await prisma.tag.findMany({
+    where: { OR: OLD_PREFIXES.map((p) => ({ id: { startsWith: p } })) },
+    select: { id: true },
+  });
+  console.log(`🔎 Tìm thấy ${candidates.length} tag cũ (${OLD_PREFIXES.join(', ')}).`);
+
+  const stats: DeleteStats = { deleted: 0, kept: [] };
+  const ids = candidates.map((t) => t.id);
+  for (let i = 0; i < ids.length; i += DELETE_BATCH) {
+    await deleteBatch(ids.slice(i, i + DELETE_BATCH), stats);
+  }
+
+  console.log(`🗑️ Đã xóa ${stats.deleted} tag cũ, giữ lại ${stats.kept.length} tag đang được gán.`);
+  if (stats.kept.length > 0) {
+    console.log(`   Ví dụ tag giữ lại: ${stats.kept.slice(0, 5).join(', ')}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// BƯỚC 2: THÊM TAG MỚI VÀO DB (tag đã tồn tại thì bỏ qua)
+// ---------------------------------------------------------------------------
+async function addNewTags(ids: string[]): Promise<void> {
+  let created = 0;
+  for (let i = 0; i < ids.length; i += 1000) {
+    const result = await prisma.tag.createMany({
+      data: ids.slice(i, i + 1000).map((id) => ({ id, status: 'INACTIVE' as const })),
+      skipDuplicates: true,
     });
-    console.log(`✅ Đã dọn dẹp sạch sẽ [ ${deleteResult.count} ] bản ghi mã QR cũ khỏi Database.`);
-  } catch (deleteError: any) {
-    // Nếu có lỗi do khóa ngoại (ví dụ mã đã gán cho Pet), nó sẽ in lỗi ra nhưng không làm sập script
-    console.error('❌ Lỗi khi xóa mã QR cũ (Có thể do mã đã được gán cho Pet):', deleteError.message);
-    console.log('⚠️ Vẫn tiếp tục quá trình tạo mã mới...');
+    created += result.count;
   }
+  console.log(`✅ DB: thêm mới ${created} tag, ${ids.length - created} tag đã có sẵn (giữ nguyên).`);
+}
 
-  // =========================================================================
-  // BƯỚC 2: TIẾN HÀNH ĐỌC FILE VÀ SEED MÃ MỚI NHƯ HIỆN TẠI
-  // =========================================================================
-  const qrFolderPath = path.join(process.cwd(), 'src/database/QR_Codes');
-  let files: string[] = [];
-
-  try {
-    files = fs.readdirSync(qrFolderPath).filter(f => f.endsWith('.svg'));
-  } catch (error: any) {
-    console.error('❌ Lỗi khi đọc thư mục QR:', error.message);
-    return;
-  }
-
-  console.log(`📦 Tìm thấy ${files.length} file SVG mới. Bắt đầu xử lý upload lên R2 và lưu DB...`);
-
-  let successCount = 0;
-
-  for (let i = 0; i < files.length; i++) {
-    const fileName = files[i];
-    
-    // Tách phần mở rộng .svg, trim khoảng trắng và ép CHỮ HOA ngay từ lúc seed để chống lỗi
-    const tagId = fileName.replace('.svg', '').trim().toUpperCase(); 
-    const filePath = path.join(qrFolderPath, fileName);
-
-    try {
-      // A. ĐỌC NỘI DUNG FILE
-      const fileContent = fs.readFileSync(filePath);
-
-      // B. UPLOAD LÊN CLOUDFLARE R2
-      await s3Client.send(new PutObjectCommand({
+// ---------------------------------------------------------------------------
+// BƯỚC 3: UPLOAD LÊN R2 (chỉ file chưa có)
+// ---------------------------------------------------------------------------
+async function listR2Keys(): Promise<Set<string>> {
+  const keys = new Set<string>();
+  let token: string | undefined;
+  do {
+    const res = await s3Client.send(
+      new ListObjectsV2Command({
         Bucket: BUCKET_NAME,
-        Key: `qr-codes/${fileName}`,
-        Body: fileContent,
-        ContentType: 'image/svg+xml',
-        ACL: 'public-read',
-      }));
+        Prefix: R2_PREFIX,
+        ContinuationToken: token,
+      }),
+    );
+    res.Contents?.forEach((o) => {
+      if (o.Key) keys.add(o.Key);
+    });
+    token = res.IsTruncated ? res.NextContinuationToken : undefined;
+  } while (token);
+  return keys;
+}
 
-      // C. LƯU VÀO DATABASE PRISMA
-      await prisma.tag.upsert({
-        where: { id: tagId },
-        update: { status: 'INACTIVE' },
-        create: {
-          id: tagId,
-          status: 'INACTIVE',
-        },
-      });
+async function uploadMissing(files: string[]): Promise<number> {
+  const existing = FORCE_UPLOAD ? new Set<string>() : await listR2Keys();
+  const todo = files.filter((f) => !existing.has(`${R2_PREFIX}${toTagId(f)}.svg`));
+  console.log(`☁️ R2: đã có ${files.length - todo.length} file, cần upload ${todo.length} file.`);
 
-      successCount++;
-      
-      // Log tiến độ mỗi 100 file
-      if (successCount % 100 === 0) {
-        console.log(`✅ Đã xong: ${successCount}/${files.length} mã.`);
+  let cursor = 0;
+  let done = 0;
+  const failed: string[] = [];
+
+  async function worker(): Promise<void> {
+    while (cursor < todo.length) {
+      const fileName = todo[cursor++];
+      try {
+        await s3Client.send(
+          new PutObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: `${R2_PREFIX}${toTagId(fileName)}.svg`,
+            Body: fs.readFileSync(path.join(QR_DIR, fileName)),
+            ContentType: 'image/svg+xml',
+          }),
+        );
+      } catch (e: any) {
+        if (failed.length < 3) console.error(`⚠️ Lỗi upload ${fileName}:`, e.message);
+        failed.push(fileName);
       }
-
-    } catch (err: any) {
-      console.error(`⚠️ Lỗi tại file ${fileName}:`, err.message);
+      if (++done % 500 === 0) console.log(`⏳ ${done}/${todo.length}`);
     }
   }
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
-  console.log(`\n🎉 HOÀN TẤT QUÁ TRÌNH SEED!`);
-  console.log(`- Đã xóa sạch mã cũ.`);
-  console.log(`- Tổng số file mới đã xử lý thành công: ${successCount}`);
-  console.log(`- Địa chỉ Public: https://pub-35c6d59c9e96467b9783df2a4e890a09.r2.dev/qr-codes/{tagId}.svg`);
+  console.log(`☁️ Upload xong: ${todo.length - failed.length}/${todo.length} thành công, ${failed.length} lỗi.`);
+  return failed.length;
+}
+
+// ---------------------------------------------------------------------------
+async function main() {
+  console.log('🚀 Bắt đầu seed thêm QR code...');
+
+  try {
+    await cleanOldTags();
+  } catch (e: any) {
+    console.error('❌ Lỗi khi dọn tag cũ, bỏ qua và tiếp tục:', e.message);
+  }
+
+  const files = fs.readdirSync(QR_DIR).filter((f) => f.toLowerCase().endsWith('.svg'));
+  if (files.length === 0) {
+    console.error(`❌ Không có file SVG nào trong ${QR_DIR}`);
+    return;
+  }
+  const ids = Array.from(new Set(files.map(toTagId)));
+  console.log(`📦 Tìm thấy ${files.length} file SVG.`);
+
+  await addNewTags(ids);
+  const failedCount = await uploadMissing(files);
+
+  console.log(`📊 Tổng số tag trong DB: ${await prisma.tag.count()}`);
+  if (failedCount === 0) {
+    console.log('🎉 HOÀN TẤT!');
+  } else {
+    console.log(`⚠️ Xong nhưng ${failedCount} file upload lỗi. Chạy lại script để upload phần còn thiếu.`);
+    process.exitCode = 1;
+  }
 }
 
 main()
