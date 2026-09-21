@@ -202,9 +202,10 @@ export class PetsService {
     // ======================================================================
     // 🔥 LOG DEBUG CHUYÊN SÂU TẬN GỐC - ĐỂ TÌM LỖI QR TRÊN BACKEND
     // ======================================================================
-    console.log('\n=================== [BACKEND DEBUG QR START] ===================');
-    console.log(`[1] Chuỗi tagId nhận từ Frontend: "${tagId}"`);
-    console.log(`[2] Độ dài thực tế (Length): ${tagId ? tagId.length : 0}`);
+    const cleanTagId = tagId.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+
+    // SỬA CÁC CHỖ GỌI tagId THÀNH cleanTagId (Ví dụ đoạn dưới)
+
 
     if (tagId) {
       const charCodes: string[] = [];
@@ -239,7 +240,7 @@ export class PetsService {
       throw new ConflictException({ message: 'You do not have permission to perform actions on this pet!', i18n: { key: 'error.pet_unauthorized' } });
     }
 
-    const tag = await this.prisma.tag.findUnique({ where: { id: tagId } });
+    const tag = await this.prisma.tag.findUnique({ where: { id: cleanTagId } });
     if (!tag) {
       throw new BadRequestException({ message: 'This QR code does not belong to the PawLife system or does not exist!', i18n: { key: 'error.qr_invalid' } });
     }
@@ -255,12 +256,12 @@ export class PetsService {
 
     await this.prisma.$transaction([
       this.prisma.tag.update({
-        where: { id: tagId },
+        where: { id: cleanTagId },
         data: { petId: petId, status: 'ACTIVE', linkedAt: new Date(), linkCount: { increment: 1 } }
       }),
       this.prisma.pet.update({
         where: { id: petId },
-        data: { qrVerificationStatus: 'VERIFIED', qrCodeUrl: `https://pawcare.app/tag/${tagId}` }
+        data: { qrVerificationStatus: 'VERIFIED', qrCodeUrl: `https://pawcare.app/tag/${cleanTagId}` }
       })
     ]);
 
@@ -1739,6 +1740,8 @@ export class PetsService {
 
   async replaceQrCode(userId: string, petId: string, dto: ReplaceQrDto) {
     const { newTagId } = dto;
+    const cleanNewTagId = newTagId.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    
     const pet = await this.prisma.pet.findUnique({
       where: { id: petId }, include: { tags: true },
     });
@@ -1748,7 +1751,7 @@ export class PetsService {
       throw new ForbiddenException({ message: 'You do not have permission to perform actions on this pet.', i18n: { key: 'error.pet_unauthorized' } });
     }
 
-    const newTag = await this.prisma.tag.findUnique({ where: { id: newTagId } });
+    const newTag = await this.prisma.tag.findUnique({ where: { id: cleanNewTagId } });
 
     if (!newTag) throw new NotFoundException({ message: 'This QR code does not exist in the system.', i18n: { key: 'error.qr_not_found' } });
     if (newTag.petId && newTag.petId !== petId) {
@@ -1790,8 +1793,9 @@ export class PetsService {
   }
 
   async getPetByTagId(tagId: string) {
+    const cleanTagId = tagId.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
     const tag = await this.prisma.tag.findUnique({
-      where: { id: tagId },
+      where: { id: cleanTagId },
       include: {
         pet: { include: { owner: { select: { id: true, name: true, avatarUrl: true, phone: true } }, images: { orderBy: { createdAt: 'asc' } } } },
       },
