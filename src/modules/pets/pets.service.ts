@@ -202,7 +202,18 @@ export class PetsService {
     // ======================================================================
     // 🔥 LOG DEBUG CHUYÊN SÂU TẬN GỐC - ĐỂ TÌM LỖI QR TRÊN BACKEND
     // ======================================================================
-    const cleanTagId = tagId.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    const rawId = tagId.split('/').pop() || tagId;
+    let cleanTagId = rawId.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+
+    // Bù đắp dấu gạch dưới cho các mã bị thiếu (VD: PL00029 -> PL_00029)
+    if (cleanTagId.match(/^PL\d+$/)) {
+      cleanTagId = cleanTagId.replace('PL', 'PL_');
+    }
+
+    // (Tùy chọn) Hỗ trợ quét luôn các mã cũ PLT bị thiếu gạch nối (VD: PLT0014 -> PLT-0014)
+    if (cleanTagId.match(/^PLT\d+$/)) {
+      cleanTagId = cleanTagId.replace('PLT', 'PLT-');
+    }
 
     // SỬA CÁC CHỖ GỌI tagId THÀNH cleanTagId (Ví dụ đoạn dưới)
 
@@ -1741,7 +1752,7 @@ export class PetsService {
   async replaceQrCode(userId: string, petId: string, dto: ReplaceQrDto) {
     const { newTagId } = dto;
     const cleanNewTagId = newTagId.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
-    
+
     const pet = await this.prisma.pet.findUnique({
       where: { id: petId }, include: { tags: true },
     });
@@ -1793,7 +1804,18 @@ export class PetsService {
   }
 
   async getPetByTagId(tagId: string) {
-    const cleanTagId = tagId.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    const rawId = tagId.split('/').pop() || tagId;
+    let cleanTagId = rawId.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+
+    // Bù đắp dấu gạch dưới cho các mã bị thiếu (VD: PL00029 -> PL_00029)
+    if (cleanTagId.match(/^PL\d+$/)) {
+      cleanTagId = cleanTagId.replace('PL', 'PL_');
+    }
+
+    // (Tùy chọn) Hỗ trợ quét luôn các mã cũ PLT bị thiếu gạch nối (VD: PLT0014 -> PLT-0014)
+    if (cleanTagId.match(/^PLT\d+$/)) {
+      cleanTagId = cleanTagId.replace('PLT', 'PLT-');
+    }
     const tag = await this.prisma.tag.findUnique({
       where: { id: cleanTagId },
       include: {
