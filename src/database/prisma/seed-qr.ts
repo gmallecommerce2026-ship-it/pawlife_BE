@@ -95,7 +95,7 @@ async function addNewTags(ids: string[]): Promise<void> {
   for (let i = 0; i < ids.length; i += 1000) {
     const result = await prisma.tag.createMany({
       data: ids.slice(i, i + 1000).map((id) => ({ id, status: 'INACTIVE' as const })),
-      skipDuplicates: true,
+      skipDuplicates: false,
     });
     created += result.count;
   }
