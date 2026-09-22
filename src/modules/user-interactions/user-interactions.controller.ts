@@ -1,0 +1,74 @@
+import { Controller, Post, Body, UseGuards, Request, Get } from '@nestjs/common';
+import { UserInteractionsService } from './user-interactions.service';
+import { SwipeAction } from '@prisma/client';
+import { JwtAuthGuard } from '../auth/guards/jwt.guard';
+import { ReportReviewDto } from './dto/report-review.dto'; // Import DTO
+@Controller('interactions')
+@UseGuards(JwtAuthGuard)
+export class UserInteractionsController {
+  constructor(private readonly interactionsService: UserInteractionsService) { }
+
+  @Post('swipe')
+  async swipe(
+    @Request() req,
+    @Body('petId') petId: string,
+    @Body('action') action: SwipeAction
+  ) {
+    // Tạm thời hardcode userId nếu chưa gắn Auth Guard, 
+    // Khi có Auth Guard, dùng req.user.id
+    const userId = req.user?.id || 'TEST_USER_ID';
+    const data = await this.interactionsService.swipePet(userId, petId, action);
+    return { success: true, data };
+  }
+
+  @Post('favorite')
+  async toggleFavorite(
+    @Request() req,
+    @Body('petId') petId: string
+  ) {
+    const userId = req.user?.id || 'TEST_USER_ID';
+    const data = await this.interactionsService.toggleFavorite(userId, petId);
+    return { success: true, data };
+  }
+
+  @Get('blocked-shelters')
+  async getBlockedShelters(@Request() req) {
+    const userId = req.user?.id || 'TEST_USER_ID';
+    const data = await this.interactionsService.getBlockedShelters(userId);
+    return { success: true, data };
+  }
+
+  @Post('unblock-shelter')
+  async unblockShelter(
+    @Request() req,
+    @Body('shelterId') shelterId: string
+  ) {
+    const userId = req.user?.id || 'TEST_USER_ID';
+    const data = await this.interactionsService.unblockShelter(userId, shelterId);
+    return { success: true, data };
+  }
+
+  @Post('follow-shelter')
+  async toggleFollow(
+    @Request() req,
+    @Body('shelterId') shelterId: string
+  ) {
+    const userId = req.user?.id || 'TEST_USER_ID';
+    const data = await this.interactionsService.toggleFollowShelter(userId, shelterId);
+    return { success: true, data };
+  }
+
+  @Post('report-review')
+  async reportReview(
+    @Request() req,
+    @Body() dto: ReportReviewDto,
+  ) {
+    const userId = req.user?.id || 'TEST_USER_ID';
+    const data = await this.interactionsService.reportReview(userId, dto);
+    return {
+      success: true,
+      message: 'Báo cáo đánh giá đã được tiếp nhận thành công',
+      data,
+    };
+  }
+}

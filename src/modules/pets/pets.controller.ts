@@ -1,0 +1,259 @@
+// src/modules/pets/pets.controller.ts
+import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, ParseIntPipe, DefaultValuePipe, Patch, Req } from '@nestjs/common';
+import { PetsService } from './pets.service';
+import { SwipePetDto } from './dto/swipe-pet.dto';
+import { GetFavoritesDto } from './dto/get-favorites.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt.guard';
+import { User } from '../../common/decorators/user.decorator';
+import { PetGender, PetSize } from '@prisma/client';
+import { CreatePetDto } from './dto/create-pet.dto';
+import { UpdatePetDto } from './dto/update-pet.dto';
+import { Throttle } from '@nestjs/throttler'; // ADDED IMPORT
+import { ToggleLostModeDto } from './dto/toggle-lost-mode.dto';
+import { ReplaceQrDto } from './dto/replace-qr.dto';
+import { ApiOperation } from '@nestjs/swagger';
+
+@Controller('pets')
+@UseGuards(JwtAuthGuard)
+export class PetsController {
+  constructor(private readonly petsService: PetsService) { }
+
+  @Post(':id/link-qr')
+  async linkQrCode(
+    @User('id') userId: string,
+    @Param('id') petId: string,
+    @Body('tagId') tagId: string,
+  ) {
+    return this.petsService.linkQrCode(userId, petId, tagId);
+  }
+
+  @Post(':id/transfer-request')
+  async requestTransfer(
+    @Param('id') petId: string,
+    @Body() body: { email?: string; phone?: string },
+    @Req() req: any
+  ) {
+    return this.petsService.requestTransfer(petId, body, req.user.id);
+  }
+
+  @Post(':id/cancel-transfer')
+  async cancelTransfer(
+    @Param('id') petId: string,
+    @User('id') userId: string
+  ) {
+    return this.petsService.cancelTransfer(petId, userId);
+  }
+
+  @Post('transfer-confirm/:transferId')
+  async confirmTransfer(@Param('transferId') transferId: string, @Req() req: any) {
+    return this.petsService.confirmTransfer(transferId, req.user.id);
+  }
+  @Get('shelter/manage')
+  @UseGuards(JwtAuthGuard)
+  async getShelterPets(
+    @User('id') userId: string,
+    @Query('search') search?: string,
+    @Query('type') type?: string,
+    @Query('status') status?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('pageSize', new DefaultValuePipe(20), ParseIntPipe) pageSize?: number,
+  ) {
+    return this.petsService.getShelterPets(userId, { search, type, status, page, pageSize });
+  }
+  @Throttle({ default: { limit: 120, ttl: 60000 } }) // ADDED: Allow feed scrolling 120 times/minute (prevent DB DDoS)
+  @Get('feed')
+  async getFeed(
+    @User('id') userId: string,
+    @Query('limit', new DefaultValuePipe(15), ParseIntPipe) limit: number,
+    @Query('gender') gender?: PetGender,
+    @Query('size') size?: PetSize,
+    @Query('species') species?: string,
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+  ) {
+    const latitude = lat ? parseFloat(lat) : undefined;
+    const longitude = lng ? parseFloat(lng) : undefined;
+
+    return this.petsService.getFeed(
+      userId,
+      limit,
+      { gender, size, species },
+      latitude,
+      longitude
+    );
+  }
+
+  @Get('favorites')
+  async getFavorites(
+    @User('id') userId: string,
+    @Query() query: GetFavoritesDto,
+  ) {
+    const skip = query.skip || 0;
+    const take = query.take || 10;
+    return this.petsService.getFavorites(userId, skip, take);
+  }
+
+  @Throttle({ default: { limit: 150, ttl: 60000 } }) // ADDED: Allow high-speed manual swiping (150 times/minute)
+  @Post(':id/swipe')
+  async swipePet(
+    @User('id') userId: string,
+    @Param('id') petId: string,
+    @Body() swipePetDto: SwipePetDto,
+  ) {
+    return this.petsService.swipePet(userId, petId, swipePetDto);
+  }
+
+  @Post(':id/favorite')
+  async addFavorite(
+    @User('id') userId: string,
+    @Param('id') petId: string,
+  ) {
+    return this.petsService.addFavorite(userId, petId);
+  }
+
+  @Delete(':id/favorite')
+  async removeFavorite(
+    @User('id') userId: string,
+    @Param('id') petId: string,
+  ) {
+    return this.petsService.removeFavorite(userId, petId);
+  }
+
+  @Get('my-pets')
+  async getMyPets(@User('id') userId: string) {
+    return this.petsService.getMyPets(userId);
+  }
+
+  @Post()
+  @UseGuards(JwtAuthGuard)
+  async createPet(
+    @User('id') userId: string,
+    @Body() createPetDto: CreatePetDto
+  ) {
+    return this.petsService.createPet(userId, createPetDto);
+  }
+
+  @Patch(':id/replace-qr')
+  async replaceQrCode(
+    @Req() req: any,
+    @Param('id') petId: string,
+    @Body() replaceQrDto: ReplaceQrDto,
+  ) {
+    const userId = req.user.id; // Get from JWT payload
+    return this.petsService.replaceQrCode(userId, petId, replaceQrDto);
+  }
+  @Post(':id/hide')
+  async hidePet(@User('id') userId: string, @Param('id') petId: string) {
+    console.log(`Debug: User ${userId} requested to hide pet ${petId}`); // 👈 LOG NÀY
+    return this.petsService.hidePet(userId, petId);
+  }
+  // ============================================================
+  // THÊM VÀO pets.controller.ts (cùng class chứa các route /pets/...)
+  // Điều chỉnh decorator @UseGuards / cách lấy userId theo đúng
+  // pattern bạn đang dùng cho các route khác (ví dụ @Req() req, req.user.id)
+  // ============================================================
+
+  @Patch(':petId/medical-records/:recordId')
+  @UseGuards(JwtAuthGuard) // dùng đúng guard hiện có trong project
+  async updateMedicalRecord(
+    @Req() req: any,
+    @Param('petId') petId: string,
+    @Param('recordId') recordId: string,
+    @Body() body: {
+      type?: string;
+      recordName?: any;
+      recordDate?: string;
+      images?: string[];
+      hasNextDueDate?: boolean;
+      nextDueDate?: string | null;
+      nextDueName?: any;
+    },
+  ) {
+    return this.petsService.updateMedicalRecord(req.user.id, petId, recordId, body);
+  }
+
+  @Delete(':petId/medical-records/:recordId')
+  @UseGuards(JwtAuthGuard)
+  async deleteMedicalRecord(
+    @Req() req: any,
+    @Param('petId') petId: string,
+    @Param('recordId') recordId: string,
+  ) {
+    return this.petsService.deleteMedicalRecord(req.user.id, petId, recordId);
+  }
+  @Post(':petId/medical-records/:recordId/report')
+  @UseGuards(JwtAuthGuard)
+  async reportMedicalRecord(
+    @Req() req: any,
+    @Param('petId') petId: string,
+    @Param('recordId') recordId: string,
+    @Body() body: { reason: string; details?: string },
+  ) {
+    return this.petsService.reportMedicalRecord(req.user.id, petId, recordId, body);
+  }
+  @Post(':id/report')
+  async reportPet(
+    @Param('id') id: string,
+    @User('id') userId: string,
+    @Body() reportData: { reason: string; detail?: string; isBlockRequested?: boolean }
+  ) {
+    return this.petsService.reportPet(id, userId, reportData);
+  }
+    @Get('shelter/dashboard')
+  @UseGuards(JwtAuthGuard)
+  async getShelterDashboardStats(@User('id') userId: string) {
+    return this.petsService.getShelterDashboardStats(userId);
+  }
+  @Get(':id')
+  async getPetById(
+    @User('id') userId: string,
+    @Param('id') id: string
+  ) {
+    return this.petsService.getPetById(id, userId);
+  }
+  @Get('transfer-requests/pending')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Lấy yêu cầu chuyển nhượng thú cưng đang chờ xử lý của user (Catch-up API)' })
+  async checkPendingTransfer(@User() user: any) {
+    return this.petsService.getPendingTransferForUser(user.id);
+  }
+  @Get()
+  async searchPets(
+    @User('id') userId: string, // 👈 FIX: Bắt buộc lấy ID từ Auth Token, không dùng @Query
+    @Query('search') search?: string,
+    @Query('type') type?: string,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
+  ) {
+    return this.petsService.searchPets({ search, type, limit, userId });
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  async updatePet(
+    @User('id') userId: string,
+    @Param('id') petId: string,
+    @Body() updatePetDto: UpdatePetDto
+  ) {
+    return this.petsService.updatePet(userId, petId, updatePetDto);
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  async removePet(
+    @User('id') userId: string,
+    @Param('id') petId: string,
+  ) {
+    return this.petsService.removePet(userId, petId);
+  }
+
+  @Patch(':id/lost-mode')
+  @UseGuards(JwtAuthGuard)
+  async toggleLostMode(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: ToggleLostModeDto // Get the entire payload sent by the frontend
+  ) {
+    console.log("BACKEND RECEIVED DTO:", dto);
+    return this.petsService.toggleLostMode(req.user.id, id, dto);
+  }
+}

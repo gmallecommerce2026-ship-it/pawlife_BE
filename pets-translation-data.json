@@ -1,0 +1,1815 @@
+[
+  {
+    "id": "1160db84-a3b5-4b4f-8ef3-8e67a5f10248",
+    "name": "900263000671632",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Fox",
+      "en": "Fox Terrier"
+    },
+    "color": {
+      "vi": "Nâu",
+      "en": "Brown"
+    },
+    "description": {
+      "vi": "Quốc Oai 15/10",
+      "en": "Rescued in Quốc Oai on Oct 15"
+    },
+    "idealHome": {
+      "vi": "Phù hợp với gia đình sống ở chung cư, miễn là được dắt đi dạo mỗi ngày.",
+      "en": "A great fit for apartment living, as long as it gets a daily walk."
+    },
+    "goodWith": [
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Chó khác",
+        "en": "Other Dogs"
+      },
+      {
+        "vi": "Mèo",
+        "en": "Cats"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Quấn người",
+        "Thích gặm đồ",
+        "Thích được vuốt ve"
+      ],
+      "en": [
+        "Affectionate",
+        "Loves chewing on things",
+        "Enjoys being petted"
+      ]
+    }
+  },
+  {
+    "id": "1167707f-eaf9-4302-8fe4-c59b0103aa6b",
+    "name": "LUNA",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Golden Retriever",
+      "en": "Golden Retriever"
+    },
+    "color": {
+      "vi": "Vàng rơm",
+      "en": "Straw yellow"
+    },
+    "description": {
+      "vi": "Luna là một bé Golden Retriever vui vẻ, luôn vẫy đuôi chào đón mọi người.",
+      "en": "Luna is a cheerful Golden Retriever who wags her tail to greet everyone."
+    },
+    "idealHome": {
+      "vi": "Thích hợp với gia đình năng động, có không gian rộng để chạy nhảy.",
+      "en": "Best suited to an active family with plenty of space to run around."
+    },
+    "goodWith": [
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      },
+      {
+        "vi": "Vật nuôi khác",
+        "en": "Other Pets"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Tiếng ồn lớn",
+        "en": "Loud Noises"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Thân thiện",
+        "Hiếu động",
+        "Trung thành"
+      ],
+      "en": [
+        "Friendly",
+        "Energetic",
+        "Loyal"
+      ]
+    }
+  },
+  {
+    "id": "164bf848-e303-4ab8-94e9-801900aa0987",
+    "name": "LUNA",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Golden Retriever",
+      "en": "Golden Retriever"
+    },
+    "color": {
+      "vi": "Vàng rơm",
+      "en": "Straw yellow"
+    },
+    "description": {
+      "vi": "Luna khá nhút nhát lúc đầu nhưng dần trở nên thân thiện khi quen người.",
+      "en": "Luna is a bit shy at first but warms up quickly once she gets to know you."
+    },
+    "idealHome": {
+      "vi": "Phù hợp với người chủ kiên nhẫn, có nhiều thời gian ở nhà.",
+      "en": "Best for a patient owner who spends a lot of time at home."
+    },
+    "goodWith": [
+      {
+        "vi": "Người lớn tuổi",
+        "en": "Seniors"
+      },
+      {
+        "vi": "Người lạ",
+        "en": "Strangers"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Ở nhà một mình",
+        "en": "Being Alone"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Nhạy cảm",
+        "Dễ mến",
+        "Thích được an ủi"
+      ],
+      "en": [
+        "Sensitive",
+        "Sweet-natured",
+        "Loves comfort and reassurance"
+      ]
+    }
+  },
+  {
+    "id": "255688c5-3497-4fdf-a988-e3a96215eebf",
+    "name": "Buggy",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Pug",
+      "en": "Pug"
+    },
+    "color": {
+      "vi": "Vàng",
+      "en": "Yellow"
+    },
+    "description": {
+      "vi": "Có vẻ buồn bã, cần thời gian để vui vẻ trở lại.",
+      "en": "Seems a bit down and could use time to feel happy again."
+    },
+    "idealHome": {
+      "vi": "Cần một người chủ có kinh nghiệm, kiên trì huấn luyện và đồng hành.",
+      "en": "Needs an experienced owner who can patiently continue training and bonding."
+    },
+    "goodWith": [
+      {
+        "vi": "Mèo",
+        "en": "Cats"
+      },
+      {
+        "vi": "Người lớn tuổi",
+        "en": "Seniors"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Tiếng ồn lớn",
+        "en": "Loud Noises"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Trầm tính",
+        "Nhạy cảm",
+        "Cần được an ủi"
+      ],
+      "en": [
+        "Quiet",
+        "Sensitive",
+        "Needs comforting"
+      ]
+    }
+  },
+  {
+    "id": "41fdc227-f6ea-483a-b9e4-f63ee3411f22",
+    "name": "Piglet a",
+    "species": {
+      "vi": "Mèo",
+      "en": "Cat"
+    },
+    "breed": {
+      "vi": "Mèo mướp",
+      "en": "Tabby Cat"
+    },
+    "color": {
+      "vi": "Xám Trắng",
+      "en": "Grey & White"
+    },
+    "description": {
+      "vi": "Piglet là một bé mèo mướp điềm tĩnh, thích nằm phơi nắng cạnh cửa sổ.",
+      "en": "Piglet is a calm tabby who loves sunbathing by the window."
+    },
+    "idealHome": {
+      "vi": "Phù hợp với căn hộ yên tĩnh, có cửa sổ để bé nằm sưởi nắng.",
+      "en": "Best suited to a quiet apartment with a sunny window to lounge in."
+    },
+    "goodWith": [
+      {
+        "vi": "Người lớn tuổi",
+        "en": "Seniors"
+      },
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Chó khác",
+        "en": "Other Dogs"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Điềm tĩnh",
+        "Độc lập",
+        "Thích nằm sưởi nắng"
+      ],
+      "en": [
+        "Calm",
+        "Independent",
+        "Loves sunbathing"
+      ]
+    }
+  },
+  {
+    "id": "446521cf-17e3-4af6-93fc-ee06b8c3532e",
+    "name": "900263002641533",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Poodle lai",
+      "en": "Poodle mix"
+    },
+    "color": {
+      "vi": "Nâu, vàng",
+      "en": "Brown, yellow"
+    },
+    "description": {
+      "vi": "Được nhận nuôi nhưng chủ không huấn luyện được, hay cho lên giường và bé đi vệ sinh ra giường nên trả lại.",
+      "en": "Was adopted but the owner couldn't train her well — she was allowed on the bed and would relieve herself there, so she was returned."
+    },
+    "idealHome": {
+      "vi": "Cần một người chủ kiên nhẫn, sẵn sàng huấn luyện lại các thói quen đi vệ sinh.",
+      "en": "Needs a patient owner willing to retrain her bathroom habits."
+    },
+    "goodWith": [
+      {
+        "vi": "Vật nuôi khác",
+        "en": "Other Pets"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Chó khác",
+        "en": "Other Dogs"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Cứng đầu",
+        "Thích được vuốt ve",
+        "Lười vận động"
+      ],
+      "en": [
+        "Stubborn",
+        "Enjoys being petted",
+        "Low energy"
+      ]
+    }
+  },
+  {
+    "id": "447ddfd3-78a7-4e3b-aa8f-2b4805d036d4",
+    "name": "900263000671386",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Poodle",
+      "en": "Poodle"
+    },
+    "color": {
+      "vi": "Trắng",
+      "en": "White"
+    },
+    "description": {
+      "vi": "Một bé poodle trắng tinh nghịch, thích ngủ nướng vào buổi sáng.",
+      "en": "A playful white poodle who loves sleeping in."
+    },
+    "idealHome": {
+      "vi": "Phù hợp với môi trường ấm cúng, có người ở nhà phần lớn thời gian.",
+      "en": "Would thrive in a cozy environment with someone home most of the day."
+    },
+    "goodWith": [
+      {
+        "vi": "Vật nuôi khác",
+        "en": "Other Pets"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Động vật nhỏ",
+        "en": "Small Animals"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Thích ngủ",
+        "Hiếu động",
+        "Dễ huấn luyện"
+      ],
+      "en": [
+        "Loves sleeping",
+        "Playful",
+        "Easy to train"
+      ]
+    }
+  },
+  {
+    "id": "5954d854-c93c-44bc-a243-e6a58b57d6bf",
+    "name": "900263002641622",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Poodle",
+      "en": "Poodle"
+    },
+    "color": {
+      "vi": "Trắng",
+      "en": "White"
+    },
+    "description": {
+      "vi": "Đã từng sinh sản; chủ nuôi đầu trả lại vì bị nấm men không chăm được, chủ nuôi thứ hai trả lại vì nhà phát sinh công việc không chăm được.",
+      "en": "Has given birth before. The first foster returned her due to a yeast infection she couldn't manage, and the second foster returned her because of a sudden work change."
+    },
+    "idealHome": {
+      "vi": "Cần chủ có kinh nghiệm, kiên trì tiếp tục huấn luyện và chăm sóc sức khỏe.",
+      "en": "Needs an experienced owner committed to ongoing training and health care."
+    },
+    "goodWith": [
+      {
+        "vi": "Vật nuôi khác",
+        "en": "Other Pets"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Mèo",
+        "en": "Cats"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Thân thiện",
+        "Nhạy cảm",
+        "Vui vẻ"
+      ],
+      "en": [
+        "Friendly",
+        "Sensitive",
+        "Cheerful"
+      ]
+    }
+  },
+  {
+    "id": "616af2ed-b5fb-4ec3-801f-c02699c98318",
+    "name": "LUNA",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Golden Retriever",
+      "en": "Golden Retriever"
+    },
+    "color": {
+      "vi": "Vàng rơm",
+      "en": "Straw yellow"
+    },
+    "description": {
+      "vi": "Luna rất thích chơi ném bắt bóng và bơi lội.",
+      "en": "Luna loves playing fetch and swimming."
+    },
+    "idealHome": {
+      "vi": "Lý tưởng cho gia đình có sân vườn hoặc gần hồ, công viên.",
+      "en": "Ideal for a family with a yard or access to a nearby park and water."
+    },
+    "goodWith": [
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      },
+      {
+        "vi": "Chó khác",
+        "en": "Other Dogs"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Động vật nhỏ",
+        "en": "Small Animals"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Năng động",
+        "Thích nước",
+        "Hòa đồng"
+      ],
+      "en": [
+        "Energetic",
+        "Loves water",
+        "Sociable"
+      ]
+    }
+  },
+  {
+    "id": "6cc6eb0a-024e-4829-8b9d-9fb9e3b8a4ae",
+    "name": "Piglet a",
+    "species": {
+      "vi": "Mèo",
+      "en": "Cat"
+    },
+    "breed": {
+      "vi": "Mèo mướp",
+      "en": "Tabby Cat"
+    },
+    "color": {
+      "vi": "Xám Trắng",
+      "en": "Grey & White"
+    },
+    "description": {
+      "vi": "Piglet hơi nhút nhát với người lạ nhưng rất quấn chủ.",
+      "en": "Piglet is a little shy around strangers but very affectionate with her owner."
+    },
+    "idealHome": {
+      "vi": "Phù hợp với người sống một mình, ít khách đến nhà.",
+      "en": "Best for someone living alone with few visitors."
+    },
+    "goodWith": [
+      {
+        "vi": "Vật nuôi khác",
+        "en": "Other Pets"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Người lạ",
+        "en": "Strangers"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Nhút nhát",
+        "Quấn chủ",
+        "Thích yên tĩnh"
+      ],
+      "en": [
+        "Shy",
+        "Attached to owner",
+        "Prefers a quiet space"
+      ]
+    }
+  },
+  {
+    "id": "70586a2a-5652-478d-9fc8-47cf1078ceec",
+    "name": "LUNA",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Golden Retriever",
+      "en": "Golden Retriever"
+    },
+    "color": {
+      "vi": "Vàng rơm",
+      "en": "Straw yellow"
+    },
+    "description": {
+      "vi": "Luna khá lớn tuổi, đi lại chậm nhưng vẫn rất tình cảm.",
+      "en": "Luna is a senior dog, slower on her feet but still very affectionate."
+    },
+    "idealHome": {
+      "vi": "Cần một gia đình kiên nhẫn, không yêu cầu vận động nhiều.",
+      "en": "Needs a patient family that doesn't require lots of exercise."
+    },
+    "goodWith": [
+      {
+        "vi": "Người lớn tuổi",
+        "en": "Seniors"
+      },
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Tiếng ồn lớn",
+        "en": "Loud Noises"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Điềm tĩnh",
+        "Tình cảm",
+        "Chậm rãi"
+      ],
+      "en": [
+        "Gentle",
+        "Affectionate",
+        "Easygoing"
+      ]
+    }
+  },
+  {
+    "id": "744002f1-d3e2-47b9-a544-0351fb057df2",
+    "name": "Piglet a",
+    "species": {
+      "vi": "Mèo",
+      "en": "Cat"
+    },
+    "breed": {
+      "vi": "Mèo mướp",
+      "en": "Tabby Cat"
+    },
+    "color": {
+      "vi": "Xám Trắng",
+      "en": "Grey & White"
+    },
+    "description": {
+      "vi": "Piglet rất tò mò, thích khám phá mọi ngóc ngách trong nhà.",
+      "en": "Piglet is very curious and loves exploring every corner of the house."
+    },
+    "idealHome": {
+      "vi": "Phù hợp với không gian có nhiều chỗ để leo trèo và khám phá.",
+      "en": "Best suited to a space with plenty of room to climb and explore."
+    },
+    "goodWith": [
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Động vật nhỏ",
+        "en": "Small Animals"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Tò mò",
+        "Lém lỉnh",
+        "Thích leo trèo"
+      ],
+      "en": [
+        "Curious",
+        "Mischievous",
+        "Loves climbing"
+      ]
+    }
+  },
+  {
+    "id": "7acedfcc-038c-43bf-b655-9a5d344f144e",
+    "name": "900263000671695",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Poodle",
+      "en": "Poodle"
+    },
+    "color": {
+      "vi": "Trắng",
+      "en": "White"
+    },
+    "description": {
+      "vi": "Đã từng sinh đẻ.",
+      "en": "Has given birth before."
+    },
+    "idealHome": {
+      "vi": "Cần một mái nhà có sân để vui chơi an toàn.",
+      "en": "Needs a home with a fenced yard for safe play."
+    },
+    "goodWith": [
+      {
+        "vi": "Người lớn tuổi",
+        "en": "Seniors"
+      },
+      {
+        "vi": "Vật nuôi khác",
+        "en": "Other Pets"
+      },
+      {
+        "vi": "Người lạ",
+        "en": "Strangers"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Chó khác",
+        "en": "Other Dogs"
+      },
+      {
+        "vi": "Mèo",
+        "en": "Cats"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Hòa đồng",
+        "Nghe lời",
+        "Quấn người"
+      ],
+      "en": [
+        "Sociable",
+        "Obedient",
+        "Affectionate"
+      ]
+    }
+  },
+  {
+    "id": "82c2c961-1d02-4eb0-b0cf-2bf972a14b20",
+    "name": "LUNA",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Golden Retriever",
+      "en": "Golden Retriever"
+    },
+    "color": {
+      "vi": "Vàng rơm",
+      "en": "Straw yellow"
+    },
+    "description": {
+      "vi": "Luna là chú chó hiền lành, rất thích được vuốt ve và âu yếm.",
+      "en": "Luna is a gentle dog who loves cuddles and being petted."
+    },
+    "idealHome": {
+      "vi": "Hợp với gia đình ấm áp, dành nhiều thời gian chăm sóc.",
+      "en": "Best for a warm family who can spend lots of time caring for her."
+    },
+    "goodWith": [
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      },
+      {
+        "vi": "Người lớn tuổi",
+        "en": "Seniors"
+      },
+      {
+        "vi": "Vật nuôi khác",
+        "en": "Other Pets"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Người lạ",
+        "en": "Strangers"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Hiền lành",
+        "Thích âu yếm",
+        "Dễ gần"
+      ],
+      "en": [
+        "Gentle",
+        "Cuddly",
+        "Approachable"
+      ]
+    }
+  },
+  {
+    "id": "8726ba09-bef0-4888-bf64-1c647be7b064",
+    "name": "900263000671188",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Cỏ lai",
+      "en": "Mixed breed"
+    },
+    "color": {
+      "vi": "Đen, xám",
+      "en": "Black, grey"
+    },
+    "description": {
+      "vi": "Một bé chó cỏ lai nhanh nhẹn, cảnh giác với người lạ.",
+      "en": "An alert, quick mixed-breed dog, wary of strangers."
+    },
+    "idealHome": {
+      "vi": "Cần gia đình năng động, thích đi bộ đường dài và dã ngoại.",
+      "en": "Needs an active family who enjoys hiking and outdoor activities."
+    },
+    "goodWith": [
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Người lạ",
+        "en": "Strangers"
+      },
+      {
+        "vi": "Mèo",
+        "en": "Cats"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Nhạy cảm",
+        "Thích đào bới",
+        "Cảnh giác"
+      ],
+      "en": [
+        "Sensitive",
+        "Loves digging",
+        "Watchful"
+      ]
+    }
+  },
+  {
+    "id": "89657269-d140-4df5-be35-bb4fa2844b12",
+    "name": "Piglet a",
+    "species": {
+      "vi": "Mèo",
+      "en": "Cat"
+    },
+    "breed": {
+      "vi": "Mèo mướp",
+      "en": "Tabby Cat"
+    },
+    "color": {
+      "vi": "Xám Trắng",
+      "en": "Grey & White"
+    },
+    "description": {
+      "vi": "Piglet thích chơi với dây ruy băng và đồ chơi có lông.",
+      "en": "Piglet loves playing with ribbons and feather toys."
+    },
+    "idealHome": {
+      "vi": "Phù hợp với người có nhiều thời gian chơi cùng mèo mỗi ngày.",
+      "en": "Best for someone with time to play with her every day."
+    },
+    "goodWith": [
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      },
+      {
+        "vi": "Vật nuôi khác",
+        "en": "Other Pets"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Tiếng ồn lớn",
+        "en": "Loud Noises"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Hiếu động",
+        "Thích chơi đùa",
+        "Vui vẻ"
+      ],
+      "en": [
+        "Playful",
+        "Energetic",
+        "Cheerful"
+      ]
+    }
+  },
+  {
+    "id": "a1e13583-85b4-4f18-8962-efb9a8be3521",
+    "name": "900263002641507",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Cỏ lai",
+      "en": "Mixed breed"
+    },
+    "color": {
+      "vi": "Nâu",
+      "en": "Brown"
+    },
+    "description": {
+      "vi": "Một bé chó cỏ lai nâu hiền lành, dễ thích nghi với môi trường mới.",
+      "en": "A gentle brown mixed-breed dog who adapts easily to new environments."
+    },
+    "idealHome": {
+      "vi": "Phù hợp với cuộc sống chung cư, miễn là được dắt đi dạo mỗi ngày.",
+      "en": "Fine with apartment living as long as she gets daily walks."
+    },
+    "goodWith": [
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      },
+      {
+        "vi": "Người lạ",
+        "en": "Strangers"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Động vật nhỏ",
+        "en": "Small Animals"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Thích được vuốt ve",
+        "Dễ lo lắng",
+        "Quấn người"
+      ],
+      "en": [
+        "Enjoys being petted",
+        "Easily anxious",
+        "Affectionate"
+      ]
+    }
+  },
+  {
+    "id": "b6c37a22-2d75-4f08-af64-b2ca881d89b5",
+    "name": "900255001490361",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Fox lai",
+      "en": "Fox Terrier mix"
+    },
+    "color": {
+      "vi": "Đen, vàng",
+      "en": "Black, yellow"
+    },
+    "description": {
+      "vi": "5kg, sinh ngày 19/10/2022.",
+      "en": "5kg, born on October 19, 2022."
+    },
+    "idealHome": {
+      "vi": "Cần một gia đình năng động, yêu thích đi bộ đường dài và hoạt động ngoài trời.",
+      "en": "Needs an active family who loves hiking and outdoor activities."
+    },
+    "goodWith": [
+      {
+        "vi": "Mèo",
+        "en": "Cats"
+      },
+      {
+        "vi": "Người lớn tuổi",
+        "en": "Seniors"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Tiếng ồn lớn",
+        "en": "Loud Noises"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Thân thiện",
+        "Thích ngủ",
+        "Thích khám phá"
+      ],
+      "en": [
+        "Friendly",
+        "Loves napping",
+        "Loves exploring"
+      ]
+    }
+  },
+  {
+    "id": "bd0c4a90-1fc3-4be3-a34e-7b2be4527fd4",
+    "name": "900263000671193",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Fox",
+      "en": "Fox Terrier"
+    },
+    "color": {
+      "vi": "Nâu",
+      "en": "Brown"
+    },
+    "description": {
+      "vi": "Bị bệnh tim, chó già, cần tìm chủ cho uống thuốc hàng ngày.",
+      "en": "Has a heart condition; an older dog who needs daily medication."
+    },
+    "idealHome": {
+      "vi": "Cần chủ có kinh nghiệm, kiên nhẫn cho uống thuốc đều đặn mỗi ngày.",
+      "en": "Needs an experienced owner who can give daily medication consistently."
+    },
+    "goodWith": [
+      {
+        "vi": "Vật nuôi khác",
+        "en": "Other Pets"
+      },
+      {
+        "vi": "Người lớn tuổi",
+        "en": "Seniors"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Động vật nhỏ",
+        "en": "Small Animals"
+      },
+      {
+        "vi": "Tiếng ồn lớn",
+        "en": "Loud Noises"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Dũng cảm",
+        "Thích đào bới",
+        "Hòa đồng"
+      ],
+      "en": [
+        "Brave",
+        "Loves digging",
+        "Sociable"
+      ]
+    }
+  },
+  {
+    "id": "c3d802a6-9a91-4f3f-ae18-d993e4d4a5fd",
+    "name": "Shibalama",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Shiba Inu",
+      "en": "Shiba Inu"
+    },
+    "color": {
+      "vi": "Nâu",
+      "en": "Brown"
+    },
+    "description": {
+      "vi": "Rất hài hước, luôn làm mọi người bật cười.",
+      "en": "Very funny, always makes everyone laugh."
+    },
+    "idealHome": {
+      "vi": "Phù hợp với nhà yên tĩnh, không có trẻ nhỏ.",
+      "en": "A quiet home without small children would be best."
+    },
+    "goodWith": [
+      {
+        "vi": "Chó khác",
+        "en": "Other Dogs"
+      },
+      {
+        "vi": "Người lạ",
+        "en": "Strangers"
+      },
+      {
+        "vi": "Người lớn tuổi",
+        "en": "Seniors"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Động vật nhỏ",
+        "en": "Small Animals"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Tinh nghịch",
+        "Độc lập",
+        "Thông minh"
+      ],
+      "en": [
+        "Mischievous",
+        "Independent",
+        "Clever"
+      ]
+    }
+  },
+  {
+    "id": "c876aae9-bb06-4800-acd3-b3b2dacf3885",
+    "name": "90263000671689",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Poodle",
+      "en": "Poodle"
+    },
+    "color": {
+      "vi": "Nâu",
+      "en": "Brown"
+    },
+    "description": {
+      "vi": "2 chân sau bị tật.",
+      "en": "Has a disability in both hind legs."
+    },
+    "idealHome": {
+      "vi": "Cần chủ có kinh nghiệm, sẵn sàng hỗ trợ di chuyển và chăm sóc đặc biệt.",
+      "en": "Needs an experienced owner willing to provide mobility support and special care."
+    },
+    "goodWith": [
+      {
+        "vi": "Người lạ",
+        "en": "Strangers"
+      },
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Chó khác",
+        "en": "Other Dogs"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Vui vẻ",
+        "Hòa đồng",
+        "Nhiều năng lượng"
+      ],
+      "en": [
+        "Cheerful",
+        "Sociable",
+        "High energy"
+      ]
+    }
+  },
+  {
+    "id": "db8eff95-b4b3-41f3-b083-ff1b6d088325",
+    "name": "900263003834545",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Poodle",
+      "en": "Poodle"
+    },
+    "color": {
+      "vi": "Trắng",
+      "en": "White"
+    },
+    "description": {
+      "vi": "3 chân, 1 mắt, 5-6kg, lang thang băng qua đường ở khu vực gần công trường Vinhomes City Tân Lập, được hai bạn thanh niên vẫy lại đưa về Linh Đàm; Trung đưa qua Hùng Vương theo dõi vài hôm rồi phẫu thuật bỏ mắt.",
+      "en": "Three legs, one eye, weighs about 5-6kg. Found wandering across a road near the Vinhomes City Tân Lập construction site; two young men flagged her down and brought her to Linh Đàm. She was then taken to Hùng Vương for a few days of monitoring before having eye-removal surgery."
+    },
+    "idealHome": {
+      "vi": "Cần chủ có kinh nghiệm, kiên nhẫn hỗ trợ một bé chó khuyết tật hòa nhập cuộc sống mới.",
+      "en": "Needs an experienced, patient owner to help a dog with disabilities settle into a new life."
+    },
+    "goodWith": [
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      },
+      {
+        "vi": "Vật nuôi khác",
+        "en": "Other Pets"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Tiếng ồn lớn",
+        "en": "Loud Noises"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Quấn người",
+        "Dịu dàng",
+        "Tự tin"
+      ],
+      "en": [
+        "Affectionate",
+        "Gentle",
+        "Confident"
+      ]
+    }
+  },
+  {
+    "id": "e36b5ff7-b42f-4d73-ab92-e184c51ebd4e",
+    "name": "900263003834544",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Poodle lai",
+      "en": "Poodle mix"
+    },
+    "color": {
+      "vi": "Nâu",
+      "en": "Brown"
+    },
+    "description": {
+      "vi": "Về trạm ngày 28/8/2025: Chó bị nhét túi nilon vứt tại 37 nhà vườn Vĩnh Hoàng. Bạn cún đã từng bị Parvo + Corona.",
+      "en": "Arrived at the shelter on August 28, 2025: found stuffed in a plastic bag and abandoned at 37 Nhà Vườn Vĩnh Hoàng. Has previously had Parvo and Corona virus."
+    },
+    "idealHome": {
+      "vi": "Phù hợp với môi trường ấm cúng, có người ở nhà phần lớn thời gian để theo dõi sức khỏe.",
+      "en": "Would thrive in a cozy home with someone around most of the day to keep an eye on her health."
+    },
+    "goodWith": [
+      {
+        "vi": "Người lớn tuổi",
+        "en": "Seniors"
+      },
+      {
+        "vi": "Người lạ",
+        "en": "Strangers"
+      },
+      {
+        "vi": "Vật nuôi khác",
+        "en": "Other Pets"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Tiếng ồn lớn",
+        "en": "Loud Noises"
+      },
+      {
+        "vi": "Mèo",
+        "en": "Cats"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Thích gặm đồ",
+        "Trung thành",
+        "Thân thiện"
+      ],
+      "en": [
+        "Loves chewing",
+        "Loyal",
+        "Friendly"
+      ]
+    }
+  },
+  {
+    "id": "eb280b44-07bc-499b-9f29-807606818bb5",
+    "name": "900263003834569",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Poodle",
+      "en": "Poodle"
+    },
+    "color": {
+      "vi": "Nâu",
+      "en": "Brown"
+    },
+    "description": {
+      "vi": "Còn đuôi (chưa bị cắt cụt).",
+      "en": "Still has her tail (not docked)."
+    },
+    "idealHome": {
+      "vi": "Phù hợp với cuộc sống chung cư, miễn là được dắt đi dạo mỗi ngày.",
+      "en": "Fine with apartment living as long as she gets daily walks."
+    },
+    "goodWith": [
+      {
+        "vi": "Chó khác",
+        "en": "Other Dogs"
+      },
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      },
+      {
+        "vi": "Người lớn tuổi",
+        "en": "Seniors"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Mèo",
+        "en": "Cats"
+      },
+      {
+        "vi": "Tiếng ồn lớn",
+        "en": "Loud Noises"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Năng động ngoài trời",
+        "Dũng cảm",
+        "Hay sủa"
+      ],
+      "en": [
+        "Loves outdoor activity",
+        "Brave",
+        "Tends to bark"
+      ]
+    }
+  },
+  {
+    "id": "f085ad95-15c7-4641-bd43-e02a24ee0af3",
+    "name": "900263002641738",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Bắc Kinh lai Nhật",
+      "en": "Pekingese-Japanese Chin mix"
+    },
+    "color": {
+      "vi": "Nâu, trắng",
+      "en": "Brown, white"
+    },
+    "description": {
+      "vi": "Mắt đục.",
+      "en": "Has cloudy eyes (cataracts)."
+    },
+    "idealHome": {
+      "vi": "Cần chủ kiên nhẫn, hỗ trợ một bé chó khiếm thị di chuyển trong nhà.",
+      "en": "Needs a patient owner to help a visually-impaired dog get around the home."
+    },
+    "goodWith": [
+      {
+        "vi": "Người lạ",
+        "en": "Strangers"
+      },
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      },
+      {
+        "vi": "Người lớn tuổi",
+        "en": "Seniors"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Chó khác",
+        "en": "Other Dogs"
+      },
+      {
+        "vi": "Tiếng ồn lớn",
+        "en": "Loud Noises"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Dũng cảm",
+        "Thích đào bới",
+        "Dịu dàng"
+      ],
+      "en": [
+        "Brave",
+        "Loves digging",
+        "Gentle"
+      ]
+    }
+  },
+  {
+    "id": "f5f3ba7d-4dd0-4882-bea0-5d52ab1a9ca4",
+    "name": "Corki",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Corgi",
+      "en": "Corgi"
+    },
+    "color": {
+      "vi": "Nâu",
+      "en": "Brown"
+    },
+    "description": {
+      "vi": "Rất thân thiện, hòa đồng với mọi người.",
+      "en": "Very friendly and sociable with everyone."
+    },
+    "idealHome": {
+      "vi": "Phù hợp với cuộc sống chung cư, miễn là được dắt đi dạo mỗi ngày.",
+      "en": "Fine with apartment living as long as it gets daily walks."
+    },
+    "goodWith": [
+      {
+        "vi": "Mèo",
+        "en": "Cats"
+      },
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Động vật nhỏ",
+        "en": "Small Animals"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Thân thiện",
+        "Lanh lợi",
+        "Trung thành"
+      ],
+      "en": [
+        "Friendly",
+        "Smart",
+        "Loyal"
+      ]
+    }
+  },
+  {
+    "id": "fad3cc3d-857a-44f2-bce9-0540bbb60497",
+    "name": "900255001490355",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Cỏ lai",
+      "en": "Mixed breed"
+    },
+    "color": {
+      "vi": "Đen",
+      "en": "Black"
+    },
+    "description": {
+      "vi": "Được nhận nuôi xong bị chủ trả lại vì cắn đồ, hay đái són khi mừng; đã kiểm tra thận, không bất thường.",
+      "en": "Was adopted but returned by the owner for chewing on things and peeing out of excitement; her kidneys were checked and found normal."
+    },
+    "idealHome": {
+      "vi": "Phù hợp với cuộc sống chung cư, miễn là được dắt đi dạo mỗi ngày.",
+      "en": "Fine with apartment living as long as she gets daily walks."
+    },
+    "goodWith": [
+      {
+        "vi": "Chó khác",
+        "en": "Other Dogs"
+      },
+      {
+        "vi": "Vật nuôi khác",
+        "en": "Other Pets"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Người lạ",
+        "en": "Strangers"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Trung thành",
+        "Quấn người",
+        "Cảnh giác"
+      ],
+      "en": [
+        "Loyal",
+        "Affectionate",
+        "Alert"
+      ]
+    }
+  },
+  {
+    "id": "fcf74d8c-97fb-4479-a943-2eee4ef59bbd",
+    "name": "Piglet a",
+    "species": {
+      "vi": "Mèo",
+      "en": "Cat"
+    },
+    "breed": {
+      "vi": "Mèo mướp",
+      "en": "Tabby Cat"
+    },
+    "color": {
+      "vi": "Xám Trắng",
+      "en": "Grey & White"
+    },
+    "description": {
+      "vi": "Piglet thích nằm cuộn tròn ngủ cả ngày trên ghế sofa.",
+      "en": "Piglet loves curling up and napping all day on the sofa."
+    },
+    "idealHome": {
+      "vi": "Phù hợp với gia đình ít thay đổi đồ đạc, để bé giữ được góc ngủ quen thuộc.",
+      "en": "Best for a household that doesn't rearrange furniture often, so she keeps her favorite napping spot."
+    },
+    "goodWith": [
+      {
+        "vi": "Người lớn tuổi",
+        "en": "Seniors"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Chó khác",
+        "en": "Other Dogs"
+      },
+      {
+        "vi": "Tiếng ồn lớn",
+        "en": "Loud Noises"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Lười biếng",
+        "Thích ngủ",
+        "Dễ chiều"
+      ],
+      "en": [
+        "Lazy",
+        "Loves sleeping",
+        "Easygoing"
+      ]
+    }
+  },
+  {
+    "id": "pet-bella-003",
+    "name": "Bella",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Golden Retriever",
+      "en": "Golden Retriever"
+    },
+    "color": null,
+    "description": {
+      "vi": "Golden hiền lành.",
+      "en": "A gentle, easygoing Golden Retriever."
+    },
+    "idealHome": {
+      "vi": "Gia đình có trẻ nhỏ.",
+      "en": "A family with young children."
+    },
+    "goodWith": [
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      },
+      {
+        "vi": "Vật nuôi khác",
+        "en": "Other Pets"
+      }
+    ],
+    "badWith": [],
+    "personalityTags": {
+      "vi": [
+        "Hiền lành",
+        "Thân thiện",
+        "Trung thành"
+      ],
+      "en": [
+        "Gentle",
+        "Friendly",
+        "Loyal"
+      ]
+    }
+  },
+  {
+    "id": "pet-charlie-007",
+    "name": "Charlie",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Beagle",
+      "en": "Beagle"
+    },
+    "color": null,
+    "description": {
+      "vi": "Beagle ham ăn.",
+      "en": "A Beagle who loves to eat."
+    },
+    "idealHome": {
+      "vi": "Có anh chị chó chơi cùng.",
+      "en": "A home with other dogs to play with."
+    },
+    "goodWith": [
+      {
+        "vi": "Chó khác",
+        "en": "Other Dogs"
+      },
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Động vật nhỏ",
+        "en": "Small Animals"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Ham ăn",
+        "Tinh nghịch",
+        "Năng động"
+      ],
+      "en": [
+        "Food-loving",
+        "Playful",
+        "Energetic"
+      ]
+    }
+  },
+  {
+    "id": "pet-daisy-006",
+    "name": "Daisy",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Poodle",
+      "en": "Poodle"
+    },
+    "color": null,
+    "description": {
+      "vi": "Poodle lanh lợi.",
+      "en": "A clever, quick-witted Poodle."
+    },
+    "idealHome": {
+      "vi": "Căn hộ chung cư.",
+      "en": "An apartment home."
+    },
+    "goodWith": [
+      {
+        "vi": "Người lớn tuổi",
+        "en": "Seniors"
+      },
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      }
+    ],
+    "badWith": [],
+    "personalityTags": {
+      "vi": [
+        "Lanh lợi",
+        "Thông minh",
+        "Dễ huấn luyện"
+      ],
+      "en": [
+        "Clever",
+        "Smart",
+        "Easy to train"
+      ]
+    }
+  },
+  {
+    "id": "pet-luna-002",
+    "name": "Luna",
+    "species": {
+      "vi": "Mèo",
+      "en": "Cat"
+    },
+    "breed": {
+      "vi": "Mèo Anh lông ngắn",
+      "en": "British Shorthair"
+    },
+    "color": null,
+    "description": {
+      "vi": "Mèo Anh lông ngắn ngọt ngào.",
+      "en": "A sweet British Shorthair cat."
+    },
+    "idealHome": {
+      "vi": "Nhà yên tĩnh.",
+      "en": "A quiet home."
+    },
+    "goodWith": [
+      {
+        "vi": "Người lớn tuổi",
+        "en": "Seniors"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Tiếng ồn lớn",
+        "en": "Loud Noises"
+      },
+      {
+        "vi": "Chó khác",
+        "en": "Other Dogs"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Ngọt ngào",
+        "Điềm tĩnh",
+        "Độc lập"
+      ],
+      "en": [
+        "Sweet",
+        "Calm",
+        "Independent"
+      ]
+    }
+  },
+  {
+    "id": "pet-max-005",
+    "name": "Max",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Husky",
+      "en": "Husky"
+    },
+    "color": null,
+    "description": {
+      "vi": "Husky năng lượng.",
+      "en": "A high-energy Husky."
+    },
+    "idealHome": {
+      "vi": "Chủ yêu thể thao.",
+      "en": "An owner who loves sports and exercise."
+    },
+    "goodWith": [
+      {
+        "vi": "Chó khác",
+        "en": "Other Dogs"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Động vật nhỏ",
+        "en": "Small Animals"
+      },
+      {
+        "vi": "Mèo",
+        "en": "Cats"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Năng động",
+        "Mạnh mẽ",
+        "Thích chạy"
+      ],
+      "en": [
+        "Energetic",
+        "Strong",
+        "Loves to run"
+      ]
+    }
+  },
+  {
+    "id": "pet-milo-001",
+    "name": "Milo",
+    "species": {
+      "vi": "Chó",
+      "en": "Dog"
+    },
+    "breed": {
+      "vi": "Corgi",
+      "en": "Corgi"
+    },
+    "color": null,
+    "description": {
+      "vi": "Corgi năng động.",
+      "en": "An active Corgi."
+    },
+    "idealHome": {
+      "vi": "Sân vườn.",
+      "en": "A home with a yard."
+    },
+    "goodWith": [
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      },
+      {
+        "vi": "Người lớn tuổi",
+        "en": "Seniors"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Động vật nhỏ",
+        "en": "Small Animals"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Năng động",
+        "Vui vẻ",
+        "Lém lỉnh"
+      ],
+      "en": [
+        "Active",
+        "Cheerful",
+        "Mischievous"
+      ]
+    }
+  },
+  {
+    "id": "pet-simba-004",
+    "name": "Simba",
+    "species": {
+      "vi": "Mèo",
+      "en": "Cat"
+    },
+    "breed": {
+      "vi": "Mèo Ba Tư",
+      "en": "Persian"
+    },
+    "color": null,
+    "description": {
+      "vi": "Ba Tư quấn chủ.",
+      "en": "A Persian cat who loves being close to its owner."
+    },
+    "idealHome": {
+      "vi": "Cần người chải lông.",
+      "en": "Needs an owner who can groom regularly."
+    },
+    "goodWith": [
+      {
+        "vi": "Người lớn tuổi",
+        "en": "Seniors"
+      },
+      {
+        "vi": "Trẻ em",
+        "en": "Kids"
+      }
+    ],
+    "badWith": [
+      {
+        "vi": "Tiếng ồn lớn",
+        "en": "Loud Noises"
+      }
+    ],
+    "personalityTags": {
+      "vi": [
+        "Quấn chủ",
+        "Điềm tĩnh",
+        "Yêu chiều"
+      ],
+      "en": [
+        "Affectionate",
+        "Calm",
+        "Loves pampering"
+      ]
+    }
+  }
+]

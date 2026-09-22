@@ -1,0 +1,1218 @@
+// Cấu trúc schema.prisma đã được tối ưu
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql" // Hoặc mysql/sqlite tùy cấu hình
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  SHELTER
+  ADMIN
+}
+
+enum AdoptionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TagStatus {
+  ACTIVE
+  LOST
+  INACTIVE
+}
+
+enum SwipeAction {
+  LIKE
+  PASS
+}
+
+enum PetGender {
+  MALE
+  FEMALE
+  UNKNOWN
+}
+
+enum PetSize {
+  SMALL
+  MEDIUM
+  LARGE
+}
+
+enum PetStatus {
+  AVAILABLE
+  PENDING
+  FOSTERING     // 🆕
+  REJECTED
+  HEALTH_ISSUE
+  ADOPTED
+}
+
+model Otp {
+  id        String   @id @default(uuid())
+  email     String
+  otp       String
+  type      String // Lưu loại OTP: "SIGNUP" hoặc "FORGOT_PASSWORD"
+  expiresAt DateTime // Thời gian hết hạn
+  createdAt DateTime @default(now())
+
+  // Đảm bảo mỗi email chỉ có 1 mã OTP active cho mỗi loại tại một thời điểm
+  @@unique([email, type])
+}
+
+model PetInteraction {
+  id        String      @id @default(uuid())
+  action    SwipeAction
+  createdAt DateTime    @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  petId String
+  pet   Pet    @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, petId]) // Đảm bảo 1 user chỉ quẹt 1 pet 1 lần
+}
+
+model FavoritePet {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation("UserFavorites", fields: [userId], references: [id], onDelete: Cascade)
+
+  petId String
+  pet   Pet    @relation("PetFavoritedBy", fields: [petId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, petId])
+}
+
+model DeviceSession {
+  id               String   @id @default(uuid())
+  deviceIdentifier String?
+  deviceName       String? // VD: "iPhone", "Mac OS"
+  deviceType       String   @default("smartphone") // "smartphone", "laptop", "tablet"
+  os               String? // VD: "iOS 16.5", "Windows 11"
+  ipAddress        String? // VD: "14.232.xxx.xxx"
+  location         String? // VD: "Hanoi, Vietnam"
+  pushToken        String?
+  lastActive       DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model TransferRequest {
+  id         String   @id @default(uuid())
+  petId      String
+  senderId   String
+  receiverId String
+  status     String   @default("PENDING") // Các trạng thái: PENDING, COMPLETED, REJECTED
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Quan hệ (Relations) - Hãy đảm bảo tên field trùng với schema Pet và User hiện tại của bạn
+  pet      Pet  @relation(fields: [petId], references: [id], onDelete: Cascade)
+  sender   User @relation("SentTransfers", fields: [senderId], references: [id])
+  receiver User @relation("ReceivedTransfers", fields: [receiverId], references: [id])
+}
+enum ShelterStaffRole {
+  ADMIN
+  MEMBER
+  VOLUNTEER
+  VETERINARIAN
+}
+
+enum ShelterInvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+model ShelterInvitation {
+  id          String                  @id @default(uuid())
+  shelterId   String
+  shelter     Shelter                 @relation(fields: [shelterId], references: [id], onDelete: Cascade)
+  email       String
+  role        ShelterStaffRole
+  token       String                  @unique
+  status      ShelterInvitationStatus @default(PENDING)
+  invitedById String
+  invitedBy   User                    @relation("SentInvitations", fields: [invitedById], references: [id])
+  expiresAt   DateTime
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@index([shelterId])
+  @@index([email])
+}
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  password  String? // Đổi thành Optional để hỗ trợ Social Login
+  role      Role      @default(USER)
+  name      String? // Đổi từ fullName thành name để khớp DTO
+  phone     String? // Thêm trường này
+  gender    String? // Thêm trường này
+  dob       DateTime? // Thêm trường này
+  avatarUrl String?
+  provider  String    @default("local")
+  // Trạng thái tài khoản (Quan trọng cho App Store - Account Deletion)
+  isDeleted Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  shelterRole     ShelterStaffRole?
+  sentInvitations ShelterInvitation[] @relation("SentInvitations")
+  petNotes PetNote[]
+  appointments Appointment[] @relation("UserAppointments")
+  // Liên kết
+  shelterId String? // Nếu User này là chủ một Shelter
+  shelter   Shelter?  @relation(fields: [shelterId], references: [id])
+
+  sentTransfers     TransferRequest[] @relation("SentTransfers")
+  receivedTransfers TransferRequest[] @relation("ReceivedTransfers")
+  applicationNotes ApplicationNote[]
+  pets                 Pet[]                 @relation("UserPets")
+  adoptionRequests     AdoptionRequest[]
+  messagesSent         Message[]             @relation("SenderMessages")
+  chatRooms            ChatRoomUser[]
+  notifications        Notification[]
+  interactions         PetInteraction[]
+  favoritePets         FavoritePet[]         @relation("UserFavorites")
+  followedShelters     FollowedShelter[]
+  deviceSessions       DeviceSession[]
+  twoFactorSecret      String?
+  isTwoFactorEnabled   Boolean               @default(false)
+  adoptionApplications AdoptionApplication[]
+  interestedEvents     EventInterest[]
+  tagReports           TagReport[]
+  reports              Report[]
+  eventReports         EventReport[]
+  hiddenEvents         UserHiddenEvent[]
+  blockedShelters      UserBlockedShelter[]
+  hiddenPets           UserHiddenPet[]
+  storyLikes StoryLike[]
+  reviewReports ReviewReport[]
+}
+
+// Bảng lưu trữ việc chặn người dùng (Apple bắt buộc phải có)
+model UserBlock {
+  id        String   @id @default(uuid())
+  blockerId String // ID người chặn
+  blockedId String // ID chủ nhân của pet bị chặn
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+}
+
+// Bảng lưu trữ lý do report
+model ContentReport {
+  id                String     @id @default(uuid())
+  reporterId        String
+  targetPetId       String? // Pet bị report
+  reason            String // Lý do (Spam, Inappropriate, etc.)
+  details           String? // Ghi chú thêm
+  status            String     @default("PENDING") // PENDING, REVIEWED, RESOLVED
+  createdAt         DateTime   @default(now())
+  targetPet         Pet?       @relation(fields: [targetPetId], references: [id])
+  targetTagReportId String?
+  targetTagReport   TagReport? @relation(fields: [targetTagReportId], references: [id])
+
+  @@index([reporterId])
+  @@index([targetPetId])
+}
+
+model Shelter {
+  id          String @id @default(uuid())
+  name        String
+  address     String
+  contactInfo String
+
+  emailAddress String?
+  shelterType  String?   @default("Animal Shelter & Rescue")
+  bio          String?   @db.Text
+  isVerified   Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  verifiedAt   DateTime?
+  appointments Appointment[] @relation("ShelterAppointments")
+  description String? @db.Text // Giới thiệu về trạm
+  policy      String? @db.Text
+  avatarUrl   String?
+  coverUrl    String? // Ảnh bìa
+  latitude    Float?
+  longitude   Float?
+  website String?
+  openingHours Json? 
+  invitations ShelterInvitation[]
+  applicationTags ApplicationTag[]
+  // Liên kết
+  followers      FollowedShelter[]
+  users          User[] // Danh sách tài khoản quản lý Shelter này
+  pets           Pet[]
+  blockedByUsers UserBlockedShelter[]
+}
+
+model EventReport {
+  id        String   @id @default(cuid())
+  eventId   String
+  userId    String
+  reason    String // Lý do report
+  details   String? // Chi tiết thêm (nếu có)
+  createdAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id])
+  user  User  @relation(fields: [userId], references: [id]) // Giả sử bạn có bảng User
+}
+
+model UserHiddenEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  eventId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  event Event @relation(fields: [eventId], references: [id])
+
+  // Đảm bảo 1 user không thể ẩn 1 event 2 lần gây rác DB
+  @@unique([userId, eventId])
+}
+
+model UserBlockedShelter {
+  userId    String
+  shelterId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shelter Shelter @relation(fields: [shelterId], references: [id], onDelete: Cascade)
+
+  @@id([userId, shelterId]) // Tránh duplicate
+  @@index([userId]) // Index để query danh sách block cực nhanh
+}
+
+model Report {
+  id        String   @id @default(uuid())
+  userId    String
+  targetId  String // ID của shelter hoặc đối tượng bị report
+  reason    String
+  detail    String?
+  type      String // 'shelter', 'pet', 'user'
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model FollowedShelter {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  shelterId String
+  shelter   Shelter @relation(fields: [shelterId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, shelterId])
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  DISPUTED
+}
+
+model PetTrait {
+  id    String @id @default(uuid())
+  name  Json // Đổi từ String sang Json
+  petId String
+  pet   Pet    @relation(fields: [petId], references: [id], onDelete: Cascade)
+}
+
+model MedicalRecord {
+  id         String   @id @default(uuid())
+  type       String // VD: "vaccination", "deworming"...
+  vaccineCategory String? // "RABIES" | "CORE" | "OTHER" — chỉ có ý nghĩa khi type = "VACCINATION"
+  recordName Json // Đổi từ String sang Json
+  recordDate DateTime
+  images     Json?
+
+  hasNextDueDate Boolean   @default(false)
+  nextDueDate    DateTime?
+  nextDueName    Json? // Đổi từ String? sang Json?
+
+  verificationStatus VerificationStatus @default(PENDING)
+
+  petId String
+  pet   Pet    @relation(fields: [petId], references: [id], onDelete: Cascade)
+  isPublic Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AdoptionRequirement {
+  id        String   @id @default(uuid())
+  key       String   @unique // 'house_with_yard', 'no_cat'... dùng để lookup icon ở FE
+  label     Json // { "vi": "Có sân vườn", "en": "House with yard" }
+  iconKey   String // map sang asset local ở FE, KHÔNG lưu icon path
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  pets PetAdoptionRequirement[]
+}
+
+// Bảng nối N-N giữa Pet và AdoptionRequirement
+model PetAdoptionRequirement {
+  id            String              @id @default(uuid())
+  petId         String
+  pet           Pet                 @relation(fields: [petId], references: [id], onDelete: Cascade)
+  requirementId String
+  requirement   AdoptionRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  createdAt     DateTime            @default(now())
+
+  @@unique([petId, requirementId])
+  @@index([petId])
+}
+
+model UserHiddenPet {
+  userId    String
+  petId     String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pet  Pet  @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@id([userId, petId])
+  @@index([userId])
+}
+enum AppointmentStatus {
+  PENDING       // Chờ Shelter xác nhận
+  CONFIRMED     // Shelter đã xác nhận lịch
+  RESCHEDULED   // Đang yêu cầu đổi lịch
+  CANCELLED     // Đã hủy lịch
+  COMPLETED     // Đã hoàn thành phỏng vấn/gặp mặt
+  REJECTED      // Shelter từ chối lịch hẹn
+}
+
+enum AppointmentType {
+  IN_PERSON     // Gặp trực tiếp tại trạm
+  ONLINE        // Phỏng vấn online
+}
+model PetNote {
+  id        String   @id @default(cuid())
+  petId     String
+  pet       Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([petId])
+}
+// =========================================================================
+// 1. MODULE THỦ TỤC NHẬP CẢNH (ENTRY PROCEDURES)
+// =========================================================================
+model CountryProcedure {
+  id          String   @id // 'japan', 'china', 'vietnam',...
+  nameVi      String
+  nameEn      String
+  flag        String
+  durationVi  String
+  durationEn  String
+  imageUrl    String
+  anchorX     Float    @default(0)
+  anchorY     Float    @default(0)
+  anchorScale Float    @default(1.05)
+  sortOrder   Int      @default(0)
+  subtitleVi String? @db.Text
+  subtitleEn String? @db.Text
+  prepDaysVi   String? // VD: "220 ngày"
+  prepDaysEn   String? // VD: "220 days"
+  costLevelVi  String? // VD: "Cao", "Trung bình", "Thấp"
+  costLevelEn  String? // VD: "High", "Medium", "Low"
+  friendlyVi   String? // VD: "Rất tốt", "Tốt", "Vừa", "Thấp"
+  friendlyEn   String? // VD: "Excellent", "Good", "Moderate", "Low"
+  descriptionVi String? @db.Text
+  descriptionEn String? @db.Text
+  introGalleryImages Json?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  milestones   ProcedureMilestone[]
+  documents    ProcedureDocument[]
+  petParadises PetParadise[]
+  petHotels    PetHotel[]
+
+  @@map("country_procedures")
+}
+
+model PetHotel {
+  id           String           @id @default(cuid())
+  countryId    String
+  country      CountryProcedure @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  name         String
+  cityVi       String           // VD: "Chiba, Nhật Bản"
+  cityEn       String           // VD: "Chiba, Japan"
+  rating       Float            @default(4.5)
+  reviewsCount Int              @default(0)
+  imageUrl     String           @db.Text
+  websiteUrl   String           @db.Text
+  sortOrder    Int              @default(0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([countryId])
+  @@map("pet_hotels")
+}
+
+model ProcedureMilestone {
+  id         String           @id @default(cuid())
+  countryId  String
+  country    CountryProcedure @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  dateLabel  String           // 'Ngày 0', 'Ngày 30 - 40',...
+  sortOrder  Int              @default(0)
+  createdAt  DateTime         @default(now())
+
+  steps ProcedureStep[]
+
+  @@index([countryId])
+  @@map("procedure_milestones")
+}
+
+model ProcedureStep {
+  id          String             @id @default(cuid())
+  milestoneId String
+  milestone   ProcedureMilestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  stepCode    String?            // 's_microchip_std', 's_flight_booking',...
+  title       String
+  subtitle    String
+  desc        String             @db.Text
+  notes       Json?              // string[]
+  hasButton   Boolean            @default(true)
+  borderColor String?
+  sortOrder   Int                @default(0)
+  createdAt   DateTime           @default(now())
+
+  @@index([milestoneId])
+  @@map("procedure_steps")
+}
+
+enum ProcedureDocType {
+  PDF
+  DOCX
+}
+
+model ProcedureDocument {
+  id          String           @id @default(cuid())
+  countryId   String
+  country     CountryProcedure @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  titleVi     String
+  titleEn     String
+  meta        String           // '3 trang • 2.5MB'
+  type        ProcedureDocType @default(PDF)
+  fileUrl     String
+  category    String           @default("GENERAL") // 'VIETNAM', 'DOG', 'CAT', 'GENERAL'
+  sortOrder   Int              @default(0)
+  createdAt   DateTime         @default(now())
+
+  @@index([countryId])
+  @@map("procedure_documents")
+}
+
+// =========================================================================
+// 2. MODULE THIÊN ĐƯỜNG THÚ CƯNG (PET PARADISE)
+// =========================================================================
+model PetParadise {
+  id            String            @id @default(cuid())
+  countryId     String?
+  country       CountryProcedure? @relation(fields: [countryId], references: [id], onDelete: SetNull)
+  name          String
+  categoryVi    String            @default("Đảo nhỏ ngoài khơi")
+  categoryEn    String            @default("Small offshore island")
+  statusTextVi  String            @default("Đang mở")
+  statusTextEn  String            @default("Opening")
+  introText     String            @db.Text
+  areaVi        String?
+  areaEn        String?
+  howToGetVi    String?           @db.Text
+  howToGetEn    String?           @db.Text
+  addressVi     String
+  addressEn     String
+  mapPreviewUrl String?
+  latitude      Float?
+  longitude     Float?
+  googlePlaceId String?           @unique // Liên kết với Google Places API
+  rating        Float             @default(5.0)
+  reviewsCount  Int               @default(0)
+  heroImage     String @db.Text
+  galleryImages Json?             // string[]
+  experiences   Json?             // [{ titleVi, titleEn, descVi, descEn }]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  reviews PetParadiseReview[]
+
+  @@index([countryId])
+  @@map("pet_paradises")
+}
+
+model PetParadiseReview {
+  id            String      @id @default(cuid())
+  paradiseId    String
+  paradise      PetParadise @relation(fields: [paradiseId], references: [id], onDelete: Cascade)
+  userId        String?
+  googleReviewId String?    @unique // Đánh dấu nếu là review kéo từ Google Maps
+  authorName    String
+  authorAvatar  String? @db.Text
+  rating        Int         @default(5)
+  dateText      String      // '12 ngày trước' hoặc 'Vừa xong'
+  content       String      @db.Text
+  images        Json?       // string[]
+  isFromGoogle  Boolean     @default(false)
+  
+  // Reaction counts
+  huuichCount   Int         @default(0)
+  camonCount    Int         @default(0)
+  huhuCount     Int         @default(0)
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  reactions PetParadiseReviewReaction[]
+  reports   PetParadiseReviewReport[]
+
+  @@index([paradiseId])
+  @@map("pet_paradise_reviews")
+}
+
+enum ParadiseReactionType {
+  HUUICH
+  CAMON
+  HUHU
+}
+
+model PetParadiseReviewReaction {
+  id        String               @id @default(cuid())
+  reviewId  String
+  review    PetParadiseReview    @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  userId    String
+  type      ParadiseReactionType
+  createdAt DateTime             @default(now())
+
+  @@unique([reviewId, userId, type])
+  @@index([reviewId])
+  @@map("pet_paradise_review_reactions")
+}
+
+model PetParadiseReviewReport {
+  id         String            @id @default(cuid())
+  reviewId   String
+  review     PetParadiseReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reporterId String
+  reason     String
+  details    String?           @db.Text
+  status     String            @default("PENDING")
+  createdAt  DateTime          @default(now())
+
+  @@index([reviewId])
+  @@map("pet_paradise_review_reports")
+}
+model Appointment {
+  id                   String              @id @default(cuid())
+  applicationId        String              @unique
+  application          AdoptionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  userId               String
+  user                 User                @relation("UserAppointments", fields: [userId], references: [id])
+
+  shelterId            String
+  shelter              Shelter             @relation("ShelterAppointments", fields: [shelterId], references: [id])
+
+  petId                String
+  pet                  Pet                 @relation("PetAppointments", fields: [petId], references: [id])
+
+  title                String?             // 🆕 tiêu đề buổi phỏng vấn
+  appointmentDate      DateTime
+  startTime            String
+  endTime              String
+  type                 AppointmentType     @default(IN_PERSON)
+  status               AppointmentStatus   @default(PENDING)
+  
+  location             String?
+  meetLink             String?
+  notes                String?
+  cancellationReason   String?
+  bookingDelegated     Boolean             @default(false)
+  members              Json?               // 🆕 [{ id, name, note }]
+  reminderMinutesBefore Int                @default(10) // 🆕
+  reminderSentAt       DateTime?           // 🆕 chống gửi nhắc trùng
+  googleEventId        String?
+  createdBy            String
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@index([shelterId, appointmentDate])
+  @@index([userId])
+  @@unique([shelterId, appointmentDate, startTime], name: "uniq_shelter_slot")
+}
+
+enum VaccinationStatus {
+  NOT_VACCINATED
+  IN_PROGRESS
+  VACCINATED
+}
+
+model Pet {
+  id   String @id @default(uuid())
+  name String
+
+  // --- Các trường đã được nâng cấp lên chuẩn Song ngữ (JSON) ---
+  species     Json // Thay vì String
+  breed       Json? // Thay vì String?
+  description Json? // Đã xoá @db.Text
+  color       Json? // Thay vì String?
+  traits      Json? // Đã xoá @db.Text
+  idealHome   Json? // Đã xoá @db.Text
+  lostDetails Json? // Thay vì String?
+  appointments Appointment[] @relation("PetAppointments")
+  // -------------------------------------------------------------
+
+  dob              DateTime?
+  microchipNumber  String?
+  images           PetImage[]
+  status           PetStatus  @default(AVAILABLE)
+  gender           PetGender?
+  size             PetSize?
+  weight           Float?
+  lostPhotos       String?    @db.Text
+  isVaccinated     Boolean    @default(false)
+  isSpayedNeutered Boolean    @default(false)
+
+  contactName           String?
+  contactPhone          String?
+  contactAddress        String?
+  traitsList            PetTrait[]
+  personalityTags       Json?
+  goodWith              Json?
+  badWith               Json?
+  medicalRecords        MedicalRecord[]
+  vetVerificationStatus VerificationStatus @default(PENDING)
+  qrCodeUrl             String?
+  qrVerificationStatus  VerificationStatus @default(PENDING)
+
+  idSetByShelter String? @unique
+
+  interactions     PetInteraction[]
+  favoritedBy      FavoritePet[]     @relation("PetFavoritedBy")
+  transferRequests TransferRequest[]
+  notes PetNote[]
+
+  ownerId   String?
+  owner     User?    @relation("UserPets", fields: [ownerId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+  shelterId String?
+  shelter   Shelter? @relation(fields: [shelterId], references: [id])
+
+  vaccinationStatus  VaccinationStatus @default(VACCINATED)
+  shelterInternalId  String?
+
+  tags                 Tag[]
+  adoptionRequests     AdoptionRequest[]
+  adoptionApplications AdoptionApplication[]
+
+  lostLatitude  Float?
+  lostLongitude Float?
+  lostRadius    Float?
+  lostDate      DateTime?
+
+  lostContactName      String?
+  lostContactPhone     String?
+  lostContactAddress   String?
+  lostLocation         String?
+  lostDateTime         String?
+  needsQrReplacement   Boolean                  @default(false)
+  nameLastUpdatedAt    DateTime?
+  adoptedAt            DateTime?
+  contentReports       ContentReport[]
+  adoptionRequirements PetAdoptionRequirement[]
+  hiddenByUsers        UserHiddenPet[]
+  @@unique([shelterId, idSetByShelter]) 
+}
+enum RequiredDocumentStatus {
+  PENDING_SUBMISSION // đã yêu cầu, applicant chưa nộp
+  PENDING_REVIEW      // applicant đã nộp, chờ shelter duyệt
+  ACCEPTED
+  REJECTED
+}
+enum DocumentCategory {
+  SHELTER
+  VETERINARY
+  APPLICANT
+  STAFF
+}
+
+model ApplicationDocument {
+  id            String   @id @default(cuid())
+  applicationId String
+  application   AdoptionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  key           String
+  label         String
+  description   String   @db.Text
+  category      DocumentCategory @default(STAFF)
+
+  status        RequiredDocumentStatus @default(PENDING_SUBMISSION)
+
+  fileUrl       String?
+  fileName      String?
+  fileSizeLabel String?
+  submittedAt   DateTime?
+
+  rejectionReason String? @db.Text
+  reviewedAt      DateTime?
+  reviewedById    String?
+
+  requestedAt   DateTime @default(now())
+  requestedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([applicationId, key]) // chặn shelter yêu cầu trùng 1 loại tài liệu 2 lần
+  @@index([applicationId])
+}
+model AdoptionApplication {
+  id     String            @id @default(uuid())
+  userId String
+  user   User              @relation(fields: [userId], references: [id])
+  petId  String
+  pet    Pet               @relation(fields: [petId], references: [id], onDelete: Cascade)
+  status ApplicationStatus @default(SUBMITTED)
+
+  // --- Section A: Contact Information ---
+  fullName String
+  phone    String // Đổi từ phoneNumber sang phone cho khớp UI
+  zalo     String
+  adoptFor String // Myself / Someone else
+
+  // --- Section B: Living Conditions ---
+  location String // Đổi từ address sang location
+  housing  String // Loại nhà ở (Apartment, House...)
+  children String // Có trẻ em không (Yes/No)
+  cage     String // Nhốt chuồng không (Yes/No/Sometimes)
+  documents ApplicationDocument[] 
+
+  // --- Section C & D: Experience & Employment ---
+  petExperience    String // Yes/No/Still living...
+  prevPetHistory   String @db.Text // @db.Text cho phép lưu chuỗi dài (tuỳ chọn tuỳ DB bạn dùng, hoặc để String)
+  employmentStatus String
+
+  // --- Section E: Adoption Commitment ---
+  adoptionReason String
+  commitments    Json // Lưu các giá trị (vaccine, medical, expenses, updateStatus, homeVisit, provideID)
+  notes            ApplicationNote[]
+  tags             ApplicationTagOnApplication[]
+  verificationPhotos Json?
+  reviewNote String? @db.Text
+  nextFollowUpDate   DateTime? 
+  appointment Appointment?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, petId])
+}
+enum ApplicationNoteType {
+  HOME_VISIT
+  VET_RECORDS
+  FOLLOW_UP
+  CONCERN
+  REJECTION
+  REFERENCE_CHECK
+  BACKGROUND_CHECK
+}
+
+model ApplicationNote {
+  id            String   @id @default(uuid())
+  applicationId String
+  authorId      String
+  type ApplicationNoteType @default(FOLLOW_UP)
+  content       String   @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  application AdoptionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  author      User                @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([authorId])
+  @@map("application_notes")
+}
+
+// ==========================================
+// 2. TAG / NHÃN DÀNH CHO ĐƠN NHẬN NUÔI (ApplicationTag)
+// ==========================================
+model ApplicationTag {
+  id        String   @id @default(uuid())
+  shelterId String?  // Tag riêng của từng Trạm cứu hộ (hoặc NULL nếu là Tag chung toàn hệ thống)
+  name      String   // Tên tag (VD: "Ưu tiên", "Đã phỏng vấn", "Cần xác minh", "Gia đình có sân")
+  color     String?  // Mã màu hiển thị Badge trên UI (VD: "#E53E3E", "#3182CE", "green")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shelter      Shelter?                      @relation(fields: [shelterId], references: [id], onDelete: Cascade)
+  applications ApplicationTagOnApplication[]
+
+  @@unique([shelterId, name])
+  @@index([shelterId])
+  @@map("application_tags")
+}
+
+// Bảng trung gian liên kết N-N giữa Application và Tag
+model ApplicationTagOnApplication {
+  applicationId String
+  tagId         String
+  assignedAt    DateTime @default(now())
+
+  application AdoptionApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  tag         ApplicationTag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([applicationId, tagId])
+  @@index([tagId])
+  @@index([applicationId])
+  @@map("application_tag_mappings")
+}
+enum ApplicationStatus {
+  SUBMITTED
+  PENDING
+  NEED_MORE_INFO
+  INTERVIEW_SCHEDULED
+  APPROVED
+  ADOPTION_COMPLETED
+  CLOSED
+}
+
+model PetImage {
+  id        String   @id @default(uuid())
+  url       String // URL từ Cloudflare R2
+  petId     String
+  pet       Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model AdoptionRequest {
+  id        String         @id @default(uuid())
+  status    AdoptionStatus @default(PENDING) // Dùng Enum cho an toàn
+  reason    String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  petId String
+  pet   Pet    @relation(fields: [petId], references: [id], onDelete: Cascade) // Đã bổ sung relation
+}
+
+model Tag {
+  id     String    @id @default(uuid()) // UUID khớp với mã QR/NFC
+  status TagStatus @default(INACTIVE)
+
+  linkCount Int @default(0)
+
+  petId     String?
+  pet       Pet?        @relation(fields: [petId], references: [id], onDelete: SetNull)
+  linkedAt  DateTime?
+  reports   TagReport[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @default(now()) @updatedAt
+}
+
+// ==========================================
+// CÁC MODEL BỔ SUNG CHO TÍNH NĂNG DỰ ÁN
+// ==========================================
+enum TagReportStatus {
+  PENDING // Đang chờ xử lý / Vừa quét
+  RESOLVED // Đã tìm thấy / Đã giải quyết
+  ARCHIVED // Lưu trữ (nếu cần)
+}
+
+// 1. Quét vòng cổ thông minh & Báo lạc
+model TagReport {
+  id             String          @id @default(uuid())
+  tagId          String
+  tag            Tag             @relation(fields: [tagId], references: [id])
+  userId         String?
+  user           User?           @relation(fields: [userId], references: [id])
+  scannedBy      String? // Tên hoặc email người quét (nếu họ nhập)
+  phoneNumber    String? // Số điện thoại người quét để liên hệ lại
+  latitude       Float? // Tọa độ GPS
+  longitude      Float?
+  radius         Float?
+  message        String? // Lời nhắn từ người quét
+  images         Json?
+  status         TagReportStatus @default(PENDING)
+  scannedAt      DateTime        @default(now())
+  isHidden       Boolean         @default(false)
+  hiddenAt       DateTime?
+  contentReports ContentReport[]
+}
+
+// 2. Hệ thống Nhắn tin (Chat Gateway)
+model ChatRoom {
+  id        String   @id @default(uuid())
+  name      String? // Tên phòng (cho group chat)
+  createdAt DateTime @default(now())
+
+  users    ChatRoomUser[]
+  messages Message[]
+}
+
+model ChatRoomUser {
+  roomId String
+  room   ChatRoom @relation(fields: [roomId], references: [id])
+  userId String
+  user   User     @relation(fields: [userId], references: [id])
+
+  @@id([roomId, userId])
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  content   String
+  createdAt DateTime @default(now())
+
+  roomId String
+  room   ChatRoom @relation(fields: [roomId], references: [id])
+
+  senderId String
+  sender   User   @relation("SenderMessages", fields: [senderId], references: [id])
+}
+
+// 3. Blog & Sự kiện (Module Blog)
+model BlogCategory {
+  id    String @id @default(uuid())
+  name  String
+  slug  String @unique
+  blogs Blog[]
+}
+
+model Blog {
+  id          String   @id @default(uuid())
+  title       String
+  slug        String   @unique
+  content     String // Lưu HTML/Markdown
+  thumbnail   String?
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  categoryId String
+  category   BlogCategory @relation(fields: [categoryId], references: [id])
+}
+
+enum NotificationType {
+  TAG
+  SECURITY
+  SYSTEM
+  PASSWORD
+  FEATURE
+  EVENT
+  TAG_SCANNED
+}
+
+// 4. Thông báo (Notifications)
+model Notification {
+  id          String           @id @default(uuid())
+  type        NotificationType @default(SYSTEM)
+  title       String
+  body        String           @db.Text
+  emoji       String?
+  isRead      Boolean          @default(false)
+  referenceId String?
+  metadata    Json?
+  createdAt   DateTime         @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Thêm index riêng cho userId để MySQL quản lý Foreign Key mà không phàn nàn
+  @@index([userId])
+  // Index ghép để tối ưu hóa truy vấn sắp xếp theo thời gian mới nhất
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model Organizer {
+  id        String   @id @default(uuid())
+  name      String
+  handle    String?  @unique // VD: @pawlife_org
+  about     Json?
+  avatarUrl String?
+  coverUrl  String?
+  followers Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events Event[] // Mối quan hệ: 1 Organizer có nhiều Event
+}
+model Story {
+  id     String  @id // id do FE tự sinh (slug_timestamp), giống pattern Ingredient
+  avatar String?
+
+  title      Json // { vi: string, en: string }
+  subtitle   Json // { vi: string, en: string }
+  content    Json // { vi: string, en: string } — nội dung rút gọn hiện trên thẻ
+  fullContent Json // { vi: string[], en: string[] } — nội dung đầy đủ khi mở rộng
+  quote      Json // { vi: string, en: string }
+  afterQuote Json // { vi: string, en: string }
+  
+  date   DateTime // Ngày của câu chuyện (không phải ngày tạo record)
+  images Json // string[] — images[0] = ảnh thẻ, phần dư hiện "+N"
+  likes       StoryLike[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+model StoryLike {
+  id        String   @id @default(uuid())
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([storyId, userId]) // 👈 Đảm bảo 1 user chỉ like 1 story 1 lần
+  @@index([storyId])
+  @@index([userId])
+  @@map("story_likes")
+}
+model Ingredient {
+  id           String   @id
+  icon         String
+  badge        String
+  title        Json
+  riskLabel    Json
+  shortContent Json
+  pets         Json
+  actionGuide  Json?
+  
+  details      Json?
+  benefits     Json?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+model Event {
+  id          String  @id @default(uuid())
+  title       Json // VD: "Dog art therapy & painting class"
+  category    Json? // VD: "Art", "Music", "Adoption" (Tag nhỏ dưới title)
+  description Json? // Nội dung cho phần "About Event"
+  bannerUrl   String? // Ảnh nền Header (Hero Image)
+
+  // Thời gian
+  startDate DateTime // Lưu ngày và giờ bắt đầu (VD: 2026-03-21 18:00)
+  endDate   DateTime? // Giờ kết thúc (VD: 2026-03-21 23:00)
+
+  // Địa điểm
+  locationName Json // Tên địa điểm (VD: "Paw & Canvas Studio")
+  address      String? // Địa chỉ chi tiết (VD: "Brooklyn, NY, United States")
+  latitude     Float? // Dành cho Map Location Marker
+  longitude    Float?
+
+  // Thống kê
+  interestedCount Int @default(0) // Số người quan tâm "250+ Interested"
+
+  // Đơn vị tổ chức (Organizer)
+  organizerId String?
+  organizer   Organizer? @relation(fields: [organizerId], references: [id], onDelete: SetNull)
+
+  // Quan hệ
+  images          EventImage[] // Danh sách ảnh cho "Gallery (Pre-Event)"
+  interestedUsers EventInterest[] // Lưu danh sách người dùng đã bấm nút "Interesting"
+  reports         EventReport[]
+  hiddenByUsers   UserHiddenEvent[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+// Bảng lưu danh sách ảnh của sự kiện (Gallery)
+model EventImage {
+  id        String   @id @default(uuid())
+  url       String // Link ảnh từ R2/S3
+  createdAt DateTime @default(now())
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  RESOLVED
+  DISMISSED
+}
+
+model ReviewReport {
+  id         String       @id @default(uuid())
+  userId     String
+  reviewId   String
+  reason     String
+  details    String?      @db.Text
+  status     ReportStatus @default(PENDING)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId])
+  @@index([userId])
+  @@unique([userId, reviewId]) // Mỗi user chỉ được report 1 review 1 lần
+}
+// Bảng lưu thao tác bấm "Interesting" ở dưới cùng màn hình (Sticky Footer)
+model EventInterest {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId]) // Đảm bảo 1 user chỉ quan tâm 1 event 1 lần
+}
+
+model PawcarePlaylist {
+  id        String   @id @default(uuid())
+  title     String
+  thumbnail String
+  category  String // "Training", "Nutrition", "Health", "Beauty"
+  createdAt DateTime @default(now())
+
+  videos PawcareVideo[]
+}
+
+model PawcareVideo {
+  id        String   @id @default(uuid())
+  title     String
+  views     String // VD: "1.2M"
+  time      String // VD: "2 days ago"
+  duration  String // VD: "12:30"
+  thumbnail String
+  url       String? // Link youtube/S3
+  category  String // "Training", "Nutrition", "Health", "Beauty"
+  createdAt DateTime @default(now())
+
+  playlistId String?
+  playlist   PawcarePlaylist? @relation(fields: [playlistId], references: [id])
+}

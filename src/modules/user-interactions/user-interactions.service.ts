@@ -1,0 +1,227 @@
+import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../database/prisma/prisma.service';
+import { SwipeAction } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
+import { RedisService } from 'src/database/redis/redis.service';
+import { ReportReviewDto } from './dto/report-review.dto';
+
+// Added `!` to fix TS2564 error
+export class ShareLocationDto {
+  petId!: string;
+  lat!: number;
+  lng!: number;
+  radius!: number; // Sent from Frontend to put into push notification (Deeplink)
+  scannedBy?: string;
+  phoneNumber?: string;
+  message?: string;
+}
+
+@Injectable()
+export class UserInteractionsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+    private readonly redisService: RedisService
+  ) { }
+
+  async shareLocation(dto: ShareLocationDto) {
+    // A. Get corresponding tagId for petId because TagReport requires tagId
+    const tag = await this.prisma.tag.findFirst({
+      where: { petId: dto.petId },
+      select: { id: true }
+    });
+
+    if (!tag) {
+      throw new NotFoundException('No Tag (collar) found attached to this pet');
+    }
+
+    // 1. Save location to database (Removed petId, radius, scannerId to match DB)
+    const savedReport = await this.prisma.tagReport.create({
+      data: {
+        tagId: tag.id,            // FIX: Use tagId instead of petId
+        latitude: dto.lat,
+        longitude: dto.lng,
+        radius: dto.radius,
+        scannedBy: dto.scannedBy, // Frontend: Scanner name (Sarah John)
+        phoneNumber: dto.phoneNumber,
+        message: dto.message,
+        // radius: Your DB doesn't have a table to save this data, so only use for Notification below
+      }
+    });
+
+    // 2. Find pet owner
+    const petOwnerId = await this.getPetOwnerId(dto.petId);
+
+    // 3. Send Push Notification to pet owner
+    const notificationPayload = {
+      title: 'Your pet\'s location has been shared!',
+      body: dto.message ? `Message: ${dto.message}` : 'Someone just updated the pet\'s location.',
+      referenceId: savedReport.id,
+      data: {
+        type: 'SHARED_LOCATION',
+        // Even though saved to DB, still pass params to url in case frontend reads from params for speed
+        url: `/tag-report-detail?reportId=${savedReport.id}&lat=${dto.lat}&lng=${dto.lng}&radius=${dto.radius}`,
+      },
+    };
+
+    if (petOwnerId) {
+      await this.notificationsService.sendPushNotification(petOwnerId, notificationPayload);
+    }
+
+    return savedReport;
+  }
+  async getBlockedShelters(userId: string) {
+    const blockedRecords = await this.prisma.userBlockedShelter.findMany({
+      where: { userId },
+      include: {
+        shelter: {
+          select: { id: true, name: true, avatarUrl: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    return blockedRecords.map(record => ({
+      id: record.shelter.id,
+      name: record.shelter.name,
+      avatarUrl: record.shelter.avatarUrl,
+      blockedAt: record.createdAt,
+    }));
+  }
+
+  // 5. Bỏ chặn trạm cứu hộ
+  async unblockShelter(userId: string, shelterId: string) {
+    const existing = await this.prisma.userBlockedShelter.findUnique({
+      where: { userId_shelterId: { userId, shelterId } }
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Không tìm thấy thông tin chặn trạm cứu hộ này');
+    }
+
+    // 1. Xóa record trong DB
+    await this.prisma.userBlockedShelter.delete({
+      where: { userId_shelterId: { userId, shelterId } }
+    });
+
+    // 2. 🌟 QUAN TRỌNG: Đánh dấu cache của Shelter đã cũ để API tự động lấy dữ liệu mới
+    const versionKey = `shelters:cache_version:u_${userId}`;
+    const current = await this.redisService.get<number>(versionKey) || 0;
+    await this.redisService.set(versionKey, current + 1, 0); 
+
+    // 3. 🌟 QUAN TRỌNG: Xóa luôn cache Pet Feed / Matching để Swipe screen hiện lại pet
+    // Mặc dù getFeed không cache result, nhưng việc xóa Redis tương tác là cẩn thiết để DB queries mượt hơn
+    await this.redisService.del(`user:${userId}:swiped_pets`);
+
+    return { success: true, unblockedShelterId: shelterId };
+  }
+  private async getPetOwnerId(petId: string): Promise<string> {
+    const pet = await this.prisma.pet.findUnique({
+      where: { id: petId },
+      select: { ownerId: true },
+    });
+
+    if (!pet || !pet.ownerId) {
+      throw new NotFoundException('Pet or owner information not found');
+    }
+
+    return pet.ownerId;
+  }
+
+  // 1. Swipe function (Like/Pass)
+  async swipePet(userId: string, petId: string, action: SwipeAction) {
+    const existing = await this.prisma.petInteraction.findUnique({
+      where: { userId_petId: { userId, petId } }
+    });
+
+    if (existing) {
+      throw new ConflictException('Already interacted with this pet');
+    }
+
+    return this.prisma.petInteraction.create({
+      data: { userId, petId, action }
+    });
+  }
+
+  // 2. Add/Remove Favorite function
+  async toggleFavorite(userId: string, petId: string) {
+    const existing = await this.prisma.favoritePet.findUnique({
+      where: { userId_petId: { userId, petId } }
+    });
+
+    if (existing) {
+      await this.prisma.favoritePet.delete({
+        where: { id: existing.id }
+      });
+      return { favorited: false };
+    } else {
+      await this.prisma.favoritePet.create({
+        data: { userId, petId }
+      });
+      return { favorited: true };
+    }
+  }
+
+  // 3. Follow Shelter function
+  async toggleFollowShelter(userId: string, shelterId: string) {
+    const existing = await this.prisma.followedShelter.findUnique({
+      where: { userId_shelterId: { userId, shelterId } }
+    });
+
+    if (existing) {
+      await this.prisma.followedShelter.delete({
+        where: { id: existing.id }
+      });
+      return { followed: false };
+    } else {
+      await this.prisma.followedShelter.create({
+        data: { userId, shelterId }
+      });
+      return { followed: true };
+    }
+  }
+  async reportReview(userId: string, dto: ReportReviewDto) {
+    const { reviewId, reason, details } = dto;
+
+    // 1. Kiểm tra đánh giá có tồn tại hay không (tuỳ tên model trong schema của bạn, vd: paradiseReview hoặc review)
+    // Nếu review đến từ Google hoặc ID ảo (vd: 'r_g1'), có thể bỏ qua check DB hoặc kiểm tra bảng review
+    const isGoogleReview = reviewId.startsWith('r_g');
+
+    if (!isGoogleReview) {
+      // Nếu là review nội bộ, kiểm tra xem review có tồn tại không
+      const reviewExists = await this.prisma.petParadiseReview.findUnique({
+        where: { id: reviewId },
+      }).catch(() => null);
+
+      // Nếu không tìm thấy trong DB nội bộ và không phải review Google
+      if (!reviewExists) {
+        // Tùy chọn: throw NotFoundException hoặc cho phép ghi nhận report với reviewId bên ngoài
+      }
+    }
+
+    // 2. Chống spam: Kiểm tra xem user này đã từng báo cáo review này trước đó chưa
+    const existingReport = await this.prisma.reviewReport.findFirst({
+      where: {
+        userId,
+        reviewId,
+      },
+    });
+
+    if (existingReport) {
+      throw new ConflictException('Bạn đã gửi báo cáo cho đánh giá này rồi. Đội ngũ kiểm duyệt đang xử lý.');
+    }
+
+    // 3. Tạo bản ghi báo cáo mới
+    const report = await this.prisma.reviewReport.create({
+      data: {
+        userId,
+        reviewId,
+        reason,
+        details: details || null,
+        status: 'PENDING', // PENDING | REVIEWED | DISMISSED | ACTIONED
+      },
+    });
+
+    return report;
+  }
+}
