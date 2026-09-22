@@ -3,6 +3,8 @@ import { PrismaService } from '../../database/prisma/prisma.service';
 import { GetNotificationsDto, CreateNotificationDto } from './dto/notification.dto';
 import { NotificationsGateway } from './notifications.gateway';
 import { NotificationType } from '@prisma/client';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 
 export interface PushNotificationPayload {
   title: string;
@@ -18,6 +20,8 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsGateway: NotificationsGateway,
+    @InjectQueue('push') private readonly pushQueue: Queue, // 🆕
+
   ) { }
 
   async createAndSendNotification(data: CreateNotificationDto) {
@@ -34,6 +38,19 @@ export class NotificationsService {
     });
 
     this.notificationsGateway.sendNotificationToUser(data.userId, notification);
+
+    // 🆕 Đẩy job gửi push thật — không block response
+    await this.pushQueue.add(
+      'send-push',
+      {
+        userId: data.userId,
+        title: data.title,
+        body: data.body,
+        data: { type: data.type, referenceId: data.referenceId },
+      },
+      { removeOnComplete: true, attempts: 3 },
+    );
+
     return notification;
   }
 

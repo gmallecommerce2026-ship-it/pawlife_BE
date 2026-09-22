@@ -100,6 +100,7 @@ model DeviceSession {
   os               String? // VD: "iOS 16.5", "Windows 11"
   ipAddress        String? // VD: "14.232.xxx.xxx"
   location         String? // VD: "Hanoi, Vietnam"
+  pushToken        String?
   lastActive       DateTime @default(now())
   createdAt        DateTime @default(now())
 

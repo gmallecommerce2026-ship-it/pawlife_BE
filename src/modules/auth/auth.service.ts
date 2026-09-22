@@ -205,7 +205,25 @@ export class AuthService {
     await this.redisService.del(`auth:session:${deviceId}`);
     return { success: true, message: 'Logged out of device.' };
   }
+  
+  async savePushToken(userId: string, deviceIdentifier: string, pushToken: string) {
+    if (!deviceIdentifier) {
+      throw new BadRequestException('Thiếu định danh thiết bị (x-device-id).');
+    }
 
+    const session = await this.prisma.deviceSession.findFirst({
+      where: { userId, deviceIdentifier },
+    });
+    if (!session) {
+      throw new BadRequestException('Không tìm thấy phiên thiết bị. Vui lòng đăng nhập lại.');
+    }
+
+    await this.prisma.deviceSession.update({
+      where: { id: session.id },
+      data: { pushToken },
+    });
+    return { success: true, message: 'Đã lưu push token.' };
+  }
   private generateOTP(): string { return Math.floor(100000 + Math.random() * 900000).toString(); }
 
   async changePassword(userId: string, dto: ChangePasswordDto) {

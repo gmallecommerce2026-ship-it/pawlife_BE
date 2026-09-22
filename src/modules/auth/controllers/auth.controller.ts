@@ -225,7 +225,16 @@ export class AuthController {
   async getDevices(@User() user: any) {
     return this.authService.getDevices(user.id, user.sessionId);
   }
-
+  @Post('push-token')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async savePushToken(
+    @User('id') userId: string,
+    @Body('pushToken') pushToken: string,
+    @Headers('x-device-id') deviceIdHeader: string,
+  ) {
+    return this.authService.savePushToken(userId, deviceIdHeader, pushToken);
+  }
   @Delete('logout-device/:deviceId')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
