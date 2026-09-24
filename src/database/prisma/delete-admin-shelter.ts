@@ -4,60 +4,86 @@ const prisma = new PrismaClient();
 
 async function main() {
   const TARGET_EMAIL = 'admin@pawlife.vn';
-  console.log(`🧹 Bắt đầu dọn dẹp Trạm cứu hộ bị bỏ lại...`);
+  console.log(`🧹 Bắt đầu XÓA TẬN GỐC Trạm, Thú cưng và Tài khoản...`);
 
   try {
-    // Tìm Shelter theo email (Vì User đăng nhập đã bị xóa mất ở lần chạy trước)
-    let shelterToDelete = await prisma.shelter.findFirst({
+    // 1. Tìm Trạm cứu hộ cùng toàn bộ danh sách Pet và User
+    const shelterToDelete = await prisma.shelter.findFirst({
       where: { emailAddress: TARGET_EMAIL },
+      include: {
+        pets: { select: { id: true } },
+        users: { select: { id: true } }
+      }
     });
 
-    // Dự phòng: Nếu Trạm không lưu email này, hãy thử tìm theo Tên của Trạm cũ
     if (!shelterToDelete) {
-       // Bạn có thể đổi 'Tên Trạm Ở Đây' thành tên trạm cũ nếu không tìm thấy qua email
-       // shelterToDelete = await prisma.shelter.findFirst({ where: { name: 'Tên Trạm Ở Đây' } });
        console.log(`⚠️ Không tìm thấy Shelter nào chứa email: ${TARGET_EMAIL}`);
        return;
     }
 
-    console.log(`🔍 Tìm thấy Shelter: ${shelterToDelete.name} (ID: ${shelterToDelete.id})`);
+    const shelterId = shelterToDelete.id;
+    const petIds = shelterToDelete.pets.map(p => p.id);
+    const userIds = shelterToDelete.users.map(u => u.id);
+
+    console.log(`🔍 TÌM THẤY Trạm: ${shelterToDelete.name} (ID: ${shelterId})`);
+    console.log(`   🐾 ${petIds.length} Pet cần xóa.`);
+    console.log(`   👥 ${userIds.length} User cần xóa.`);
 
     // ==========================================
-    // DỌN DẸP CÁC DỮ LIỆU ĐANG RÀNG BUỘC (FOREIGN KEYS)
+    // BƯỚC 1: DỌN DẸP RÀNG BUỘC CỦA THÚ CƯNG (PET)
     // ==========================================
+    if (petIds.length > 0) {
+      console.log('⏳ Đang dọn dẹp dữ liệu ràng buộc của Pet...');
+      await prisma.appointment.deleteMany({ where: { petId: { in: petIds } } });
+      await prisma.adoptionApplication.deleteMany({ where: { petId: { in: petIds } } });
+      await prisma.adoptionRequest.deleteMany({ where: { petId: { in: petIds } } });
+      await prisma.transferRequest.deleteMany({ where: { petId: { in: petIds } } });
+      await prisma.petNote.deleteMany({ where: { petId: { in: petIds } } });
+      
+      // Với Vòng cổ (Tag), chỉ gỡ liên kết (setNull) chứ không xoá vật lý vòng cổ
+      await prisma.tag.updateMany({
+        where: { petId: { in: petIds } },
+        data: { petId: null, status: 'INACTIVE', linkedAt: null }
+      });
 
-    // 1. Xóa các Lịch hẹn (Appointment)
-    // Trường shelterId trong bảng Appointment là bắt buộc, nên ta phải xoá lịch hẹn
-    const deletedAppointments = await prisma.appointment.deleteMany({
-      where: { shelterId: shelterToDelete.id },
-    });
-    console.log(`🧹 Đã xoá ${deletedAppointments.count} lịch hẹn (Appointment).`);
-
-    // 2. Gỡ liên kết Thú cưng (Pet)
-    // Để tránh xoá nhầm Pet gây lỗi dây chuyền, ta gỡ liên kết bằng cách set shelterId = null
-    const updatedPets = await prisma.pet.updateMany({
-      where: { shelterId: shelterToDelete.id },
-      data: { shelterId: null },
-    });
-    console.log(`🧹 Đã gỡ liên kết ${updatedPets.count} thú cưng khỏi Trạm.`);
-
-    // 3. Gỡ liên kết các Nhân viên khác (User)
-    // Đề phòng Trạm có nhiều hơn 1 nhân viên, ta đưa shelterId của họ về null
-    const updatedUsers = await prisma.user.updateMany({
-      where: { shelterId: shelterToDelete.id },
-      data: { shelterId: null },
-    });
-    console.log(`🧹 Đã gỡ liên kết ${updatedUsers.count} nhân viên khác khỏi Trạm.`);
+      const deletedPets = await prisma.pet.deleteMany({ where: { shelterId } });
+      console.log(`✅ Đã xóa ${deletedPets.count} Thú cưng.`);
+    }
 
     // ==========================================
-    // XOÁ SHELTER CHÍNH
+    // BƯỚC 2: DỌN DẸP RÀNG BUỘC CỦA TÀI KHOẢN (USER)
     // ==========================================
+    if (userIds.length > 0) {
+      console.log('⏳ Đang dọn dẹp dữ liệu ràng buộc của User...');
+      
+      // Xóa lời mời làm việc
+      await prisma.shelterInvitation.deleteMany({ where: { invitedById: { in: userIds } } });
+      
+      // Xóa lịch hẹn, ghi chú, tin nhắn, và báo cáo (do schema không cascade)
+      await prisma.appointment.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.petNote.deleteMany({ where: { authorId: { in: userIds } } });
+      await prisma.message.deleteMany({ where: { senderId: { in: userIds } } });
+      await prisma.chatRoomUser.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.userHiddenEvent.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.eventReport.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.report.deleteMany({ where: { userId: { in: userIds } } });
+
+      const deletedUsers = await prisma.user.deleteMany({ where: { shelterId } });
+      console.log(`✅ Đã xóa ${deletedUsers.count} Nhân viên/Tài khoản.`);
+    }
+
+    // ==========================================
+    // BƯỚC 3: XOÁ TRẠM CỨU HỘ (SHELTER)
+    // ==========================================
+    // Đề phòng còn sót Appointment nào chỉ liên kết với Shelter
+    await prisma.appointment.deleteMany({ where: { shelterId } });
+
     const deletedShelter = await prisma.shelter.delete({
-      where: { id: shelterToDelete.id },
+      where: { id: shelterId },
     });
     
     console.log(`✅ Đã xóa dứt điểm Trạm cứu hộ: ${deletedShelter.name}`);
-    console.log('🎉 Hoàn tất quá trình dọn dẹp!');
+    console.log('🎉 Hoàn tất dọn dẹp TOÀN BỘ rác dữ liệu!');
     
   } catch (error) {
     console.error('❌ Lỗi trong quá trình xóa dữ liệu:', error);
