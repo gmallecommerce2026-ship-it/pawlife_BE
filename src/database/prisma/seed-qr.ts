@@ -42,23 +42,21 @@ const CONCURRENCY = 20;
 const DELETE_BATCH = 500;
 const FORCE_UPLOAD = process.argv.includes('--force');
 
-// Hỗ trợ cắt cả đuôi .png và .svg
-const toTagId = (fileName: string) => fileName.replace(/\.(svg|png)$/i, '').trim().toUpperCase();
+// ✅ SỬA 1: Cắt đuôi .png thay vì .svg
+const toTagId = (fileName: string) => fileName.replace(/\.png$/i, '').trim().toUpperCase();
 
 // ---------------------------------------------------------------------------
 // BƯỚC 1: XÓA QR CŨ CÓ THỂ XÓA
 // ---------------------------------------------------------------------------
 type DeleteStats = { deleted: number; kept: string[] };
 
-// Xóa theo lô. Nếu lô có tag bị khóa ngoại (P2003) thì chia đôi lô và thử lại,
-// cho tới khi tìm ra đúng tag đang được tham chiếu -> giữ lại tag đó, xóa phần còn lại.
 async function deleteBatch(ids: string[], stats: DeleteStats): Promise<void> {
   if (ids.length === 0) return;
   try {
     const result = await prisma.tag.deleteMany({ where: { id: { in: ids } } });
     stats.deleted += result.count;
   } catch (e: any) {
-    if (e?.code !== 'P2003') throw e; // chỉ xử lý lỗi khóa ngoại, lỗi khác thì báo ra
+    if (e?.code !== 'P2003') throw e; 
     if (ids.length === 1) {
       stats.kept.push(ids[0]);
       return;
@@ -96,6 +94,7 @@ async function addNewTags(ids: string[]): Promise<void> {
   for (let i = 0; i < ids.length; i += 1000) {
     const result = await prisma.tag.createMany({
       data: ids.slice(i, i + 1000).map((id) => ({ id, status: 'INACTIVE' as const })),
+      // ✅ SỬA 2: Đổi thành true để bỏ qua các Tag bị trùng lặp, không văng lỗi P2002 nữa
       skipDuplicates: true,
     });
     created += result.count;
@@ -127,7 +126,8 @@ async function listR2Keys(): Promise<Set<string>> {
 
 async function uploadMissing(files: string[]): Promise<number> {
   const existing = FORCE_UPLOAD ? new Set<string>() : await listR2Keys();
-  const todo = files.filter((f) => !existing.has(`${R2_PREFIX}${toTagId(f)}.svg`));
+  // ✅ SỬA 3: Kiểm tra theo đuôi .png trên Cloudflare R2
+  const todo = files.filter((f) => !existing.has(`${R2_PREFIX}${toTagId(f)}.png`));
   console.log(`☁️ R2: đã có ${files.length - todo.length} file, cần upload ${todo.length} file.`);
 
   let cursor = 0;
@@ -141,9 +141,10 @@ async function uploadMissing(files: string[]): Promise<number> {
         await s3Client.send(
           new PutObjectCommand({
             Bucket: BUCKET_NAME,
-            Key: `${R2_PREFIX}${toTagId(fileName)}.png`, // 👈 Đổi thành .png
+            // ✅ SỬA 4: Upload file lên R2 với đuôi .png và ContentType là image/png
+            Key: `${R2_PREFIX}${toTagId(fileName)}.png`,
             Body: fs.readFileSync(path.join(QR_DIR, fileName)),
-            ContentType: 'image/png', // 👈 Đổi thành image/png
+            ContentType: 'image/png',
           }),
         );
       } catch (e: any) {
@@ -169,13 +170,14 @@ async function main() {
     console.error('❌ Lỗi khi dọn tag cũ, bỏ qua và tiếp tục:', e.message);
   }
 
-  const files = fs.readdirSync(QR_DIR).filter((f) => f.toLowerCase().endsWith('.svg'));
+  // ✅ SỬA 5: Lọc đọc file .png thay vì .svg
+  const files = fs.readdirSync(QR_DIR).filter((f) => f.toLowerCase().endsWith('.png'));
   if (files.length === 0) {
-    console.error(`❌ Không có file SVG nào trong ${QR_DIR}`);
+    console.error(`❌ Không có file PNG nào trong ${QR_DIR}`);
     return;
   }
   const ids = Array.from(new Set(files.map(toTagId)));
-  console.log(`📦 Tìm thấy ${files.length} file SVG.`);
+  console.log(`📦 Tìm thấy ${files.length} file PNG.`);
 
   await addNewTags(ids);
   const failedCount = await uploadMissing(files);
