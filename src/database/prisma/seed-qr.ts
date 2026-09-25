@@ -42,7 +42,8 @@ const CONCURRENCY = 20;
 const DELETE_BATCH = 500;
 const FORCE_UPLOAD = process.argv.includes('--force');
 
-const toTagId = (fileName: string) => fileName.replace(/\.svg$/i, '').trim().toUpperCase();
+// Hỗ trợ cắt cả đuôi .png và .svg
+const toTagId = (fileName: string) => fileName.replace(/\.(svg|png)$/i, '').trim().toUpperCase();
 
 // ---------------------------------------------------------------------------
 // BƯỚC 1: XÓA QR CŨ CÓ THỂ XÓA
@@ -95,7 +96,7 @@ async function addNewTags(ids: string[]): Promise<void> {
   for (let i = 0; i < ids.length; i += 1000) {
     const result = await prisma.tag.createMany({
       data: ids.slice(i, i + 1000).map((id) => ({ id, status: 'INACTIVE' as const })),
-      skipDuplicates: false,
+      skipDuplicates: true,
     });
     created += result.count;
   }
@@ -140,9 +141,9 @@ async function uploadMissing(files: string[]): Promise<number> {
         await s3Client.send(
           new PutObjectCommand({
             Bucket: BUCKET_NAME,
-            Key: `${R2_PREFIX}${toTagId(fileName)}.svg`,
+            Key: `${R2_PREFIX}${toTagId(fileName)}.png`, // 👈 Đổi thành .png
             Body: fs.readFileSync(path.join(QR_DIR, fileName)),
-            ContentType: 'image/svg+xml',
+            ContentType: 'image/png', // 👈 Đổi thành image/png
           }),
         );
       } catch (e: any) {
