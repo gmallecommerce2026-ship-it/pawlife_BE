@@ -81,21 +81,31 @@ async function deleteBatch(ids: string[], stats: DeleteStats): Promise<void> {
 }
 
 async function cleanOldTags(): Promise<void> {
+  // 1. Tìm TẤT CẢ các tag đang trống (chưa có chủ)
   const candidates = await prisma.tag.findMany({
-    where: { OR: OLD_PREFIXES.map((p) => ({ id: { startsWith: p } })) },
+    where: { petId: null },
     select: { id: true },
   });
-  console.log(`🔎 Tìm thấy ${candidates.length} tag cũ (${OLD_PREFIXES.join(', ')}).`);
+  console.log(`🔎 Tìm thấy ${candidates.length} tag đang trống. Tiến hành dọn dẹp rác...`);
 
   const stats: DeleteStats = { deleted: 0, kept: [] };
   const ids = candidates.map((t) => t.id);
+  
+  // 2. Tiến hành xóa hàng loạt
   for (let i = 0; i < ids.length; i += DELETE_BATCH) {
     await deleteBatch(ids.slice(i, i + DELETE_BATCH), stats);
   }
 
-  console.log(`🗑️ Đã xóa ${stats.deleted} tag cũ, giữ lại ${stats.kept.length} tag đang được gán.`);
+  // 3. Đếm số lượng tag đã có chủ để in báo cáo
+  const activeTagsCount = await prisma.tag.count({
+    where: { petId: { not: null } }
+  });
+
+  console.log(`🗑️ Đã xóa sạch ${stats.deleted} tag rác/trống.`);
+  console.log(`🛡️ BẢO VỆ THÀNH CÔNG: Giữ nguyên toàn bộ ${activeTagsCount} tag đang được gắn cho thú cưng.`);
+  
   if (stats.kept.length > 0) {
-    console.log(`   Ví dụ tag giữ lại: ${stats.kept.slice(0, 5).join(', ')}`);
+    console.log(`⚠️ Có ${stats.kept.length} tag trống không thể xóa (do vướng dữ liệu lịch sử/report): ${stats.kept.slice(0, 5).join(', ')}...`);
   }
 }
 
