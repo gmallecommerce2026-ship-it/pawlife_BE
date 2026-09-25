@@ -1839,10 +1839,11 @@ export class PetsService {
       cleanTagId = cleanTagId.replace('PL', 'PL_');
     }
 
-    // (Tùy chọn) Hỗ trợ quét luôn các mã cũ PLT bị thiếu gạch nối (VD: PLT0014 -> PLT-0014)
+    // Hỗ trợ quét luôn các mã cũ PLT bị thiếu gạch nối (VD: PLT0014 -> PLT-0014)
     if (cleanTagId.match(/^PLT\d+$/)) {
       cleanTagId = cleanTagId.replace('PLT', 'PLT-');
     }
+    
     const tag = await this.prisma.tag.findUnique({
       where: { id: cleanTagId },
       include: {
@@ -1855,7 +1856,7 @@ export class PetsService {
       throw new NotFoundException({ message: 'No pet found with this tag code', i18n: { key: 'error.pet_not_found_by_qr' } });
     }
 
-    // 2. SỬA Ở ĐÂY: Nếu QR tồn tại nhưng ĐANG TRỐNG (chưa có Pet)
+    // 2. Nếu QR tồn tại nhưng ĐANG TRỐNG (chưa có Pet)
     if (!tag.pet) {
       return {
         isUnlinked: true, // Báo cho Frontend biết đây là QR trống
@@ -1866,20 +1867,33 @@ export class PetsService {
     }
 
     const pet = tag.pet;
-    const isLost = tag.status === TagStatus.LOST;
+    
+    // 🚀 FIX 1: Dùng string 'LOST' thay vì Enum để tránh lỗi undefined khi build
+    const isLost = tag.status === 'LOST';
 
     if (!isLost && pet.owner) {
-      (pet.owner as any).phone = null;
+      (pet.owner as any).phone = null; // Ẩn SĐT nếu đang an toàn
     }
 
     return {
       isUnlinked: false, // QR đã có thú cưng
-      ...pet, dob: pet.dob ?? null,
-      avatarUrl: pet.images?.length > 0 ? pet.images[0].url : null, isLost,
+      ...pet, 
+      
+      // 🚀 FIX 2: ÉP cứng status của Pet thành LOST nếu Tag đang LOST để Frontend nhận diện ngay
+      status: isLost ? 'LOST' : pet.status, 
+      
+      // 🚀 FIX 3: Gửi kèm luôn tag hiện tại vào mảng tags để FE check được logic cũ
+      tags: [tag], 
+      
+      isLost: isLost,
+      dob: pet.dob ?? null,
+      avatarUrl: pet.images?.length > 0 ? pet.images[0].url : null, 
+      
       lostInfo: isLost ? {
         ownerName: pet.lostContactName ?? pet.owner?.name ?? null,
         ownerPhone: pet.lostContactPhone ?? pet.owner?.phone ?? null,
-        ownerAddress: pet.lostContactAddress ?? null, note: pet.lostDetails ?? null,
+        ownerAddress: pet.lostContactAddress ?? null, 
+        note: pet.lostDetails ?? null,
       } : null,
     };
   }
