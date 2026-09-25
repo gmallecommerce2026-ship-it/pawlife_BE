@@ -199,10 +199,14 @@ export class PetsController {
   ) {
     return this.petsService.reportPet(id, userId, reportData);
   }
-    @Get('shelter/dashboard')
+  @Get('shelter/dashboard')
   @UseGuards(JwtAuthGuard)
   async getShelterDashboardStats(@User('id') userId: string) {
     return this.petsService.getShelterDashboardStats(userId);
+  }
+  @Get('tag/:tagId')
+  async getPetByQrTag(@Param('tagId') tagId: string) {
+    return this.petsService.getPetByTagId(tagId);
   }
   @Get(':id')
   async getPetById(
