@@ -43,7 +43,20 @@ const DELETE_BATCH = 500;
 const FORCE_UPLOAD = process.argv.includes('--force');
 
 // ✅ SỬA 1: Cắt đuôi .png thay vì .svg
-const toTagId = (fileName: string) => fileName.replace(/\.png$/i, '').trim().toUpperCase();
+// ✅ CẬP NHẬT: Tự động map QR_1 -> PL-00001, QR_10000 -> PL-10000
+const toTagId = (fileName: string) => {
+  let baseName = fileName.replace(/\.png$/i, '').trim().toUpperCase(); // VD: "QR_1"
+
+  // Bắt mẫu chữ "QR_" theo sau là các chữ số
+  const match = baseName.match(/^QR_(\d+)$/i);
+  if (match) {
+    const numberPart = match[1]; // Lấy ra số (VD: "1", "150", "10000")
+    // Dùng padStart để chèn thêm số 0 vào đằng trước cho đủ 5 chữ số
+    return `PL-${numberPart.padStart(5, '0')}`;
+  }
+
+  return baseName; // Nếu tên file không phải chuẩn QR_x thì giữ nguyên
+};
 
 // ---------------------------------------------------------------------------
 // BƯỚC 1: XÓA QR CŨ CÓ THỂ XÓA
@@ -56,7 +69,7 @@ async function deleteBatch(ids: string[], stats: DeleteStats): Promise<void> {
     const result = await prisma.tag.deleteMany({ where: { id: { in: ids } } });
     stats.deleted += result.count;
   } catch (e: any) {
-    if (e?.code !== 'P2003') throw e; 
+    if (e?.code !== 'P2003') throw e;
     if (ids.length === 1) {
       stats.kept.push(ids[0]);
       return;
@@ -116,15 +129,15 @@ async function addNewTags(ids: string[]): Promise<void> {
     // 3. GHI ĐÈ (Reset) các tag đã tồn tại
     if (existingIds.size > 0) {
       const existingArray = Array.from(existingIds);
-      
+
       const updateResult = await prisma.tag.updateMany({
-        where: { 
+        where: {
           id: { in: existingArray }
           // ⚠️ LƯU Ý AN TOÀN: Bỏ comment dòng bên dưới nếu BẠN KHÔNG MUỐN GHI ĐÈ các tag đang được chó mèo sử dụng
           // status: { not: 'ACTIVE' } 
         },
-        data: { 
-          status: 'INACTIVE', 
+        data: {
+          status: 'INACTIVE',
           petId: null,       // Gỡ liên kết với Pet
           linkedAt: null,    // Xóa thời gian liên kết
           linkCount: 0       // Reset bộ đếm số lần sử dụng
@@ -133,7 +146,7 @@ async function addNewTags(ids: string[]): Promise<void> {
       updated += updateResult.count;
     }
   }
-  
+
   console.log(`✅ DB: Thêm mới ${created} tag, ghi đè/reset ${updated} tag đã có.`);
 }
 
