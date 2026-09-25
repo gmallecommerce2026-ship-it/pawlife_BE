@@ -1215,9 +1215,38 @@ export class PetsService {
 
     try {
       if (tagId) {
+        // 1. Làm sạch tagId giống như hàm linkQrCode để đề phòng user quét cả một URL dài
+        const rawId = tagId.split('/').pop() || tagId;
+        let cleanTagId = rawId.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+
+        if (cleanTagId.match(/^PL\d+$/)) {
+          cleanTagId = cleanTagId.replace('PL', 'PL_');
+        }
+        if (cleanTagId.match(/^PLT\d+$/)) {
+          cleanTagId = cleanTagId.replace('PLT', 'PLT-');
+        }
+
         const result = await this.prisma.$transaction(async (prisma) => {
           const newPet = await this.prisma.pet.create({ data: buildData(), include: { images: true } });
-          await prisma.tag.update({ where: { id: tagId }, data: { petId: newPet.id, status: 'ACTIVE', linkedAt: new Date(), linkCount: { increment: 1 } } });
+          
+          // 2. Dùng upsert thay vì update để tạo mới luôn QR nếu database chưa có
+          await prisma.tag.upsert({
+            where: { id: cleanTagId },
+            update: { 
+              petId: newPet.id, 
+              status: 'ACTIVE', 
+              linkedAt: new Date(), 
+              linkCount: { increment: 1 } 
+            },
+            create: {
+              id: cleanTagId,
+              petId: newPet.id, 
+              status: 'ACTIVE', 
+              linkedAt: new Date(), 
+              linkCount: 1 
+            }
+          });
+          
           return newPet;
         });
         return result;
