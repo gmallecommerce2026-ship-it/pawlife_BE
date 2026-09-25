@@ -87,19 +87,54 @@ async function cleanOldTags(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// BƯỚC 2: THÊM TAG MỚI VÀO DB (tag đã tồn tại thì bỏ qua)
+// BƯỚC 2: THÊM TAG MỚI VÀO DB VÀ GHI ĐÈ TAG ĐÃ TỒN TẠI
 // ---------------------------------------------------------------------------
 async function addNewTags(ids: string[]): Promise<void> {
   let created = 0;
+  let updated = 0;
+
   for (let i = 0; i < ids.length; i += 1000) {
-    const result = await prisma.tag.createMany({
-      data: ids.slice(i, i + 1000).map((id) => ({ id, status: 'INACTIVE' as const })),
-      // ✅ SỬA 2: Đổi thành true để bỏ qua các Tag bị trùng lặp, không văng lỗi P2002 nữa
-      skipDuplicates: true,
+    const batch = ids.slice(i, i + 1000);
+
+    // 1. Phân loại xem trong lô 1000 mã này, mã nào đã có sẵn trong DB
+    const existingTags = await prisma.tag.findMany({
+      where: { id: { in: batch } },
+      select: { id: true }
     });
-    created += result.count;
+    const existingIds = new Set(existingTags.map(t => t.id));
+    const newIds = batch.filter(id => !existingIds.has(id));
+
+    // 2. TẠO MỚI các tag chưa từng tồn tại
+    if (newIds.length > 0) {
+      const createResult = await prisma.tag.createMany({
+        data: newIds.map(id => ({ id, status: 'INACTIVE' as const })),
+        skipDuplicates: true,
+      });
+      created += createResult.count;
+    }
+
+    // 3. GHI ĐÈ (Reset) các tag đã tồn tại
+    if (existingIds.size > 0) {
+      const existingArray = Array.from(existingIds);
+      
+      const updateResult = await prisma.tag.updateMany({
+        where: { 
+          id: { in: existingArray }
+          // ⚠️ LƯU Ý AN TOÀN: Bỏ comment dòng bên dưới nếu BẠN KHÔNG MUỐN GHI ĐÈ các tag đang được chó mèo sử dụng
+          // status: { not: 'ACTIVE' } 
+        },
+        data: { 
+          status: 'INACTIVE', 
+          petId: null,       // Gỡ liên kết với Pet
+          linkedAt: null,    // Xóa thời gian liên kết
+          linkCount: 0       // Reset bộ đếm số lần sử dụng
+        }
+      });
+      updated += updateResult.count;
+    }
   }
-  console.log(`✅ DB: thêm mới ${created} tag, ${ids.length - created} tag đã có sẵn (giữ nguyên).`);
+  
+  console.log(`✅ DB: Thêm mới ${created} tag, ghi đè/reset ${updated} tag đã có.`);
 }
 
 // ---------------------------------------------------------------------------
