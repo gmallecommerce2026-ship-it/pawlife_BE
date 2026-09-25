@@ -75,11 +75,11 @@ interface ShelterSeedData {
 
 const shelterAccountsData: ShelterSeedData[] = [
   {
-    adminName: 'Phúc Lê',
-    adminEmail: 'phuc.le@havepaws.org',
+    adminName: 'BoNé Petkery',
+    adminEmail: 'hellopawlife@gmail.com',
     adminPhone: '0912345678',
     
-    shelterName: 'havepaws',
+    shelterName: 'BoNé Petkery',
     address: 'Hà Nội',
     contactInfo: '0912345678',
     description: 'Trạm cứu hộ chó mèo Hà Nội. Nơi cưu mang và tìm mái ấm mới cho các bé chó mèo bị bỏ rơi, bạo hành hoặc đi lạc.',
