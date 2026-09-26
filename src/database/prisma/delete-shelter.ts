@@ -10,7 +10,7 @@ async function main() {
   // 1. CẬP NHẬT MẬT KHẨU CHO USER
   // ============================================================
   const targetEmail = 'hellopawlife@gmail.com';
-  const NEW_PASSWORD = 'NewPawlifePassword@2026'; // Đổi mật khẩu mới tại đây
+  const NEW_PASSWORD = 'Pawlife@2026'; // Đổi mật khẩu mới tại đây
   const hashedPassword = await bcrypt.hash(NEW_PASSWORD, 10);
 
   try {
