@@ -12,7 +12,7 @@ import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
 import { ToggleLostModeDto } from './dto/toggle-lost-mode.dto';
 import { ReplaceQrDto } from './dto/replace-qr.dto';
-
+import { Logger } from '@nestjs/common';
 export interface FeedFilters {
   gender?: PetGender;
   size?: PetSize;
@@ -124,7 +124,7 @@ export class PetsService {
     private readonly redisService: RedisService,
     private configService: ConfigService,
   ) { }
-
+  private readonly logger = new Logger('QR-SCAN');
   private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371;
     const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -1833,17 +1833,13 @@ export class PetsService {
   async getPetByTagId(tagId: string) {
     const rawId = tagId.split('/').pop() || tagId;
     let cleanTagId = rawId.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    const beforeFix = cleanTagId;
 
-    // Bù đắp dấu gạch dưới cho các mã bị thiếu (VD: PL00029 -> PL_00029)
-    if (cleanTagId.match(/^PL\d+$/)) {
-      cleanTagId = cleanTagId.replace('PL', 'PL_');
-    }
+    if (cleanTagId.match(/^PL\d+$/)) cleanTagId = cleanTagId.replace('PL', 'PL_');
+    if (cleanTagId.match(/^PLT\d+$/)) cleanTagId = cleanTagId.replace('PLT', 'PLT-');
 
-    // Hỗ trợ quét luôn các mã cũ PLT bị thiếu gạch nối (VD: PLT0014 -> PLT-0014)
-    if (cleanTagId.match(/^PLT\d+$/)) {
-      cleanTagId = cleanTagId.replace('PLT', 'PLT-');
-    }
-    
+    this.logger.log(`raw="${tagId}" | afterClean="${beforeFix}" | finalLookup="${cleanTagId}"`);
+
     const tag = await this.prisma.tag.findUnique({
       where: { id: cleanTagId },
       include: {
@@ -1851,10 +1847,33 @@ export class PetsService {
       },
     });
 
-    // 1. Nếu mã QR hoàn toàn không tồn tại trong hệ thống
     if (!tag) {
+      // ---- CHẨN ĐOÁN KHI KHÔNG TÌM THẤY ----
+      const digits = cleanTagId.match(/\d+/)?.[0];
+      const [total, sample, similar] = await Promise.all([
+        this.prisma.tag.count(),
+        this.prisma.tag.findMany({ take: 3, orderBy: { id: 'asc' }, select: { id: true, status: true } }),
+        digits
+          ? this.prisma.tag.findMany({
+            where: { id: { contains: String(parseInt(digits, 10)).padStart(5, '0') } },
+            take: 5,
+            select: { id: true, status: true, petId: true },
+          })
+          : Promise.resolve([]),
+      ]);
+
+      this.logger.warn(`❌ KHÔNG THẤY "${cleanTagId}" trong DB.`);
+      this.logger.warn(`   Tổng tag trong DB: ${total}`);
+      this.logger.warn(`   3 tag mẫu: ${JSON.stringify(sample)}`);
+      this.logger.warn(`   Tag có số tương tự: ${JSON.stringify(similar)}`);
+      this.logger.warn(`   DB đang dùng: ${(process.env.DATABASE_URL || '').replace(/\/\/.*@/, '//***@')}`);
+
       throw new NotFoundException({ message: 'No pet found with this tag code', i18n: { key: 'error.pet_not_found_by_qr' } });
     }
+
+    this.logger.log(`✅ Thấy tag ${tag.id} | status=${tag.status} | petId=${tag.petId ?? 'TRỐNG'} | linkCount=${(tag as any).linkCount}`);
+
+
 
     // 2. Nếu QR tồn tại nhưng ĐANG TRỐNG (chưa có Pet)
     if (!tag.pet) {
@@ -1867,7 +1886,7 @@ export class PetsService {
     }
 
     const pet = tag.pet;
-    
+
     // 🚀 FIX 1: Dùng string 'LOST' thay vì Enum để tránh lỗi undefined khi build
     const isLost = tag.status === 'LOST';
 
@@ -1877,22 +1896,22 @@ export class PetsService {
 
     return {
       isUnlinked: false, // QR đã có thú cưng
-      ...pet, 
-      
+      ...pet,
+
       // 🚀 FIX 2: ÉP cứng status của Pet thành LOST nếu Tag đang LOST để Frontend nhận diện ngay
-      status: isLost ? 'LOST' : pet.status, 
-      
+      status: isLost ? 'LOST' : pet.status,
+
       // 🚀 FIX 3: Gửi kèm luôn tag hiện tại vào mảng tags để FE check được logic cũ
-      tags: [tag], 
-      
+      tags: [tag],
+
       isLost: isLost,
       dob: pet.dob ?? null,
-      avatarUrl: pet.images?.length > 0 ? pet.images[0].url : null, 
-      
+      avatarUrl: pet.images?.length > 0 ? pet.images[0].url : null,
+
       lostInfo: isLost ? {
         ownerName: pet.lostContactName ?? pet.owner?.name ?? null,
         ownerPhone: pet.lostContactPhone ?? pet.owner?.phone ?? null,
-        ownerAddress: pet.lostContactAddress ?? null, 
+        ownerAddress: pet.lostContactAddress ?? null,
         note: pet.lostDetails ?? null,
       } : null,
     };
