@@ -1,15 +1,15 @@
 /**
- * Seed QR code CHUẨN XÁC THEO FILE ẢNH VẬT LÝ
- *  1. Xóa sạch toàn bộ Tag QR đang trống trong DB (chưa gắn cho pet).
- *  2. Đọc 10.000 file .png trong thư mục, lấy đúng tên file làm ID (VD: PL-00001).
- *  3. Thêm vào DB (Bỏ qua những Tag đã tồn tại vì nó đang gắn cho Pet rồi).
- *  4. Upload ảnh lên R2.
+ * Seed QR code CHUẨN XÁC BẰNG CÁCH ĐỌC NỘI DUNG MÃ QR
  */
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
 import { S3Client, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+
+// 🆕 Thêm thư viện đọc QR
+import Jimp from 'jimp';
+import jsQR from 'jsqr';
 
 const prisma = new PrismaClient();
 
@@ -38,9 +38,6 @@ const CONCURRENCY = 20;
 const DELETE_BATCH = 500;
 const FORCE_UPLOAD = process.argv.includes('--force');
 
-// ✅ LẤY CHÍNH XÁC TÊN FILE XƯỞNG GỬI (VD: PL-00001.png -> PL-00001)
-const toTagId = (fileName: string) => fileName.replace(/\.png$/i, '').trim().toUpperCase();
-
 type DeleteStats = { deleted: number; kept: string[] };
 
 async function deleteBatch(ids: string[], stats: DeleteStats): Promise<void> {
@@ -57,6 +54,36 @@ async function deleteBatch(ids: string[], stats: DeleteStats): Promise<void> {
     const mid = Math.ceil(ids.length / 2);
     await deleteBatch(ids.slice(0, mid), stats);
     await deleteBatch(ids.slice(mid), stats);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 🆕 BƯỚC MỚI: HÀM ĐỌC MÃ QR TỪ FILE ẢNH
+// ---------------------------------------------------------------------------
+async function extractIdFromImage(fileName: string): Promise<string | null> {
+  try {
+    const filePath = path.join(QR_DIR, fileName);
+    const image = await Jimp.read(filePath);
+    
+    // jsQR cần mảng Uint8ClampedArray
+    const qrData = jsQR(
+      new Uint8ClampedArray(image.bitmap.data),
+      image.bitmap.width,
+      image.bitmap.height
+    );
+
+    if (!qrData) return null; // Không nhận diện được mã QR
+
+    // Lấy nội dung chuỗi trong QR (VD: "PL-00001" hoặc "https://paw.com/PL-00001")
+    const rawValue = qrData.data.trim();
+    
+    // Nếu QR của bạn chứa link, hãy cắt lấy ID cuối cùng. 
+    // Nếu QR chỉ chứa đúng ID thì dòng này vẫn hoạt động tốt.
+    const tagId = rawValue.split('/').pop()?.trim().toUpperCase();
+    
+    return tagId || null;
+  } catch (error) {
+    return null;
   }
 }
 
@@ -93,7 +120,7 @@ async function addNewTags(ids: string[]): Promise<void> {
   for (let i = 0; i < ids.length; i += 1000) {
     const result = await prisma.tag.createMany({
       data: ids.slice(i, i + 1000).map((id) => ({ id, status: 'INACTIVE' as const })),
-      skipDuplicates: true, // Bỏ qua nếu tag đã tồn tại (đang được pet sử dụng)
+      skipDuplicates: true,
     });
     created += result.count;
   }
@@ -122,9 +149,16 @@ async function listR2Keys(): Promise<Set<string>> {
   return keys;
 }
 
-async function uploadMissing(files: string[]): Promise<number> {
+// 🆕 Nhận thêm map (Tên file -> ID chuẩn)
+async function uploadMissing(files: string[], fileToIdMap: Map<string, string>): Promise<number> {
   const existing = FORCE_UPLOAD ? new Set<string>() : await listR2Keys();
-  const todo = files.filter((f) => !existing.has(`${R2_PREFIX}${toTagId(f)}.png`));
+  
+  // 🆕 Lọc danh sách file cần upload dựa trên ID thật sự
+  const todo = files.filter((f) => {
+    const realId = fileToIdMap.get(f);
+    return realId && !existing.has(`${R2_PREFIX}${realId}.png`);
+  });
+  
   console.log(`☁️ R2: Cloud đã có ${files.length - todo.length} ảnh, cần upload thêm ${todo.length} ảnh.`);
 
   let cursor = 0;
@@ -134,17 +168,20 @@ async function uploadMissing(files: string[]): Promise<number> {
   async function worker(): Promise<void> {
     while (cursor < todo.length) {
       const fileName = todo[cursor++];
+      const realId = fileToIdMap.get(fileName); // 🆕 Lấy ID thật sự
+      if (!realId) continue;
+
       try {
         await s3Client.send(
           new PutObjectCommand({
             Bucket: BUCKET_NAME,
-            Key: `${R2_PREFIX}${toTagId(fileName)}.png`,
-            Body: fs.readFileSync(path.join(QR_DIR, fileName)),
+            Key: `${R2_PREFIX}${realId}.png`, // 🆕 Lưu trên R2 với tên ID thật
+            Body: fs.readFileSync(path.join(QR_DIR, fileName)), // 🆕 Đọc từ file vật lý sai tên
             ContentType: 'image/png',
           }),
         );
       } catch (e: any) {
-        if (failed.length < 3) console.error(`⚠️ Lỗi upload ${fileName}:`, e.message);
+        if (failed.length < 3) console.error(`⚠️ Lỗi upload ${fileName} (thành ${realId}):`, e.message);
         failed.push(fileName);
       }
       if (++done % 500 === 0) console.log(`⏳ Đang upload... ${done}/${todo.length}`);
@@ -171,17 +208,51 @@ async function main() {
     console.error(`❌ Không tìm thấy file PNG nào trong thư mục ${QR_DIR}`);
     return;
   }
-  const ids = Array.from(new Set(files.map(toTagId)));
   console.log(`📦 Tìm thấy ${files.length} file thẻ QR (.png) trong thư mục.`);
 
-  await addNewTags(ids);
-  const failedCount = await uploadMissing(files);
+  // -------------------------------------------------------------------------
+  // 🆕 QUÉT 10.000 ẢNH ĐỂ LẤY ID THẬT SỰ (Có giới hạn luồng để tránh tràn RAM)
+  // -------------------------------------------------------------------------
+  console.log('🔍 Đang tiến hành quét hình ảnh để trích xuất QR Code, quá trình này có thể mất vài phút...');
+  const fileToIdMap = new Map<string, string>();
+  let scanCursor = 0;
+  let scanDone = 0;
+  let scanFailed = 0;
+
+  async function scanWorker() {
+    while (scanCursor < files.length) {
+      const fileName = files[scanCursor++];
+      const id = await extractIdFromImage(fileName);
+      if (id) {
+        fileToIdMap.set(fileName, id);
+      } else {
+        scanFailed++;
+        // console.error(`⚠️ Lỗi: Không thể đọc mã QR từ file ${fileName}`);
+      }
+      if (++scanDone % 500 === 0) console.log(`🔄 Đã quét: ${scanDone}/${files.length} ảnh...`);
+    }
+  }
+
+  // Chạy 10 luồng song song để quét ảnh
+  await Promise.all(Array.from({ length: 10 }, scanWorker));
+  
+  console.log(`✅ Quét xong: Nhận diện thành công ${fileToIdMap.size} ảnh, thất bại ${scanFailed} ảnh.`);
+
+  // Loại bỏ các file không scan được ra khỏi danh sách tiếp tục xử lý
+  const validFiles = files.filter(f => fileToIdMap.has(f));
+  const validIds = Array.from(new Set(fileToIdMap.values()));
+
+  // -------------------------------------------------------------------------
+  // Tiếp tục quy trình với danh sách ID thật sự
+  // -------------------------------------------------------------------------
+  await addNewTags(validIds);
+  const failedCount = await uploadMissing(validFiles, fileToIdMap); // 🆕 Truyền map vào
 
   console.log(`📊 Tổng số thẻ vật lý khai báo trong Database: ${await prisma.tag.count()}`);
-  if (failedCount === 0) {
+  if (failedCount === 0 && scanFailed === 0) {
     console.log('🎉 QUY TRÌNH HOÀN TẤT THÀNH CÔNG!');
   } else {
-    console.log(`⚠️ Xong nhưng có ${failedCount} ảnh chưa lên Cloud. Hãy chạy lại lệnh --force để thử upload nốt.`);
+    console.log(`⚠️ Xong nhưng có ${failedCount} ảnh upload lỗi và ${scanFailed} ảnh không đọc được mã QR.`);
     process.exitCode = 1;
   }
 }
