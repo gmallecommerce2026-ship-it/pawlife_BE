@@ -66,6 +66,25 @@ function getS3(): S3Client {
 }
 
 // ---------------------------------------------------------------------------
+// NHỊ PHÂN HOÁ ẢNH: các file PNG nguồn có viền module bị anti-alias (pixel xám
+// mờ giữa đen/trắng), khiến thuật toán tự threshold trong jsQR bị nhiễu và
+// không tìm được finder pattern. Ép cứng về đen/trắng tuyệt đối trước khi đưa
+// vào jsQR giúp đọc ổn định (đã xác nhận bằng test thực tế trên nhiều file).
+// ---------------------------------------------------------------------------
+function binarize(data: Uint8ClampedArray, threshold = 128): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(data.length);
+  for (let i = 0; i < data.length; i += 4) {
+    const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    const v = lum < threshold ? 0 : 255;
+    out[i] = v;
+    out[i + 1] = v;
+    out[i + 2] = v;
+    out[i + 3] = 255;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // CHUẨN HOÁ ID: mọi biến thể PL-1, PL_00001, https://.../PL-00001?x=1 -> PL-00001
 // Chuỗi không khớp (PLT-0014, QR_27, ...) trả về null để báo cáo, không nhận bừa.
 // ---------------------------------------------------------------------------
@@ -86,7 +105,8 @@ async function scanFile(fileName: string): Promise<ScanResult> {
   try {
     const image = await Jimp.read(path.join(QR_DIR, fileName));
     const { data, width, height } = image.bitmap;
-    const qr = jsQR(new Uint8ClampedArray(data), width, height, {
+    const cleaned = binarize(data);
+    const qr = jsQR(cleaned, width, height, {
       inversionAttempts: 'attemptBoth',
     });
     if (!qr) return { ok: false, reason: 'no-qr' };
