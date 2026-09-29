@@ -205,7 +205,7 @@ export class AuthService {
     await this.redisService.del(`auth:session:${deviceId}`);
     return { success: true, message: 'Logged out of device.' };
   }
-  
+
   async savePushToken(userId: string, deviceIdentifier: string, pushToken: string) {
     if (!deviceIdentifier) {
       throw new BadRequestException('Thiếu định danh thiết bị (x-device-id).');
@@ -595,11 +595,18 @@ export class AuthService {
       });
     }
     // =========================================================================
-    const expiresIn = rememberMe ? '30d' : '1d';
-    const redisTtlSeconds = rememberMe ? (30 * 24 * 60 * 60) : (24 * 60 * 60);
-    await this.redisService.set(`auth:session:${session.id}`, "active", redisTtlSeconds); // TTL equals JWT lifespan
+    const expiresIn = '30d';
+    const redisTtlSeconds = 30 * 24 * 60 * 60; // 30 ngày tính bằng giây
 
-    const payload = { userId: user.id, sessionId: session.id, email: user.email, role: user.role, shelterId: user.shelterId ?? undefined, };
+    await this.redisService.set(`auth:session:${session.id}`, "active", redisTtlSeconds);
+
+    const payload = {
+      userId: user.id,
+      sessionId: session.id,
+      email: user.email,
+      role: user.role,
+      shelterId: user.shelterId ?? undefined,
+    };
     const accessToken = this.jwtService.sign(payload, { expiresIn });
 
     const isProfileComplete = !!(

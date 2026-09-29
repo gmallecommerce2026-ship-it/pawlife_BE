@@ -23,6 +23,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1000.0",
     "@aws-sdk/s3-request-presigner": "^3.1000.0",
+    "@cspotcode/source-map-support": "^0.8.1",
     "@faker-js/faker": "^10.2.0",
     "@nest-lab/throttler-storage-redis": "^1.2.0",
     "@nestjs-modules/mailer": "^2.0.2",
@@ -66,6 +67,7 @@
     "googleapis": "^171.4.0",
     "ioredis": "^5.10.1",
     "jimp": "^0.22.12",
+    "jsqr": "^1.4.0",
     "jwks-rsa": "^3.2.0",
     "mime-types": "^3.0.2",
     "moment": "^2.30.1",

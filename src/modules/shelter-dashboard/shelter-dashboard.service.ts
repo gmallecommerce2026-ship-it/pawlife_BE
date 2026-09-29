@@ -141,7 +141,7 @@ export class ShelterDashboardService {
                 user: { select: { id: true, name: true, avatarUrl: true, email: true, phone: true } },
                 notes: {
                     include: {
-                        author: { select: { id: true, name: true, avatarUrl: true } },
+                        author: { select: { id: true, name: true, avatarUrl: true, shelterRole: true } },
                     },
                     orderBy: { createdAt: 'desc' },
                 },
