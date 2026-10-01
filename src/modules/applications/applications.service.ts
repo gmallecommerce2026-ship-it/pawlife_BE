@@ -24,7 +24,23 @@ import {
 import { ScheduleAppointmentDto } from './dto/schedule-appointment.dto';
 import { GoogleMeetService } from '../google-meet/google-meet.service';
 import { renderInterviewConfirmationEmail } from './templates/interview-confirmation.template';
+const NOTE_AUTHOR_SELECT = {
+  id: true,
+  name: true,
+  avatarUrl: true,
+  role: true,
+  shelterRole: true,
+} as const;
 
+// Thêm authorName / authorAvatar / authorRole dạng phẳng cho FE.
+// User SHELTER cũ chưa có shelterRole thì coi như ADMIN để luôn có chip.
+const mapNote = <T extends { author?: any }>(n: T) => ({
+  ...n,
+  authorName: n.author?.name ?? null,
+  authorAvatar: n.author?.avatarUrl ?? null,
+  authorRole:
+    n.author?.shelterRole ?? (n.author?.role === Role.SHELTER ? 'ADMIN' : null),
+});
 @Injectable()
 export class ApplicationsService {
   private readonly logger = new Logger(ApplicationsService.name);
@@ -462,9 +478,7 @@ export class ApplicationsService {
         },
         appointment: true,
         notes: {
-          include: {
-            author: { select: { id: true, name: true, avatarUrl: true } },
-          },
+          include: { author: { select: NOTE_AUTHOR_SELECT } },
           orderBy: { createdAt: 'desc' },
         },
         tags: {
@@ -480,8 +494,9 @@ export class ApplicationsService {
       });
     }
 
-    return application;
+    return { ...application, notes: application.notes.map(mapNote) };
   }
+
 
   async updateVerificationPhotos(
     userId: string,
@@ -585,7 +600,7 @@ export class ApplicationsService {
           },
         },
         notes: {
-          include: { author: { select: { id: true, name: true, avatarUrl: true } } },
+          include: { author: { select: NOTE_AUTHOR_SELECT } },
           orderBy: { createdAt: 'desc' },
         },
         tags: { include: { tag: true } },
@@ -595,8 +610,9 @@ export class ApplicationsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return applications;
+    return applications.map((a) => ({ ...a, notes: a.notes.map(mapNote) }));
   }
+
 
   async addNote(
     shelterId: string,
@@ -607,17 +623,17 @@ export class ApplicationsService {
   ) {
     await this.assertOwnsApplication(shelterId, applicationId);
 
-    return this.prisma.applicationNote.create({
+    const note = await this.prisma.applicationNote.create({
       data: {
         applicationId,
         authorId,
         content,
         type,
       },
-      include: {
-        author: { select: { id: true, name: true, avatarUrl: true } },
-      },
+      include: { author: { select: NOTE_AUTHOR_SELECT } },
     });
+
+    return mapNote(note);
   }
 
   async updateNote(
@@ -634,13 +650,13 @@ export class ApplicationsService {
     });
     if (!note) throw new NotFoundException('Không tìm thấy ghi chú.');
 
-    return this.prisma.applicationNote.update({
+    const updated = await this.prisma.applicationNote.update({
       where: { id: noteId },
       data: { content, type },
-      include: {
-        author: { select: { id: true, name: true, avatarUrl: true } },
-      },
+      include: { author: { select: NOTE_AUTHOR_SELECT } },
     });
+
+    return mapNote(updated);
   }
 
   async deleteNote(shelterId: string, applicationId: string, noteId: string) {
@@ -845,12 +861,21 @@ export class ApplicationsService {
         images: { select: { url: true }, take: 1 },
         qrVerificationStatus: true,
         idSetByShelter: true,
+        // 👇 THÊM CÁC TRƯỜNG DƯỚI ĐÂY ĐỂ XÂY DỰNG TIMELINE
+        dob: true,
+        createdAt: true,
+        adoptedAt: true,
+        tags: { select: { linkedAt: true }, take: 1 },
+        medicalRecords: {
+          where: { type: 'VACCINATION' },
+          select: { id: true, recordName: true, recordDate: true },
+        },
       },
     });
 
     const notes = await this.prisma.applicationNote.findMany({
       where: { application: { userId, pet: { shelterId } } },
-      include: { author: { select: { id: true, name: true, avatarUrl: true } } },
+      include: { author: { select: NOTE_AUTHOR_SELECT } },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -886,20 +911,53 @@ export class ApplicationsService {
       },
       activeApplications: activeApplications.map(mapAppSummary),
       adoptionHistory: adoptionHistory.map(mapAppSummary),
-      currentPets: currentPets.map((p) => ({
-        id: p.id,
-        name: p.name,
-        status: p.status,
-        avatarUrl: p.images?.[0]?.url ?? null,
-        qrVerificationStatus: p.qrVerificationStatus,
-      })),
-      notes: notes.map((n) => ({
-        id: n.id,
-        content: n.content,
-        type: n.type,
-        createdAt: n.createdAt,
-        author: n.author,
-      })),
+      currentPets: currentPets.map((p) => {
+        const history = [];
+
+        if (p.dob) {
+          history.push({ id: `birth-${p.id}`, type: 'BIRTH', title: 'Sinh nhật', description: `Ngày sinh của ${p.name}`, date: p.dob.toISOString() });
+        }
+        if (p.createdAt) {
+          history.push({ id: `shelter-${p.id}`, type: 'UNDER_SHELTER_CARE', title: 'Được cứu hộ', description: 'Đưa về trạm chăm sóc', date: p.createdAt.toISOString() });
+        }
+        if (p.adoptedAt) {
+          history.push({ id: `transfer-${p.id}`, type: 'TRANSFER', title: 'Nhận nuôi thành công', description: `Chuyển giao quyền chăm sóc ${p.name}`, date: p.adoptedAt.toISOString() });
+        }
+        if (p.qrVerificationStatus === 'VERIFIED' && p.tags?.[0]?.linkedAt) {
+          history.push({ id: `qr-${p.id}`, type: 'QR_LINKED', title: 'Đăng ký mã QR', description: 'Kích hoạt vòng cổ PawLife', date: p.tags[0].linkedAt.toISOString() });
+        }
+        
+        p.medicalRecords.forEach(mr => {
+          // Xử lý json recordName
+          const titleVi = typeof mr.recordName === 'object' ? (mr.recordName as any)?.vi : mr.recordName;
+          history.push({ id: `med-${mr.id}`, type: 'VACCINE', title: 'Tiêm phòng', description: titleVi || 'Tiêm vắc-xin định kỳ', date: mr.recordDate.toISOString() });
+        });
+
+        // Sắp xếp giảm dần theo thời gian (mới nhất lên đầu)
+        history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        return {
+          id: p.id,
+          name: p.name,
+          status: p.status,
+          avatarUrl: p.images?.[0]?.url ?? null,
+          qrVerificationStatus: p.qrVerificationStatus,
+          pawHistory: history, // 👈 Trả về mảng history đã build sẵn
+        };
+      }),
+      notes: notes.map((n) => {
+        const m = mapNote(n);
+        return {
+          id: m.id,
+          content: m.content,
+          type: m.type,
+          createdAt: m.createdAt,
+          author: m.author,
+          authorName: m.authorName,
+          authorAvatar: m.authorAvatar,
+          authorRole: m.authorRole,
+        };
+      }),
     };
   }
 
