@@ -51,7 +51,7 @@ export class ShelterTeamController {
     const data = await this.shelterTeamService.inviteMember(shelterId, inviterId, dto);
     return { success: true, data };
   }
-  
+
   @Patch('me/password')
   async changeMyPassword(
     @User('id') userId: string,

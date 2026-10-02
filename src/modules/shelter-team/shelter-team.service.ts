@@ -158,15 +158,18 @@ export class ShelterTeamService {
         return { success: true };
     }
     async changeMyPassword(userId: string, oldPassword: string, newPassword: string) {
+        if (!newPassword || newPassword.length < 6) {
+            throw new BadRequestException('Mật khẩu mới phải có ít nhất 6 ký tự');
+        }
+
         const user = await this.prisma.user.findUnique({ where: { id: userId } });
         if (!user) throw new NotFoundException('Không tìm thấy tài khoản');
+        if (!user.password) {
+            throw new BadRequestException('Tài khoản đăng nhập bằng mạng xã hội, chưa có mật khẩu');
+        }
 
         const ok = await bcrypt.compare(oldPassword, user.password);
         if (!ok) throw new BadRequestException('Mật khẩu cũ không đúng');
-
-        if (newPassword.length < 6) {
-            throw new BadRequestException('Mật khẩu mới phải có ít nhất 6 ký tự');
-        }
 
         await this.prisma.user.update({
             where: { id: userId },
@@ -177,29 +180,37 @@ export class ShelterTeamService {
     }
     // Trong ShelterTeamService (Backend)
     // Nhớ import * as bcrypt from 'bcryptjs';
-    async updateMemberPassword(shelterId: string, requesterId: string, memberId: string, newPassword: string) {
-        // Bắt buộc dùng hàm bảo mật chung của file này
-        await this.assertShelterAdmin(requesterId, shelterId);
-
-        // Đảm bảo member bị đổi pass cũng phải thuộc cùng trạm
-        const member = await this.prisma.user.findFirst({ where: { id: memberId, shelterId } });
-        if (!member) throw new NotFoundException('Không tìm thấy thành viên trong trạm này.');
-
+    async updateMemberPassword(
+        shelterId: string,
+        adminId: string,
+        targetUserId: string,
+        newPassword: string,
+    ) {
         if (!newPassword || newPassword.length < 6) {
-            throw new BadRequestException('Mật khẩu mới phải có ít nhất 6 ký tự.');
+            throw new BadRequestException('Mật khẩu mới phải có ít nhất 6 ký tự');
+        }
+        if (adminId === targetUserId) {
+            throw new BadRequestException('Hãy dùng chức năng đổi mật khẩu cá nhân');
         }
 
-        // Hash mật khẩu mới và lưu vào DB
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(newPassword, salt);
+        const admin = await this.prisma.user.findUnique({ where: { id: adminId } });
+        if (!admin || admin.shelterId !== shelterId || admin.shelterRole !== 'ADMIN') {
+            throw new ForbiddenException('Chỉ Admin của trạm mới được đặt lại mật khẩu');
+        }
+
+        const target = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+        if (!target || target.shelterId !== shelterId || target.isDeleted) {
+            throw new NotFoundException('Không tìm thấy thành viên trong trạm');
+        }
 
         await this.prisma.user.update({
-            where: { id: memberId },
-            data: { password: hashedPassword },
+            where: { id: targetUserId },
+            data: { password: await bcrypt.hash(newPassword, 10) },
         });
 
-        return { success: true, message: 'Cập nhật mật khẩu thành công.' };
+        return { success: true, message: 'Đặt lại mật khẩu thành công' };
     }
+
     async updateMemberName(shelterId: string, requesterId: string, memberId: string, name: string) {
         // Kiểm tra quyền Admin của trạm
         await this.assertShelterAdmin(requesterId, shelterId);
