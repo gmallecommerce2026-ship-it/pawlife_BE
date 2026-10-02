@@ -53,11 +53,20 @@ export class ShelterDashboardService {
 
 
     async updateMyProfile(shelterId: string, dto: UpdateShelterProfileDto) {
-        const { email, phone, logoUrl, coverUrl, openingHours, ...rest } = dto;
+        const { email, phone, logoUrl, coverUrl, openingHours, bio, description, ...rest } = dto;
+
+        const normBio = bio?.trim();
+        const normDesc = description?.trim();
+        if (normBio && normDesc && normBio === normDesc) {
+            throw new BadRequestException('Mô tả ngắn và Giới thiệu không được trùng nhau.');
+        }
+
         const updated = await this.prisma.shelter.update({
             where: { id: shelterId },
             data: {
                 ...rest,
+                ...(bio !== undefined && { bio: normBio || null }),
+                ...(description !== undefined && { description: normDesc || null }),
                 ...(email !== undefined && { emailAddress: email }),
                 ...(phone !== undefined && { contactInfo: phone }),
                 ...(logoUrl && { avatarUrl: logoUrl }),
@@ -67,9 +76,11 @@ export class ShelterDashboardService {
                 }),
             },
         });
+
         await this.redisService.del(`shelter:profile:${shelterId}`);
         const v = (await this.redisService.get<number>('shelters:cache_version:global')) || 0;
         await this.redisService.set('shelters:cache_version:global', v + 1, 0);
+
         return { ...updated, email: updated.emailAddress, phone: updated.contactInfo, logoUrl: updated.avatarUrl };
     }
 
