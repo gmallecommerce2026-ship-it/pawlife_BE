@@ -44,7 +44,7 @@ export class ShelterTeamService {
 
     async updateOwnProfile(userId: string, dto: { name?: string; avatarUrl?: string }) {
         const dataToUpdate: any = {};
-        
+
         if (dto.name && dto.name.trim() !== '') {
             dataToUpdate.name = dto.name.trim();
         }
@@ -156,6 +156,24 @@ export class ShelterTeamService {
             data: { status: 'REVOKED' },
         });
         return { success: true };
+    }
+    async changeMyPassword(userId: string, oldPassword: string, newPassword: string) {
+        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (!user) throw new NotFoundException('Không tìm thấy tài khoản');
+
+        const ok = await bcrypt.compare(oldPassword, user.password);
+        if (!ok) throw new BadRequestException('Mật khẩu cũ không đúng');
+
+        if (newPassword.length < 6) {
+            throw new BadRequestException('Mật khẩu mới phải có ít nhất 6 ký tự');
+        }
+
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { password: await bcrypt.hash(newPassword, 10) },
+        });
+
+        return { success: true, message: 'Đổi mật khẩu thành công' };
     }
     // Trong ShelterTeamService (Backend)
     // Nhớ import * as bcrypt from 'bcryptjs';

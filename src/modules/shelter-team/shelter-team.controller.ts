@@ -51,6 +51,14 @@ export class ShelterTeamController {
     const data = await this.shelterTeamService.inviteMember(shelterId, inviterId, dto);
     return { success: true, data };
   }
+  
+  @Patch('me/password')
+  async changeMyPassword(
+    @User('id') userId: string,
+    @Body() dto: { oldPassword: string; newPassword: string },
+  ) {
+    return this.shelterTeamService.changeMyPassword(userId, dto.oldPassword, dto.newPassword);
+  }
   // Trong ShelterTeamController (Backend)
   @Patch(':userId/password')
   @UseGuards(JwtAuthGuard)
