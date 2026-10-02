@@ -1126,12 +1126,12 @@ export class PetsService {
     const keyword = search?.trim();
     if (keyword) {
       whereCondition.OR = [
-        { name: { contains: keyword, mode: 'insensitive' } },
+        { name: { contains: keyword } },
         { breed: { path: ['vi'], string_contains: keyword } as any },
         { breed: { path: ['en'], string_contains: keyword } as any },
-        // 🆕 Tìm theo ID: khớp ký tự ở đầu, giữa hoặc cuối chuỗi
-        { idSetByShelter: { contains: keyword, mode: 'insensitive' } },
-        { shelterInternalId: { contains: keyword, mode: 'insensitive' } },
+        // Tìm theo ID: khớp ký tự ở đầu, giữa hoặc cuối chuỗi
+        { idSetByShelter: { contains: keyword } },
+        { shelterInternalId: { contains: keyword } },
       ];
     }
     if (type) {
