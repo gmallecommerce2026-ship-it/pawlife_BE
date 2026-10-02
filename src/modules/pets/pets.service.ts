@@ -159,6 +159,14 @@ export class PetsService {
 
     return false;
   }
+  private async isShelterManager(userId: string, pet: any): Promise<boolean> {
+    if (!pet.shelterId) return false;
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { shelterId: true },
+    });
+    return user?.shelterId === pet.shelterId;
+  }
   private diffInDays(date1: Date, date2: Date): number {
     const diffTime = Math.abs(date2.getTime() - date1.getTime());
     return Math.floor(diffTime / (1000 * 60 * 60 * 24));
@@ -1959,43 +1967,47 @@ export class PetsService {
     const now = new Date();
     const previousStatus = pet.status;
 
-    if (updateData.name && updateData.name !== pet.name) {
-      const isAdopted = pet.status === 'ADOPTED';
-      const daysSinceAdoption = pet.adoptedAt ? this.diffInDays(now, pet.adoptedAt) : 999;
-      const isUnlimitedNameChange = isAdopted && daysSinceAdoption <= 30;
+    // 🆕 Trạm quản lý pet (web) -> không bị ràng buộc số ngày
+    const isShelterManager = await this.isShelterManager(userId, pet);
 
-      if (!isUnlimitedNameChange) {
-        if (pet.nameLastUpdatedAt) {
+    if (!isShelterManager) {
+      // ── Ràng buộc đổi tên: 14 ngày (chỉ áp dụng cho chủ nuôi / app) ──
+      if (updateData.name && updateData.name !== pet.name) {
+        const isAdopted = pet.status === 'ADOPTED';
+        const daysSinceAdoption = pet.adoptedAt ? this.diffInDays(now, pet.adoptedAt) : 999;
+        const isUnlimitedNameChange = isAdopted && daysSinceAdoption <= 30;
+
+        if (!isUnlimitedNameChange && pet.nameLastUpdatedAt) {
           const daysSinceLastNameChange = this.diffInDays(now, pet.nameLastUpdatedAt);
           if (daysSinceLastNameChange < 14) {
             throw new BadRequestException({
               message: `You can only change the name once every 14 days. Please wait ${14 - daysSinceLastNameChange} more days.`,
-              i18n: { key: 'error.name_change_limit', params: { daysLeft: 14 - daysSinceLastNameChange } }
+              i18n: { key: 'error.name_change_limit', params: { daysLeft: 14 - daysSinceLastNameChange } },
             });
           }
         }
+        updateData.nameLastUpdatedAt = now;
       }
-      updateData.nameLastUpdatedAt = now;
-    }
 
-    const daysSinceCreation = this.diffInDays(now, pet.createdAt);
-    const isCoreInfoLocked = daysSinceCreation >= 7;
+      // ── Ràng buộc thông tin lõi: 7 ngày ──
+      const daysSinceCreation = this.diffInDays(now, pet.createdAt);
+      const isCoreInfoLocked = daysSinceCreation >= 7;
 
-    if (isCoreInfoLocked) {
-      if (updateData.dob && pet.dob && new Date(updateData.dob).getTime() !== pet.dob.getTime()) {
-        throw new BadRequestException({ message: 'Date of birth cannot be changed after 7 days of profile creation.', i18n: { key: 'error.dob_locked' } });
-      }
-      if (updateData.breed && pet.breed) {
-        const newBreed = getBilingualText(updateData.breed);
-        const oldBreed = getBilingualText(pet.breed);
-        const breedChanged = newBreed.vi.trim() !== oldBreed.vi.trim() || newBreed.en.trim() !== oldBreed.en.trim();
-        if (breedChanged) {
-          throw new BadRequestException({ message: 'Pet breed cannot be changed after 7 days of profile creation.', i18n: { key: 'error.breed_locked' } });
+      if (isCoreInfoLocked) {
+        if (updateData.dob && pet.dob && new Date(updateData.dob).getTime() !== pet.dob.getTime()) {
+          throw new BadRequestException({ message: 'Date of birth cannot be changed after 7 days of profile creation.', i18n: { key: 'error.dob_locked' } });
         }
-      }
-
-      if (updateData.gender && pet.gender && updateData.gender !== pet.gender) {
-        throw new BadRequestException({ message: 'Gender cannot be changed after 7 days of profile creation.', i18n: { key: 'error.gender_locked' } });
+        if (updateData.breed && pet.breed) {
+          const newBreed = getBilingualText(updateData.breed);
+          const oldBreed = getBilingualText(pet.breed);
+          const breedChanged = newBreed.vi.trim() !== oldBreed.vi.trim() || newBreed.en.trim() !== oldBreed.en.trim();
+          if (breedChanged) {
+            throw new BadRequestException({ message: 'Pet breed cannot be changed after 7 days of profile creation.', i18n: { key: 'error.breed_locked' } });
+          }
+        }
+        if (updateData.gender && pet.gender && updateData.gender !== pet.gender) {
+          throw new BadRequestException({ message: 'Gender cannot be changed after 7 days of profile creation.', i18n: { key: 'error.gender_locked' } });
+        }
       }
     }
 
