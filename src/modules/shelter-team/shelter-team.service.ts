@@ -164,11 +164,12 @@ export class ShelterTeamService {
 
         const user = await this.prisma.user.findUnique({ where: { id: userId } });
         if (!user) throw new NotFoundException('Không tìm thấy tài khoản');
+
         if (!user.password) {
             throw new BadRequestException('Tài khoản đăng nhập bằng mạng xã hội, chưa có mật khẩu');
         }
 
-        const ok = await bcrypt.compare(oldPassword, user.password);
+        const ok = await bcrypt.compare(oldPassword, user.password); 
         if (!ok) throw new BadRequestException('Mật khẩu cũ không đúng');
 
         await this.prisma.user.update({
