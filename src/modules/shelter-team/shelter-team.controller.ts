@@ -34,7 +34,7 @@ export class ShelterTeamController {
     @User('id') userId: string,
     @Body() dto: { name?: string; avatarUrl?: string },
   ) {
-    return this.shelterTeamService.updateMe(userId, dto);
+    return this.shelterTeamService.updateOwnProfile(userId, dto);
   }
   @Get()
   async getTeam(@User('shelterId') shelterId: string) {
@@ -55,11 +55,12 @@ export class ShelterTeamController {
   @Patch(':userId/password')
   @UseGuards(JwtAuthGuard)
   async updateMemberPassword(
-    @User('id') adminId: string, // ID của admin đang gọi API
-    @Param('userId') targetUserId: string, // ID của member bị đổi pass
+    @User('id') adminId: string,
+    @User('shelterId') shelterId: string,
+    @Param('userId') targetUserId: string,
     @Body('newPassword') newPassword: string,
   ) {
-    return this.shelterTeamService.updateMemberPassword(adminId, targetUserId, newPassword);
+    return this.shelterTeamService.updateMemberPassword(shelterId, adminId, targetUserId, newPassword);
   }
 
 
@@ -77,10 +78,11 @@ export class ShelterTeamController {
   @UseGuards(JwtAuthGuard)
   async updateMemberName(
     @User('id') adminId: string,
+    @User('shelterId') shelterId: string,
     @Param('userId') targetUserId: string,
     @Body('name') newName: string,
   ) {
-    return this.shelterTeamService.updateMemberName(adminId, targetUserId, newName);
+    return this.shelterTeamService.updateMemberName(shelterId, adminId, targetUserId, newName);
   }
 
   @Delete(':userId')
