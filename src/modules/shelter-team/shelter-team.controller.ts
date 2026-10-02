@@ -27,10 +27,14 @@ export class ShelterTeamController {
     return { success: true, data };
   }
 
+
   @Patch('me')
-  async updateMe(@User('id') userId: string, @Body() dto: UpdateOwnProfileDto) {
-    const data = await this.shelterTeamService.updateOwnProfile(userId, dto);
-    return { success: true, data };
+  @UseGuards(JwtAuthGuard)
+  async updateMe(
+    @User('id') userId: string,
+    @Body() dto: { name?: string; avatarUrl?: string },
+  ) {
+    return this.shelterTeamService.updateMe(userId, dto);
   }
   @Get()
   async getTeam(@User('shelterId') shelterId: string) {
@@ -58,7 +62,7 @@ export class ShelterTeamController {
     return this.shelterTeamService.updateMemberPassword(adminId, targetUserId, newPassword);
   }
 
-  
+
   @Patch(':userId/role')
   async updateMemberRole(
     @User('shelterId') shelterId: string,
@@ -68,6 +72,15 @@ export class ShelterTeamController {
   ) {
     const data = await this.shelterTeamService.updateMemberRole(shelterId, requesterId, userId, dto.role);
     return { success: true, data };
+  }
+  @Patch(':userId/name')
+  @UseGuards(JwtAuthGuard)
+  async updateMemberName(
+    @User('id') adminId: string,
+    @Param('userId') targetUserId: string,
+    @Body('name') newName: string,
+  ) {
+    return this.shelterTeamService.updateMemberName(adminId, targetUserId, newName);
   }
 
   @Delete(':userId')

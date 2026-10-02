@@ -167,6 +167,37 @@ export class ShelterTeamService {
 
         return { success: true, message: 'Cập nhật mật khẩu thành công.' };
     }
+    async updateMemberName(adminId: string, targetUserId: string, name: string) {
+        // Kiểm tra admin
+        const admin = await this.prisma.user.findUnique({ where: { id: adminId } });
+        if (admin?.shelterRole !== 'ADMIN') {
+            throw new ForbiddenException('Chỉ Admin mới có quyền đổi tên thành viên.');
+        }
+
+        // Cập nhật tên
+        await this.prisma.user.update({
+            where: { id: targetUserId },
+            data: { name },
+        });
+        return { success: true };
+    }
+    async updateMe(userId: string, dto: { name?: string; avatarUrl?: string }) {
+        const updated = await this.prisma.user.update({
+            where: { id: userId },
+            data: {
+                ...(dto.name ? { name: dto.name } : {}),
+                ...(dto.avatarUrl ? { avatarUrl: dto.avatarUrl } : {}),
+            },
+        });
+
+        return {
+            id: updated.id,
+            name: updated.name,
+            email: updated.email,
+            avatarUrl: updated.avatarUrl,
+            shelterRole: updated.shelterRole,
+        };
+    }
     async updateMemberRole(shelterId: string, requesterId: string, memberId: string, role: ShelterStaffRole) {
         await this.assertShelterAdmin(requesterId, shelterId);
 
