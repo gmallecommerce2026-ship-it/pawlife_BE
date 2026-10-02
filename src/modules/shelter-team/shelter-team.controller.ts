@@ -47,7 +47,18 @@ export class ShelterTeamController {
     const data = await this.shelterTeamService.inviteMember(shelterId, inviterId, dto);
     return { success: true, data };
   }
+  // Trong ShelterTeamController (Backend)
+  @Patch(':userId/password')
+  @UseGuards(JwtAuthGuard)
+  async updateMemberPassword(
+    @User('id') adminId: string, // ID của admin đang gọi API
+    @Param('userId') targetUserId: string, // ID của member bị đổi pass
+    @Body('newPassword') newPassword: string,
+  ) {
+    return this.shelterTeamService.updateMemberPassword(adminId, targetUserId, newPassword);
+  }
 
+  
   @Patch(':userId/role')
   async updateMemberRole(
     @User('shelterId') shelterId: string,

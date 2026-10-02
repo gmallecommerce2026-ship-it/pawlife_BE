@@ -148,7 +148,25 @@ export class ShelterTeamService {
         });
         return { success: true };
     }
+    // Trong ShelterTeamService (Backend)
+    // Nhớ import * as bcrypt from 'bcryptjs';
+    async updateMemberPassword(adminId: string, targetUserId: string, newPassword: string) {
+        const adminUser: any = await this.prisma.user.findUnique({ where: { id: adminId } });
+        if (adminUser.shelterRole !== 'ADMIN') {
+            throw new ForbiddenException('Chỉ Admin mới có quyền đổi mật khẩu thành viên.');
+        }
 
+        // 2. Hash mật khẩu mới và lưu vào DB
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        await this.prisma.user.update({
+            where: { id: targetUserId },
+            data: { password: hashedPassword },
+        });
+
+        return { success: true, message: 'Cập nhật mật khẩu thành công.' };
+    }
     async updateMemberRole(shelterId: string, requesterId: string, memberId: string, role: ShelterStaffRole) {
         await this.assertShelterAdmin(requesterId, shelterId);
 
