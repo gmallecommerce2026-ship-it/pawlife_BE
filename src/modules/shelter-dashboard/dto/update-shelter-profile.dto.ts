@@ -29,7 +29,7 @@ class OpeningHourDto {
 
 export class UpdateShelterProfileDto {
   @IsOptional() @IsString() name?: string;
-  @IsOptional() @IsString() @MaxLength(100) bio?: string;
+  @IsOptional() @IsString() @MaxLength(360) bio?: string;          // 100 → 160
   @IsOptional() @IsString() shelterType?: string;
   @IsOptional() @IsString() address?: string;
   @IsOptional() @IsNumber() @Type(() => Number) latitude?: number;
@@ -37,10 +37,10 @@ export class UpdateShelterProfileDto {
   @IsOptional() @IsString() phone?: string;
   @IsOptional() @IsString() email?: string;
   @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() policy?: string;                       // 🆕
   @IsOptional() @IsString() logoUrl?: string;
   @IsOptional() @IsString() coverUrl?: string;
-
-  @IsOptional() @IsString() website?: string; // 🆕 thêm nếu muốn giữ field này
+  @IsOptional() @IsString() website?: string;
 
   @IsOptional()
   @IsArray()

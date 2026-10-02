@@ -68,6 +68,8 @@ export class ShelterDashboardService {
             },
         });
         await this.redisService.del(`shelter:profile:${shelterId}`);
+        const v = (await this.redisService.get<number>('shelters:cache_version:global')) || 0;
+        await this.redisService.set('shelters:cache_version:global', v + 1, 0);
         return { ...updated, email: updated.emailAddress, phone: updated.contactInfo, logoUrl: updated.avatarUrl };
     }
 
@@ -164,7 +166,7 @@ export class ShelterDashboardService {
             where: { id: applicationId },
             include: { pet: true, user: true },
         });
-        
+
         if (!application) throw new NotFoundException('Không tìm thấy đơn.');
         if (application.pet.shelterId !== shelterId) throw new ForbiddenException('Bạn không có quyền với đơn này.');
 
@@ -180,7 +182,7 @@ export class ShelterDashboardService {
         if (status === ApplicationStatus.APPROVED) {
             await this.prisma.pet.update({ where: { id: application.petId }, data: { status: 'PENDING' } });
         }
-        
+
         if (status === ApplicationStatus.CLOSED) {
             await this.prisma.pet.updateMany({
                 where: { id: application.petId, status: 'PENDING' },
