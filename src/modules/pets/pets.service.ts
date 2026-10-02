@@ -1123,11 +1123,15 @@ export class PetsService {
     const whereCondition: Prisma.PetWhereInput = { shelterId: user.shelterId };
 
     if (status) whereCondition.status = status as any;
-    if (search) {
+    const keyword = search?.trim();
+    if (keyword) {
       whereCondition.OR = [
-        { name: { contains: search } },
-        { breed: { path: ['vi'], string_contains: search } as any },
-        { breed: { path: ['en'], string_contains: search } as any },
+        { name: { contains: keyword, mode: 'insensitive' } },
+        { breed: { path: ['vi'], string_contains: keyword } as any },
+        { breed: { path: ['en'], string_contains: keyword } as any },
+        // 🆕 Tìm theo ID: khớp ký tự ở đầu, giữa hoặc cuối chuỗi
+        { idSetByShelter: { contains: keyword, mode: 'insensitive' } },
+        { shelterInternalId: { contains: keyword, mode: 'insensitive' } },
       ];
     }
     if (type) {
