@@ -912,7 +912,14 @@ export class ApplicationsService {
       activeApplications: activeApplications.map(mapAppSummary),
       adoptionHistory: adoptionHistory.map(mapAppSummary),
       currentPets: currentPets.map((p) => {
-        const history = [];
+        // 👇 KHAI BÁO RÕ TYPE CHO MẢNG HISTORY TẠI ĐÂY
+        const history: Array<{
+          id: string;
+          type: string;
+          title: string;
+          description: string;
+          date: string;
+        }> = [];
 
         if (p.dob) {
           history.push({ id: `birth-${p.id}`, type: 'BIRTH', title: 'Sinh nhật', description: `Ngày sinh của ${p.name}`, date: p.dob.toISOString() });
@@ -942,7 +949,7 @@ export class ApplicationsService {
           status: p.status,
           avatarUrl: p.images?.[0]?.url ?? null,
           qrVerificationStatus: p.qrVerificationStatus,
-          pawHistory: history, // 👈 Trả về mảng history đã build sẵn
+          pawHistory: history,
         };
       }),
       notes: notes.map((n) => {
