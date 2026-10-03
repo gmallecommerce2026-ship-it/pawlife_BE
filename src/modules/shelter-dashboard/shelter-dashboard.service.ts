@@ -80,7 +80,9 @@ export class ShelterDashboardService {
         await this.redisService.del(`shelter:profile:${shelterId}`);
         const v = (await this.redisService.get<number>('shelters:cache_version:global')) || 0;
         await this.redisService.set('shelters:cache_version:global', v + 1, 0);
-
+        if (updated.latitude != null && updated.longitude != null) {
+            await this.redisService.addLocation('shelters:locations', updated.longitude, updated.latitude, shelterId);
+        }
         return { ...updated, email: updated.emailAddress, phone: updated.contactInfo, logoUrl: updated.avatarUrl };
     }
 

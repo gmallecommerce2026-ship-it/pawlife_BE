@@ -341,7 +341,10 @@ export class PetsService {
       const passActionIds = new Set(userInteractions.filter(i => i.action === 'PASS').map(i => i.petId));
 
       const REDIS_KEY = 'shelters:locations';
-      let nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, 50);
+      const MAX_RADIUS_KM = 2000;   // 🆕 đủ phủ cả nước, thay cho 50
+      const MAX_SHELTERS = 100;     // 🆕 thay cho 30
+
+      let nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, MAX_RADIUS_KM);
 
       if (!nearbyShelterIds || nearbyShelterIds.length === 0) {
         // ... (Giữ nguyên logic của bạn) ...
@@ -351,10 +354,10 @@ export class PetsService {
         for (const s of allShelters) {
           await this.redisService.addLocation(REDIS_KEY, s.longitude!, s.latitude!, s.id);
         }
-        nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, 50);
+        nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, MAX_RADIUS_KM);
       }
 
-      const targetShelterIds = nearbyShelterIds.slice(0, 30);
+      const targetShelterIds = nearbyShelterIds.slice(0, MAX_SHELTERS);
 
       if (targetShelterIds.length > 0) {
         const allPetsInShelters = await this.getAvailablePetsByShelterIds(targetShelterIds);
