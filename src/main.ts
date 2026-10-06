@@ -49,7 +49,11 @@ async function bootstrap() {
   app.use(cookieParser());
 
   app.enableCors({
-    origin: true,
+    origin: [
+      'http://localhost:3000',      
+      'https://pawlife.vn',         
+      'https://shelter.pawlife.vn'    
+    ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
     allowedHeaders: 'Content-Type, Accept, Authorization, x-device-id, x-client-type, user-agent, Cache-Control, Pragma, Expires',
@@ -60,7 +64,7 @@ async function bootstrap() {
   app.use(compression());
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
-    forbidNonWhitelisted: true,   
+    forbidNonWhitelisted: true,
     transform: true,
     transformOptions: { enableImplicitConversion: true }
   }));
