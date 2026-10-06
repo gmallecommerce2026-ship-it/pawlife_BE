@@ -13,6 +13,10 @@ import { ConfigService } from '@nestjs/config';
 import { ToggleLostModeDto } from './dto/toggle-lost-mode.dto';
 import { ReplaceQrDto } from './dto/replace-qr.dto';
 import { Logger } from '@nestjs/common';
+const HIDDEN_SHELTER_NAME = 'BoNé Petkery';
+const notHiddenShelterPet: Prisma.PetWhereInput = {
+  NOT: { shelter: { is: { name: HIDDEN_SHELTER_NAME } } },
+};
 export interface FeedFilters {
   gender?: PetGender;
   size?: PetSize;
@@ -192,13 +196,13 @@ export class PetsService {
   }
 
   private async getAvailablePetsByShelterIds(shelterIds: string[]) {
-    const cacheKey = `pets:available:shelters:${shelterIds.sort().join('_')}`;
+    const cacheKey = `pets:available:v2:shelters:${shelterIds.sort().join('_')}`;
 
     const cached = await this.redisService.get<any[]>(cacheKey);
     if (cached) return cached;
 
     const pets = await this.prisma.pet.findMany({
-      where: { status: 'AVAILABLE', shelterId: { in: shelterIds } },
+      where: { status: 'AVAILABLE', shelterId: { in: shelterIds }, ...notHiddenShelterPet },
       include: { images: true, shelter: true }
     });
 
@@ -315,7 +319,7 @@ export class PetsService {
     const hiddenPetIds = hiddenPetRecords.map(h => h.petId);
 
     // 2. Tạo điều kiện filter linh hoạt cho Prisma
-    const blockFilterCondition: Prisma.PetWhereInput = {};
+    const blockFilterCondition: Prisma.PetWhereInput = { ...notHiddenShelterPet };
     if (blockedUserIds.length > 0) {
       blockFilterCondition.ownerId = { notIn: blockedUserIds };
     }
@@ -855,13 +859,16 @@ export class PetsService {
   }
 
   async getFavorites(userId: string, skip: number, take: number) {
+    const favoriteWhere: Prisma.FavoritePetWhereInput = {
+      userId,
+      pet: { ...notHiddenShelterPet },
+    };
+
     const favorites = await this.prisma.favoritePet.findMany({
-      where: { userId: userId },
-      skip: skip,
-      take: take,
-      orderBy: {
-        createdAt: 'desc',
-      },
+      where: favoriteWhere,
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
       include: {
         pet: {
           include: {
@@ -881,9 +888,7 @@ export class PetsService {
       },
     });
 
-    const totalCount = await this.prisma.favoritePet.count({
-      where: { userId: userId },
-    });
+    const totalCount = await this.prisma.favoritePet.count({ where: favoriteWhere });
 
     return {
       data: favorites.map((fav) => fav.pet),
@@ -1288,6 +1293,7 @@ export class PetsService {
 
     const whereCondition: Prisma.PetWhereInput = {
       status: 'AVAILABLE',
+      ...notHiddenShelterPet,
     };
 
     if (userId) {
@@ -1464,7 +1470,18 @@ export class PetsService {
           i18n: { key: 'error.pet_not_found' },
         });
       }
-
+      if (pet?.shelter?.name === HIDDEN_SHELTER_NAME) {
+        // Cho nhân viên của chính shelter này vẫn xem được để dashboard hoạt động
+        const viewer = userId
+          ? await this.prisma.user.findUnique({ where: { id: userId }, select: { shelterId: true } })
+          : null;
+        if (!viewer?.shelterId || viewer.shelterId !== pet.shelterId) {
+          throw new NotFoundException({
+            message: 'Pet information not found!',
+            i18n: { key: 'error.pet_not_found' },
+          });
+        }
+      }
       // ── Auto-generate shelter code nếu chưa có ─────────────────────────────
       if (!pet.idSetByShelter) {
         const newCode = await this.generateUniqueShelterCode();
