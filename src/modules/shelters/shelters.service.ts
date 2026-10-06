@@ -30,11 +30,8 @@ export class SheltersService {
       throw new NotFoundException('Organizer not found');
     }
 
-    // Because the system currently does not have a separate FollowedOrganizer table (only FollowedShelter), 
-    // we temporarily set isFollowing = false. Later, when implementing the follow organizer feature, we will query the secondary table here.
     let isFollowing = false;
 
-    // Mapping returned data to the format requested by FE
     return {
       success: true,
       data: {
@@ -51,6 +48,7 @@ export class SheltersService {
       },
     };
   }
+
   private async getCacheVersion(userId?: string): Promise<number> {
     const versionKey = `shelters:cache_version:u_${userId || 'guest'}`;
     const version = await this.redisService.get<number>(versionKey);
@@ -62,6 +60,7 @@ export class SheltersService {
     const current = await this.getCacheVersion(userId);
     await this.redisService.set(versionKey, current + 1, 0); // 0 = không hết hạn
   }
+  
   private async getGlobalCacheVersion(): Promise<number> {
     const v = await this.redisService.get<number>('shelters:cache_version:global');
     return v || 0;
@@ -71,6 +70,7 @@ export class SheltersService {
     const current = await this.getGlobalCacheVersion();
     await this.redisService.set('shelters:cache_version:global', current + 1, 0);
   }
+
   // =====================================================================
   // THE REMAINING FUNCTIONS ARE KEPT COMPLETELY UNCHANGED
   // =====================================================================
@@ -95,8 +95,6 @@ export class SheltersService {
     const cachedData = await this.redisService.get<any>(cacheKey);
     if (cachedData) return cachedData;
 
-    if (cachedData) return cachedData;
-
     const lockKey = `${cacheKey}:lock`;
     const isLocked = await this.redisService.get<boolean>(lockKey);
 
@@ -107,19 +105,26 @@ export class SheltersService {
     await this.redisService.set(lockKey, true, 10);
 
     const skip = (page - 1) * limit;
-    const whereClause: any = search
-      ? {
-        OR: [
-          { name: { contains: search } },
-          { address: { contains: search } },
-        ],
-      }
-      : {};
+    
+    // Tạm ẩn BoNé Petkery
+    const whereClause: any = {
+      name: { not: 'BoNé Petkery' }
+    };
+
+    if (search) {
+      whereClause.AND = [
+        {
+          OR: [
+            { name: { contains: search } },
+            { address: { contains: search } },
+          ],
+        }
+      ];
+    }
 
     if (blockedIds.length > 0) {
       whereClause.id = { notIn: blockedIds };
     }
-
 
     const [shelters, total] = await Promise.all([
       this.prisma.shelter.findMany({
@@ -165,7 +170,8 @@ export class SheltersService {
       },
     });
 
-    if (!shelter) {
+    // Chặn hiển thị chi tiết nếu là BoNé Petkery
+    if (!shelter || shelter.name === 'BoNé Petkery') {
       throw new NotFoundException('Shelter not found');
     }
 
@@ -199,7 +205,7 @@ export class SheltersService {
 
   async follow(shelterId: string, userId: string) {
     const shelter = await this.prisma.shelter.findUnique({ where: { id: shelterId } });
-    if (!shelter) {
+    if (!shelter || shelter.name === 'BoNé Petkery') {
       throw new NotFoundException('Shelter not found');
     }
 
@@ -244,7 +250,7 @@ export class SheltersService {
       where: { id: shelterId },
     });
 
-    if (!shelter) {
+    if (!shelter || shelter.name === 'BoNé Petkery') {
       throw new NotFoundException('Shelter not found');
     }
 
@@ -296,6 +302,9 @@ export class SheltersService {
     const followedRecords = await this.prisma.followedShelter.findMany({
       where: {
         userId: userId,
+        shelter: {
+          name: { not: 'BoNé Petkery' } // Tạm ẩn khỏi danh sách Followed
+        }
       },
       include: {
         shelter: {
@@ -334,11 +343,10 @@ export class SheltersService {
       });
     });
 
-    await this.bumpCacheVersion(userId); // 👈 thêm dòng này
+    await this.bumpCacheVersion(userId);
 
     return result;
   }
-
 
   async reportShelter(shelterId: string, userId: string, reportData: any) {
     const report = await this.prisma.$transaction(async (tx) => {
@@ -356,7 +364,7 @@ export class SheltersService {
     });
 
     if (reportData.isBlockRequested) {
-      await this.bumpCacheVersion(userId); // 👈 thêm dòng này
+      await this.bumpCacheVersion(userId);
     }
 
     return report;
@@ -421,13 +429,15 @@ export class SheltersService {
       .filter(id => !blockedIds.includes(id))
       .slice(0, limit);
 
-
     if (targetIds.length === 0) {
       return { data: [], meta: { limit, count: 0 } };
     }
 
     const shelters = await this.prisma.shelter.findMany({
-      where: { id: { in: targetIds } },
+      where: { 
+        id: { in: targetIds },
+        name: { not: 'BoNé Petkery' } // Tạm ẩn khỏi Nearby
+      },
     });
 
     const petCounts = await this.prisma.pet.groupBy({
@@ -462,12 +472,9 @@ export class SheltersService {
 
     const result = { data: finalData, meta: { limit, count: finalData.length } };
 
-    await this.redisService.set(cacheKey, result, 600); // dùng cacheKey mới có userId+version
-    await this.redisService.del(lockKey); // sửa luôn: trước đó bạn dùng `${cacheKey}:lock` 2 lần
-    // tính lockKey 2 lần độc lập (1 lần khi check, 1 lần khi del)
-    // không sai nhưng nên dùng biến lockKey thống nhất cho rõ ràng
+    await this.redisService.set(cacheKey, result, 600);
+    await this.redisService.del(lockKey); 
 
     return result;
   }
-
 }
