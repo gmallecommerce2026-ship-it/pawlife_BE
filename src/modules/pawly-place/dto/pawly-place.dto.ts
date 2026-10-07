@@ -18,7 +18,7 @@ export class LimitGeoDto extends GeoLangDto {
 
 export class SearchPlacesDto extends GeoLangDto {
   /** bán kính km, mặc định 20 */
-  @IsOptional() @Type(() => Number) @IsNumber() @Min(0.1) @Max(200) radius?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0.1) @Max(25000) radius?: number;
   @IsOptional() @IsString() @MaxLength(100) q?: string;
   /** category key: viet | milk_tea | fast_food | chinese | breakfast */
   @IsOptional() @IsString() category?: string;
