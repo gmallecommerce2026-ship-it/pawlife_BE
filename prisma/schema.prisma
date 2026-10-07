@@ -198,10 +198,10 @@ model User {
   eventReports         EventReport[]
   hiddenEvents         UserHiddenEvent[]
   blockedShelters      UserBlockedShelter[]
-  placeReviews         PlaceReview[]         @relation("UserPlaceReviews")
-  placeReviewReactions PlaceReviewReaction[] @relation("UserPlaceReviewReactions")
-  placeReviewReports   PlaceReviewReport[]   @relation("UserPlaceReviewReports")
-  recentPlaces         RecentPlaceView[]     @relation("UserRecentPlaces")
+  placeReviews         PlaceReview[]         
+  placeReviewReactions PlaceReviewReaction[] 
+  placeReviewReports   PlaceReviewReport[]   
+  recentPlaces         RecentPlaceView[]     
 
   hiddenPets           UserHiddenPet[]
   storyLikes StoryLike[]
@@ -729,7 +729,7 @@ model Pet {
   updatedAt DateTime @default(now()) @updatedAt
   shelterId String?
   shelter   Shelter? @relation(fields: [shelterId], references: [id])
-  placeAssignments PlaceWorkingPet[]
+  placeWorkingPets     PlaceWorkingPet[]
 
   vaccinationStatus  VaccinationStatus @default(VACCINATED)
   shelterInternalId  String?
@@ -1406,5 +1406,178 @@ model RecentPlaceView {
 
   @@id([userId, placeId])
   @@index([userId, viewedAt])
+  @@map("recent_place_views")
+}
+enum PlaceReactionType {
+  HUUICH
+  CAMON
+  HUHU
+}
+
+model PlaceCategory {
+  id        String   @id @default(cuid())
+  key       String   @unique // 'viet', 'milk_tea', ...
+  nameVi    String
+  nameEn    String
+  icon      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  places Place[]
+
+  @@map("place_categories")
+}
+
+model PlaceAmenity {
+  id           String   @id @default(cuid())
+  key          String   @unique // 'pet_allowed', 'dog_allowed', ...
+  labelVi      String
+  labelEn      String
+  isFilter     Boolean  @default(false) // hiện ở thanh lọc
+  showInDetail Boolean  @default(true) // hiện ở mục Tiện ích trong chi tiết quán
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  places PlaceAmenityOnPlace[]
+
+  @@map("place_amenities")
+}
+
+model Place {
+  id           String        @id @default(cuid())
+  name         String
+  categoryId   String
+  category     PlaceCategory @relation(fields: [categoryId], references: [id])
+  categoryText Json // { vi, en }
+  intro        Json // { vi, en }
+  address      String
+  city         String
+  latitude     Float
+  longitude    Float
+  phone        String?
+  heroImage    String        @db.Text
+  galleryImages Json // string[]
+  openingHours Json // { mon: [{open, close}], ... }
+  isActive     Boolean       @default(true)
+
+  // Denormalized từ PlaceReview
+  rating       Float         @default(0)
+  reviewsCount Int           @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  amenities    PlaceAmenityOnPlace[]
+  menuSections PlaceMenuSection[]
+  workingPets  PlaceWorkingPet[]
+  reviews      PlaceReview[]
+  recentViews  RecentPlaceView[]
+
+  @@index([isActive])
+  @@index([latitude, longitude])
+  @@index([categoryId])
+  @@map("places")
+}
+
+model PlaceAmenityOnPlace {
+  placeId   String
+  amenityId String
+  place     Place        @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  amenity   PlaceAmenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([placeId, amenityId])
+  @@index([amenityId])
+  @@map("place_amenity_links")
+}
+
+model PlaceMenuSection {
+  id        String          @id @default(cuid())
+  placeId   String
+  place     Place           @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  title     Json // { vi, en }
+  sortOrder Int             @default(0)
+  items     PlaceMenuItem[]
+
+  @@index([placeId])
+  @@map("place_menu_sections")
+}
+
+model PlaceMenuItem {
+  id         String           @id @default(cuid())
+  sectionId  String
+  section    PlaceMenuSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  name       String
+  subtext    String           @default("")
+  price      Int // VND, ví dụ 60000 -> API trả priceLabel "60.000"
+  image      String           @db.Text
+  sortOrder  Int              @default(0)
+  isFeatured Boolean          @default(false) // hiện ở menuPreview ngoài trang chi tiết
+
+  @@index([sectionId])
+  @@map("place_menu_items")
+}
+
+model PlaceWorkingPet {
+  id        String   @id @default(cuid())
+  placeId   String
+  place     Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  petId     String
+  pet       Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  sortOrder Int      @default(0)
+  intro     Json? // { vi, en } — lời giới thiệu riêng tại quán, nếu null thì dùng pet.description
+  createdAt DateTime @default(now())
+
+  @@unique([placeId, petId]) // => placeId_petId
+  @@index([petId])
+  @@map("place_working_pets")
+}
+
+model PlaceReview {
+  id        String   @id @default(cuid())
+  placeId   String
+  place     Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating    Int
+  content   String   @db.Text
+  images    Json // string[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reactions PlaceReviewReaction[]
+
+  @@unique([placeId, userId]) // mỗi user 1 review / quán (sửa review = update)
+  @@index([placeId, createdAt])
+  @@index([userId])
+  @@map("place_reviews")
+}
+
+model PlaceReviewReaction {
+  id        String            @id @default(cuid())
+  reviewId  String
+  review    PlaceReview       @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      PlaceReactionType
+  createdAt DateTime          @default(now())
+
+  @@unique([reviewId, userId, type])
+  @@index([reviewId])
+  @@index([userId])
+  @@map("place_review_reactions")
+}
+
+model RecentPlaceView {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  placeId  String
+  place    Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  viewedAt DateTime @default(now())
+
+  @@unique([userId, placeId]) // => userId_placeId
+  @@index([userId, viewedAt(sort: Desc)])
   @@map("recent_place_views")
 }
