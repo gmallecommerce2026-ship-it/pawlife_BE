@@ -1238,31 +1238,32 @@ export class PetsService {
         const rawId = tagId.split('/').pop() || tagId;
         let cleanTagId = rawId.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
 
-        if (cleanTagId.match(/^PL\d+$/)) {
-          cleanTagId = cleanTagId.replace('PL', 'PL_');
-        }
-        if (cleanTagId.match(/^PLT\d+$/)) {
-          cleanTagId = cleanTagId.replace('PLT', 'PLT-');
-        }
+        if (cleanTagId.match(/^PL\d+$/)) cleanTagId = cleanTagId.replace('PL', 'PL_');
+        if (cleanTagId.match(/^PLT\d+$/)) cleanTagId = cleanTagId.replace('PLT', 'PLT-');
 
-        const result = await this.prisma.$transaction(async (prisma) => {
-          const newPet = await this.prisma.pet.create({ data: buildData(), include: { images: true } });
+        const result = await this.prisma.$transaction(async (tx) => {
+          const data = buildData();
+          // Ghi đè SAU khi spread petData để không bị rawQrData từ FE đè lên
+          data.qrVerificationStatus = 'VERIFIED';
+          data.qrCodeUrl = `https://pawcare.app/tag/${cleanTagId}`;
 
-          await prisma.tag.upsert({
+          const newPet = await tx.pet.create({ data, include: { images: true } }); // dùng tx
+
+          await tx.tag.upsert({
             where: { id: cleanTagId },
             update: {
               petId: newPet.id,
               status: 'ACTIVE',
               linkedAt: new Date(),
-              linkCount: { increment: 1 }
+              linkCount: { increment: 1 },
             },
             create: {
               id: cleanTagId,
               petId: newPet.id,
               status: 'ACTIVE',
               linkedAt: new Date(),
-              linkCount: 1
-            }
+              linkCount: 1,
+            },
           });
 
           return newPet;
