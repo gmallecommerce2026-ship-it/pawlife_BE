@@ -1252,7 +1252,7 @@ model PlaceCategory {
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
-
+  isActive  Boolean  @default(true)
   places Place[]
 
   @@map("place_categories")
@@ -1343,7 +1343,7 @@ model PlaceMenuItem {
   image      String           @db.Text
   sortOrder  Int              @default(0)
   isFeatured Boolean          @default(false) // hiện ở menuPreview ngoài trang chi tiết
-
+  isAvailable Boolean @default(true)
   @@index([sectionId])
   @@map("place_menu_items")
 }
@@ -1357,7 +1357,8 @@ model PlaceWorkingPet {
   sortOrder Int      @default(0)
   intro     Json? // { vi, en } — lời giới thiệu riêng tại quán, nếu null thì dùng pet.description
   createdAt DateTime @default(now())
-
+  isWorking   Boolean @default(true)
+  isSponsored Boolean @default(true)
   @@unique([placeId, petId]) // => placeId_petId
   @@index([petId])
   @@map("place_working_pets")
