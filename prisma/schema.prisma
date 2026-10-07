@@ -1400,14 +1400,13 @@ model PlaceReviewReaction {
 }
 
 model RecentPlaceView {
-  id       String   @id @default(cuid())
   userId   String
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   placeId  String
   place    Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
   viewedAt DateTime @default(now())
 
-  @@unique([userId, placeId]) // => userId_placeId
+  @@id([userId, placeId])
   @@index([userId, viewedAt(sort: Desc)])
   @@map("recent_place_views")
 }
