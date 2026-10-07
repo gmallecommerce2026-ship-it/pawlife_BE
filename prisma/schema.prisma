@@ -200,7 +200,7 @@ model User {
   blockedShelters      UserBlockedShelter[]
   placeReviews         PlaceReview[]         
   placeReviewReactions PlaceReviewReaction[] 
-  placeReviewReports   PlaceReviewReport[]   
+  placeReviewReports   PlaceReviewReport[] @relation("UserPlaceReviewReports")  
   recentPlaces         RecentPlaceView[]     
 
   hiddenPets           UserHiddenPet[]
@@ -1376,7 +1376,8 @@ model PlaceReview {
   updatedAt DateTime @updatedAt
 
   reactions PlaceReviewReaction[]
-
+  reports   PlaceReviewReport[]
+  
   @@unique([placeId, userId]) // mỗi user 1 review / quán (sửa review = update)
   @@index([placeId, createdAt])
   @@index([userId])
