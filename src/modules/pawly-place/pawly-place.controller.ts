@@ -1,11 +1,11 @@
 import { Body, Controller, Delete, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
-import { PawlyPlacesService } from './pawly-places.service';
+import { PawlyPlacesService } from './pawly-place.service';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import {
   GeoLangDto, LangQueryDto, LimitGeoDto, ListReviewsDto, ReactReviewDto, ReportReviewDto,
   SearchPlacesDto, UpsertReviewDto,
-} from './dto/pawly-places.dto';
+} from './dto/pawly-place.dto';
 
 @Controller('pawly-places')
 export class PawlyPlacesController {
