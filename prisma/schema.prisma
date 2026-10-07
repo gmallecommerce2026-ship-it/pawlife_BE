@@ -1251,7 +1251,7 @@ model PlaceCategory {
   icon      String
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   places Place[]
 
@@ -1267,7 +1267,7 @@ model PlaceAmenity {
   showInDetail Boolean  @default(true) // hiện ở mục Tiện ích trong chi tiết quán
   sortOrder    Int      @default(0)
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   places PlaceAmenityOnPlace[]
 
