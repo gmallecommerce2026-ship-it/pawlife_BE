@@ -32,6 +32,7 @@ import { ShelterTeamModule } from './modules/shelter-team/shelter-team.module';
 import { PetParadiseModule } from './modules/pet-paradise/pet-paradise.module';
 import { ProceduresModule } from './modules/procedures/procedures.module';
 import { PetHotelModule } from './modules/pet-hotel/pet-hotel.module';
+import { PawlyPlacesModule } from './modules/pawly-place/pawly-place.module';
 
 @Module({
   imports: [
@@ -116,6 +117,7 @@ import { PetHotelModule } from './modules/pet-hotel/pet-hotel.module';
     PetsModule,
     SheltersModule,
     PetParadiseModule,
+    PawlyPlacesModule,
     ProceduresModule,
     UserInteractionsModule,
     EventsModule,

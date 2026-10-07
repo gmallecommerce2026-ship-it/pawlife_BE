@@ -4,11 +4,11 @@ import { PrismaService } from '../../database/prisma/prisma.service';
 import { RedisService } from '../../database/redis/redis.service';
 import {
   GeoLangDto, LangQueryDto, LimitGeoDto, ListReviewsDto, ReportReviewDto, SearchPlacesDto, UpsertReviewDto,
-} from './dto/pawly-places.dto';
+} from './dto/pawly-place.dto';
 import {
   boundingBox, formatDistance, formatPrice, getOpenStatus, haversineKm, Lang, loc, normLang,
   OpeningHours, pick, timeAgo, toStringArray, uniq, weeklyHours,
-} from './utils/place.utils';
+} from './utils/pawly-place.utils';
 
 const cardInclude = Prisma.validator<Prisma.PlaceInclude>()({
   category: true,
