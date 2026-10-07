@@ -1216,3 +1216,4 @@ model PawcareVideo {
   playlistId String?
   playlist   PawcarePlaylist? @relation(fields: [playlistId], references: [id])
 }
+oke a xong a gửi e nhé
