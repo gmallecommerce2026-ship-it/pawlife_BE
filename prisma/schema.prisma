@@ -198,6 +198,11 @@ model User {
   eventReports         EventReport[]
   hiddenEvents         UserHiddenEvent[]
   blockedShelters      UserBlockedShelter[]
+  placeReviews         PlaceReview[]         @relation("UserPlaceReviews")
+  placeReviewReactions PlaceReviewReaction[] @relation("UserPlaceReviewReactions")
+  placeReviewReports   PlaceReviewReport[]   @relation("UserPlaceReviewReports")
+  recentPlaces         RecentPlaceView[]     @relation("UserRecentPlaces")
+
   hiddenPets           UserHiddenPet[]
   storyLikes StoryLike[]
   reviewReports ReviewReport[]
@@ -724,6 +729,7 @@ model Pet {
   updatedAt DateTime @default(now()) @updatedAt
   shelterId String?
   shelter   Shelter? @relation(fields: [shelterId], references: [id])
+  placeAssignments PlaceWorkingPet[]
 
   vaccinationStatus  VaccinationStatus @default(VACCINATED)
   shelterInternalId  String?
@@ -1215,4 +1221,190 @@ model PawcareVideo {
 
   playlistId String?
   playlist   PawcarePlaylist? @relation(fields: [playlistId], references: [id])
+}
+enum PlaceReactionType {
+  HUUICH
+  CAMON
+  HUHU
+}
+
+model PlaceCategory {
+  id        String  @id @default(cuid())
+  key       String  @unique // 'viet', 'milk_tea', ...
+  nameVi    String
+  nameEn    String
+  icon      String // tên icon MaterialCommunityIcons
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+
+  places Place[]
+
+  @@map("place_categories")
+}
+
+// Dùng chung cho cả filter chip (isFilter) và danh sách "Tiện ích" ở màn detail (showInDetail)
+model PlaceAmenity {
+  id           String  @id @default(cuid())
+  key          String  @unique // 'pawlife_friend', 'pet_allowed', ...
+  labelVi      String
+  labelEn      String
+  isFilter     Boolean @default(false)
+  showInDetail Boolean @default(false)
+  sortOrder    Int     @default(0)
+
+  places PlaceAmenityOnPlace[]
+
+  @@map("place_amenities")
+}
+
+model Place {
+  id            String        @id @default(cuid())
+  name          String
+  categoryId    String
+  category      PlaceCategory @relation(fields: [categoryId], references: [id])
+  categoryText  Json? // { vi, en } — "Coffee & Tea, Desserts"
+  intro         Json // { vi, en }
+  address       String
+  city          String // hiển thị ở list: "Hà Nội"
+  latitude      Float
+  longitude     Float
+  phone         String?
+  heroImage     String        @db.Text
+  galleryImages Json? // string[]
+  openingHours  Json? // { mon: [{open:"08:00", close:"22:00"}], ..., sun: null }
+  rating        Float         @default(0) // denormalized, cập nhật khi review đổi
+  reviewsCount  Int           @default(0)
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  amenities    PlaceAmenityOnPlace[]
+  workingPets  PlaceWorkingPet[]
+  menuSections PlaceMenuSection[]
+  reviews      PlaceReview[]
+  recentViews  RecentPlaceView[]
+
+  @@index([latitude, longitude])
+  @@index([categoryId])
+  @@map("places")
+}
+
+model PlaceAmenityOnPlace {
+  placeId   String
+  amenityId String
+  place     Place        @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  amenity   PlaceAmenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([placeId, amenityId])
+  @@index([amenityId])
+  @@map("place_amenity_mappings")
+}
+
+// Thú cưng "đang đi làm" tại quán (tab "Bạn của PawLife")
+model PlaceWorkingPet {
+  id          String   @id @default(cuid())
+  placeId     String
+  place       Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  petId       String
+  pet         Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  intro       Json? // { vi, en } — lời giới thiệu riêng tại quán, fallback Pet.description
+  isSponsored Boolean  @default(true) // badge "PawLife tài trợ"
+  isWorking   Boolean  @default(true) // chấm xanh online
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@unique([placeId, petId])
+  @@index([petId])
+  @@map("place_working_pets")
+}
+
+model PlaceMenuSection {
+  id        String @id @default(cuid())
+  placeId   String
+  place     Place  @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  title     Json // { vi, en }
+  sortOrder Int    @default(0)
+
+  items PlaceMenuItem[]
+
+  @@index([placeId])
+  @@map("place_menu_sections")
+}
+
+model PlaceMenuItem {
+  id          String           @id @default(cuid())
+  sectionId   String
+  section     PlaceMenuSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  name        String
+  subtext     String?
+  price       Int // VND
+  image       String?          @db.Text
+  isFeatured  Boolean          @default(false) // hiện ở preview menu trên màn detail
+  isAvailable Boolean          @default(true)
+  sortOrder   Int              @default(0)
+
+  @@index([sectionId])
+  @@map("place_menu_items")
+}
+
+model PlaceReview {
+  id        String   @id @default(cuid())
+  placeId   String
+  place     Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("UserPlaceReviews", fields: [userId], references: [id], onDelete: Cascade)
+  rating    Int
+  content   String   @db.Text
+  images    Json? // string[] (URL R2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reactions PlaceReviewReaction[]
+  reports   PlaceReviewReport[]
+
+  @@unique([placeId, userId]) // mỗi user 1 review / quán, sửa = cập nhật
+  @@index([placeId, createdAt])
+  @@index([userId])
+  @@map("place_reviews")
+}
+
+model PlaceReviewReaction {
+  id        String            @id @default(cuid())
+  reviewId  String
+  review    PlaceReview       @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User              @relation("UserPlaceReviewReactions", fields: [userId], references: [id], onDelete: Cascade)
+  type      PlaceReactionType
+  createdAt DateTime          @default(now())
+
+  @@unique([reviewId, userId, type])
+  @@index([reviewId])
+  @@map("place_review_reactions")
+}
+
+model PlaceReviewReport {
+  id         String      @id @default(cuid())
+  reviewId   String
+  review     PlaceReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reporterId String
+  reporter   User        @relation("UserPlaceReviewReports", fields: [reporterId], references: [id], onDelete: Cascade)
+  reason     String
+  details    String?     @db.Text
+  status     String      @default("PENDING")
+  createdAt  DateTime    @default(now())
+
+  @@unique([reviewId, reporterId])
+  @@map("place_review_reports")
+}
+
+model RecentPlaceView {
+  userId   String
+  placeId  String
+  viewedAt DateTime @default(now())
+  user     User     @relation("UserRecentPlaces", fields: [userId], references: [id], onDelete: Cascade)
+  place    Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, placeId])
+  @@index([userId, viewedAt])
+  @@map("recent_place_views")
 }
