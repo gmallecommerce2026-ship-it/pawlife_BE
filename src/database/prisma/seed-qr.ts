@@ -1,25 +1,32 @@
 /**
- * Seed QR thẻ vật lý: đọc ID thẳng từ TÊN FILE ảnh (VD: PL-00001.png -> PL-00001)
- * Chuẩn hoá về dạng PL-00001, dọn DB (xoá rác) / thêm tag / upload R2.
+ * Seed QR thẻ vật lý THEO TÊN FILE: PL-00001.png -> tag id "PL-00001".
+ * Không quét nội dung mã QR nữa (bỏ jsQR/jimp).
  *
  * Cách chạy:
- *   npx ts-node src/database/seed-qr.ts --dry-run   # chỉ quét + báo cáo, KHÔNG đụng DB/R2
- *   npx ts-node src/database/seed-qr.ts             # quét -> dọn tag trống -> thêm tag -> upload R2
+ *   npx ts-node src/database/seed-qr.ts --dry-run   # chỉ báo cáo, KHÔNG ghi/xoá gì
+ *   npx ts-node src/database/seed-qr.ts             # xoá tag thừa -> thêm tag -> upload R2
  *
  * Cờ tuỳ chọn:
- *   --force           upload lại toàn bộ ảnh lên R2
- *   --allow-partial   vẫn chạy dù có ảnh không đúng chuẩn tên / ID trùng
+ *   --force          upload lại toàn bộ ảnh lên R2
+ *   --clean-r2       xoá luôn ảnh thừa trên R2 (key không nằm trong danh sách PL-xxxxx.png)
+ *   --allow-partial  vẫn chạy dù thiếu nhiều ảnh / có file sai tên
  */
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
-import { S3Client, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
+} from '@aws-sdk/client-s3';
 
 const prisma = new PrismaClient();
 
 const DRY_RUN = process.argv.includes('--dry-run');
 const FORCE_UPLOAD = process.argv.includes('--force');
+const CLEAN_R2 = process.argv.includes('--clean-r2');
 const ALLOW_PARTIAL = process.argv.includes('--allow-partial');
 
 const BUCKET_NAME = process.env.R2_BUCKET ?? 'pawcare';
@@ -30,10 +37,10 @@ const REPORT_FILE = path.join(process.cwd(), 'qr-scan-report.json');
 const EXPECTED_TOTAL = 10000; // dải PL-00001 ... PL-10000
 const UPLOAD_CONCURRENCY = 20;
 const DELETE_BATCH = 500;
-const MAX_BAD_RATIO = 0.05; // quá 5% ảnh lỗi thì dừng, không xoá gì
+const MAX_MISSING_RATIO = 0.05; // thiếu quá 5% thì dừng, không xoá gì (tránh trỏ nhầm thư mục)
 
 // ---------------------------------------------------------------------------
-// S3 / R2
+// S3 / R2 (tạo lười để --dry-run không cần biến môi trường R2)
 // ---------------------------------------------------------------------------
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -59,116 +66,59 @@ function getS3(): S3Client {
 }
 
 // ---------------------------------------------------------------------------
-// LẤY ID TỪ TÊN FILE: PL-00001.png -> PL-00001
+// BƯỚC 0: ĐỌC DANH SÁCH TỪ TÊN FILE (đúng định dạng PL-00001.png)
 // ---------------------------------------------------------------------------
-function getIdFromFilename(fileName: string): string | null {
-  // Loại bỏ đuôi mở rộng (.png, .jpg) để lấy tên gốc
-  const baseName = path.parse(fileName).name;
-  
-  // Tìm chuỗi có dạng PL-xxxx hoặc PL_xxxx hoặc PLxxxx
-  const m = baseName.match(/PL[-_\s]?(\d{1,5})(?!\d)/i);
-  if (!m) return null;
-  
-  // Trả về format chuẩn xác: PL-00001
-  return `PL-${m[1].padStart(5, '0')}`;
-}
+const FILE_NAME_RE = /^PL-(\d{5})\.png$/i;
 
-// ---------------------------------------------------------------------------
-// BƯỚC 0: QUÉT ẢNH TỪ TÊN FILE (Rất nhanh, không cần đọc byte ảnh)
-// ---------------------------------------------------------------------------
-type ScanSummary = {
-  fileToId: Map<string, string>;
-  idToFiles: Map<string, string[]>;
-  unrecognized: { file: string; raw: string }[];
-  samples: { file: string; id: string }[];
+type LocalScan = {
+  idToFile: Map<string, string>; // "PL-00001" -> "PL-00001.png"
+  badNames: string[]; // file .png nhưng tên không đúng dạng PL-xxxxx.png
+  duplicates: Record<string, string[]>;
+  missing: string[];
+  outOfRange: string[];
 };
 
-async function processFilenames(files: string[]): Promise<ScanSummary> {
-  const s: ScanSummary = {
-    fileToId: new Map(),
-    idToFiles: new Map(),
-    unrecognized: [],
-    samples: [],
-  };
+function scanLocalFiles(files: string[]): LocalScan {
+  const idToFiles = new Map<string, string[]>();
+  const badNames: string[] = [];
 
-  for (const file of files) {
-    const id = getIdFromFilename(file);
-    if (id) {
-      s.fileToId.set(file, id);
-      const list = s.idToFiles.get(id) ?? [];
-      list.push(file);
-      s.idToFiles.set(id, list);
-      if (s.samples.length < 5) s.samples.push({ file, id });
-    } else {
-      s.unrecognized.push({ file, raw: 'Tên file không đúng định dạng PL-XXXXX' });
+  for (const f of files) {
+    const m = f.match(FILE_NAME_RE);
+    if (!m) {
+      badNames.push(f);
+      continue;
     }
+    const id = `PL-${m[1]}`;
+    const list = idToFiles.get(id) ?? [];
+    list.push(f);
+    idToFiles.set(id, list);
   }
 
-  return s;
-}
-
-function buildReport(files: string[], s: ScanSummary) {
-  const duplicates = [...s.idToFiles.entries()].filter(([, f]) => f.length > 1);
+  const idToFile = new Map<string, string>();
+  const duplicates: Record<string, string[]> = {};
+  for (const [id, list] of idToFiles) {
+    idToFile.set(id, list[0]);
+    if (list.length > 1) duplicates[id] = list;
+  }
 
   const missing: string[] = [];
   for (let n = 1; n <= EXPECTED_TOTAL; n++) {
     const id = `PL-${String(n).padStart(5, '0')}`;
-    if (!s.idToFiles.has(id)) missing.push(id);
+    if (!idToFile.has(id)) missing.push(id);
   }
 
-  const outOfRange = [...s.idToFiles.keys()].filter((id) => {
+  const outOfRange = [...idToFile.keys()].filter((id) => {
     const n = parseInt(id.slice(3), 10);
     return n < 1 || n > EXPECTED_TOTAL;
   });
 
-  const bad = s.unrecognized.length;
-  const problem = bad > files.length * MAX_BAD_RATIO || duplicates.length > 0 || s.fileToId.size === 0;
-
-  console.log('\n================ BÁO CÁO NHẬN DIỆN TÊN FILE ================');
-  console.log(`Tổng file ảnh:            ${files.length}`);
-  console.log(`Tên file hợp lệ (OK):     ${s.fileToId.size}`);
-  console.log(`ID duy nhất:              ${s.idToFiles.size}`);
-  console.log(`Tên file sai định dạng:   ${s.unrecognized.length}`);
-  console.log(`ID bị trùng (nhiều file): ${duplicates.length}`);
-  console.log(`ID ngoài dải 1..${EXPECTED_TOTAL}:     ${outOfRange.length}`);
-  console.log(`ID thiếu trong dải:       ${missing.length}`);
-  console.log('\n5 mẫu đầu (Tên file -> ID chuẩn hoá):');
-  s.samples.forEach((x) => console.log(`  ${x.file}  ->  ${x.id}`));
-  
-  if (s.unrecognized.length) {
-    console.log('\nVí dụ tên file không nhận diện được:');
-    s.unrecognized.slice(0, 5).forEach((x) => console.log(`  ${x.file}`));
-  }
-  if (duplicates.length) {
-    console.log('\nVí dụ ID bị trùng:');
-    duplicates.slice(0, 5).forEach(([id, f]) => console.log(`  ${id}  <-  ${f.join(', ')}`));
-  }
-  if (missing.length) console.log(`\nVí dụ ID thiếu: ${missing.slice(0, 10).join(', ')}`);
-  console.log('============================================================\n');
-
-  fs.writeFileSync(
-    REPORT_FILE,
-    JSON.stringify(
-      {
-        total: files.length,
-        ok: s.fileToId.size,
-        uniqueIds: s.idToFiles.size,
-        unrecognized: s.unrecognized,
-        duplicates: Object.fromEntries(duplicates),
-        outOfRange,
-        missing,
-      },
-      null,
-      2,
-    ),
-  );
-  console.log(`📝 Báo cáo chi tiết: ${REPORT_FILE}`);
-
-  return { problem };
+  return { idToFile, badNames, duplicates, missing, outOfRange };
 }
 
 // ---------------------------------------------------------------------------
-// BƯỚC 1: DỌN TAG TRỐNG (Xoá các thẻ thừa/rác trong DB)
+// BƯỚC 1: XOÁ TAG THỪA TRONG DB
+// Chỉ xoá tag: (1) chưa gắn thú cưng (petId = null) và (2) id KHÔNG nằm trong
+// danh sách PL-xxxxx lấy từ tên file. Tag đã gắn thú cưng luôn được giữ.
 // ---------------------------------------------------------------------------
 type DeleteStats = { deleted: number; kept: string[] };
 
@@ -179,6 +129,7 @@ async function deleteBatch(ids: string[], stats: DeleteStats): Promise<void> {
     stats.deleted += result.count;
   } catch (e: any) {
     if (e?.code !== 'P2003') throw e;
+    // Vướng khoá ngoại: chia đôi lô để tìm đúng tag bị ràng buộc
     if (ids.length === 1) {
       stats.kept.push(ids[0]);
       return;
@@ -189,27 +140,31 @@ async function deleteBatch(ids: string[], stats: DeleteStats): Promise<void> {
   }
 }
 
-async function cleanOldTags(): Promise<void> {
-  // Lấy ra tất cả các tag chưa được gắn cho pet nào
-  const candidates = await prisma.tag.findMany({
+async function findOrphanTagIds(validIds: Set<string>): Promise<string[]> {
+  const empty = await prisma.tag.findMany({
     where: { petId: null },
     select: { id: true },
   });
-  console.log(`🔎 Tìm thấy ${candidates.length} tag đang trống/rác trong hệ thống...`);
+  return empty.map((t) => t.id).filter((id) => !validIds.has(id));
+}
+
+async function cleanOrphanTags(validIds: Set<string>): Promise<void> {
+  const orphans = await findOrphanTagIds(validIds);
+  console.log(`🔎 Tìm thấy ${orphans.length} tag thừa (trống, không có trong danh sách file)...`);
 
   const stats: DeleteStats = { deleted: 0, kept: [] };
-  const ids = candidates.map((t) => t.id);
-  for (let i = 0; i < ids.length; i += DELETE_BATCH) {
-    await deleteBatch(ids.slice(i, i + DELETE_BATCH), stats);
+  for (let i = 0; i < orphans.length; i += DELETE_BATCH) {
+    await deleteBatch(orphans.slice(i, i + DELETE_BATCH), stats);
+    if ((i / DELETE_BATCH) % 10 === 0 && i > 0) console.log(`🗑️ Đã xoá ${stats.deleted}/${orphans.length}...`);
   }
 
   const activeTagsCount = await prisma.tag.count({ where: { petId: { not: null } } });
-  console.log(`🗑️ Đã xóa ${stats.deleted} tag trống (${stats.kept.length} tag bị giữ do ràng buộc khoá ngoại).`);
+  console.log(`🗑️ Đã xoá ${stats.deleted} tag thừa (${stats.kept.length} tag bị giữ do ràng buộc khoá ngoại).`);
   console.log(`🛡️ Đang bảo vệ ${activeTagsCount} tag đã gắn với thú cưng.`);
 }
 
 // ---------------------------------------------------------------------------
-// BƯỚC 2: THÊM TAG MỚI
+// BƯỚC 2: THÊM TAG MỚI (bỏ qua tag đã có)
 // ---------------------------------------------------------------------------
 async function addNewTags(ids: string[]): Promise<void> {
   let created = 0;
@@ -224,7 +179,7 @@ async function addNewTags(ids: string[]): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// BƯỚC 3: UPLOAD LÊN R2 (key = qr-codes/PL-00001.png)
+// BƯỚC 3: R2 (key = qr-codes/PL-00001.png)
 // ---------------------------------------------------------------------------
 async function listR2Keys(): Promise<Set<string>> {
   const keys = new Set<string>();
@@ -245,13 +200,31 @@ async function listR2Keys(): Promise<Set<string>> {
   return keys;
 }
 
-async function uploadMissing(files: string[], fileToId: Map<string, string>): Promise<number> {
-  const existing = FORCE_UPLOAD ? new Set<string>() : await listR2Keys();
-  const todo = files.filter((f) => {
-    const id = fileToId.get(f);
-    return id && !existing.has(`${R2_PREFIX}${id}.png`);
-  });
-  console.log(`☁️ R2: Đã có ${files.length - todo.length} ảnh, cần upload thêm ${todo.length} ảnh.`);
+async function cleanOrphanR2(existing: Set<string>, validIds: Set<string>): Promise<void> {
+  const validKeys = new Set([...validIds].map((id) => `${R2_PREFIX}${id}.png`));
+  const orphans = [...existing].filter((k) => !validKeys.has(k));
+  console.log(`🔎 R2: Tìm thấy ${orphans.length} ảnh thừa.`);
+
+  let deleted = 0;
+  for (let i = 0; i < orphans.length; i += 1000) {
+    const batch = orphans.slice(i, i + 1000);
+    const res = await getS3().send(
+      new DeleteObjectsCommand({
+        Bucket: BUCKET_NAME,
+        Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
+      }),
+    );
+    deleted += batch.length - (res.Errors?.length ?? 0);
+    if (res.Errors?.length) console.error(`⚠️ R2: ${res.Errors.length} ảnh xoá lỗi trong lô ${i / 1000 + 1}`);
+  }
+  console.log(`🗑️ R2: Đã xoá ${deleted} ảnh thừa.`);
+  orphans.forEach((k) => existing.delete(k));
+}
+
+async function uploadMissing(existing: Set<string>, idToFile: Map<string, string>): Promise<number> {
+  const have = FORCE_UPLOAD ? new Set<string>() : existing;
+  const todo = [...idToFile.entries()].filter(([id]) => !have.has(`${R2_PREFIX}${id}.png`));
+  console.log(`☁️ R2: Đã có ${idToFile.size - todo.length} ảnh, cần upload thêm ${todo.length} ảnh.`);
 
   let cursor = 0;
   let done = 0;
@@ -259,9 +232,7 @@ async function uploadMissing(files: string[], fileToId: Map<string, string>): Pr
 
   async function worker(): Promise<void> {
     while (cursor < todo.length) {
-      const fileName = todo[cursor++];
-      const id = fileToId.get(fileName);
-      if (!id) continue;
+      const [id, fileName] = todo[cursor++];
       try {
         await getS3().send(
           new PutObjectCommand({
@@ -272,7 +243,7 @@ async function uploadMissing(files: string[], fileToId: Map<string, string>): Pr
           }),
         );
       } catch (e: any) {
-        if (failed.length < 3) console.error(`⚠️ Lỗi upload ${fileName} (thành ${id}):`, e.message);
+        if (failed.length < 3) console.error(`⚠️ Lỗi upload ${fileName}:`, e.message);
         failed.push(fileName);
       }
       if (++done % 500 === 0) console.log(`⏳ Đang upload... ${done}/${todo.length}`);
@@ -286,7 +257,7 @@ async function uploadMissing(files: string[], fileToId: Map<string, string>): Pr
 
 // ---------------------------------------------------------------------------
 async function main() {
-  console.log(`🚀 Bắt đầu seed QR thẻ vật lý từ TÊN FILE${DRY_RUN ? ' (DRY-RUN: không đụng DB/R2)' : ''}...`);
+  console.log(`🚀 Bắt đầu seed QR thẻ vật lý theo tên file${DRY_RUN ? ' (DRY-RUN: không ghi/xoá gì)' : ''}...`);
 
   if (!fs.existsSync(QR_DIR)) {
     console.error(`❌ Thư mục không tồn tại: ${QR_DIR}`);
@@ -299,41 +270,85 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  console.log(`📦 Tìm thấy ${files.length} file PNG. Bắt đầu xử lý...`);
 
-  // 1) LẤY ID TỪ TÊN FILE
-  const scan = await processFilenames(files);
-  const { problem } = buildReport(files, scan);
+  const scan = scanLocalFiles(files);
+  const validIds = new Set(scan.idToFile.keys());
+  const dupCount = Object.keys(scan.duplicates).length;
+
+  console.log('\n================ BÁO CÁO THEO TÊN FILE ================');
+  console.log(`Tổng file .png:                ${files.length}`);
+  console.log(`Tên đúng dạng PL-xxxxx.png:    ${validIds.size}`);
+  console.log(`Tên sai định dạng (bị bỏ qua): ${scan.badNames.length}`);
+  console.log(`ID trùng (nhiều file):         ${dupCount}`);
+  console.log(`ID ngoài dải 1..${EXPECTED_TOTAL}:        ${scan.outOfRange.length}`);
+  console.log(`ID thiếu trong dải:            ${scan.missing.length}`);
+  if (scan.badNames.length) console.log(`  Ví dụ tên sai: ${scan.badNames.slice(0, 5).join(', ')}`);
+  if (scan.missing.length) console.log(`  Ví dụ ID thiếu: ${scan.missing.slice(0, 10).join(', ')}`);
+  console.log('=======================================================\n');
+
+  fs.writeFileSync(
+    REPORT_FILE,
+    JSON.stringify(
+      {
+        total: files.length,
+        valid: validIds.size,
+        badNames: scan.badNames,
+        duplicates: scan.duplicates,
+        outOfRange: scan.outOfRange,
+        missing: scan.missing,
+      },
+      null,
+      2,
+    ),
+  );
+  console.log(`📝 Báo cáo chi tiết: ${REPORT_FILE}`);
 
   if (DRY_RUN) {
-    console.log('🧪 Dry-run xong. Kiểm tra báo cáo, nếu ổn thì chạy lại không có --dry-run.');
+    // Chỉ ĐỌC DB để xem sẽ xoá bao nhiêu, không ghi gì
+    try {
+      const orphans = await findOrphanTagIds(validIds);
+      const active = await prisma.tag.count({ where: { petId: { not: null } } });
+      const total = await prisma.tag.count();
+      console.log(`🧪 DB hiện có ${total} tag, trong đó ${active} tag đã gắn thú cưng (được giữ).`);
+      console.log(`🧪 Sẽ xoá ${orphans.length} tag thừa. Ví dụ: ${orphans.slice(0, 5).join(', ') || '(không có)'}`);
+    } catch (e: any) {
+      console.log(`🧪 Không đọc được DB để xem trước: ${e.message}`);
+    }
+    console.log('🧪 Dry-run xong. Nếu ổn thì chạy lại không có --dry-run.');
     return;
   }
+
+  // Chốt an toàn: lệnh xoá dựa trên danh sách file, nên danh sách phải đáng tin
+  const tooMissing = scan.missing.length > EXPECTED_TOTAL * MAX_MISSING_RATIO;
+  const problem = tooMissing || scan.badNames.length > 0 || dupCount > 0 || validIds.size === 0;
   if (problem && !ALLOW_PARTIAL) {
-    console.error('⛔ Kết quả quét có vấn đề (sai định dạng tên hoặc trùng lặp). DỪNG, chưa xoá/thêm gì trong DB.');
-    console.error('   Xem báo cáo ở trên, sửa tên file hoặc chạy lại với --allow-partial nếu chấp nhận.');
+    console.error('⛔ Danh sách file có vấn đề (thiếu nhiều ID / tên sai / trùng). DỪNG, chưa xoá/thêm gì.');
+    console.error('   Sửa nguyên nhân hoặc chạy lại với --allow-partial nếu chấp nhận.');
     process.exitCode = 1;
     return;
   }
 
-  const validFiles = files.filter((f) => scan.fileToId.has(f));
-  const validIds = Array.from(scan.idToFiles.keys());
-
-  // 2) XỬ LÝ DATABASE VÀ R2
+  // 1) Xoá tag thừa trong DB
   try {
-    await cleanOldTags(); // Hàm này sẽ xoá toàn bộ thẻ rác (không có petId) trong Database
+    await cleanOrphanTags(validIds);
   } catch (e: any) {
-    console.error('❌ Lỗi khi dọn tag cũ, bỏ qua và tiếp tục:', e.message);
+    console.error('❌ Lỗi khi xoá tag thừa, bỏ qua và tiếp tục:', e.message);
   }
-  
-  await addNewTags(validIds);
-  const failedUpload = await uploadMissing(validFiles, scan.fileToId);
 
-  console.log(`📊 Tổng số thẻ trong Database hiện tại: ${await prisma.tag.count()}`);
+  // 2) Thêm tag mới
+  await addNewTags([...validIds]);
+
+  // 3) R2: xoá ảnh thừa (nếu có --clean-r2) rồi upload ảnh còn thiếu
+  let failedUpload = 0;
+  const existing = FORCE_UPLOAD && !CLEAN_R2 ? new Set<string>() : await listR2Keys();
+  if (CLEAN_R2) await cleanOrphanR2(existing, validIds);
+  failedUpload = await uploadMissing(existing, scan.idToFile);
+
+  console.log(`📊 Tổng số thẻ trong Database: ${await prisma.tag.count()}`);
   if (failedUpload === 0 && !problem) {
     console.log('🎉 QUY TRÌNH HOÀN TẤT THÀNH CÔNG!');
   } else {
-    console.log(`⚠️ Xong nhưng có ${failedUpload} ảnh upload lỗi (xem ${REPORT_FILE}).`);
+    console.log(`⚠️ Xong nhưng có ${failedUpload} ảnh upload lỗi hoặc danh sách file chưa sạch (xem ${REPORT_FILE}).`);
     process.exitCode = 1;
   }
 }
