@@ -202,6 +202,8 @@ model User {
   placeReviewReactions PlaceReviewReaction[] 
   placeReviewReports   PlaceReviewReport[] @relation("UserPlaceReviewReports")  
   recentPlaces         RecentPlaceView[]     
+  placeSubmissions         PlaceSubmission[] @relation("PlaceSubmissionSubmitter")
+  reviewedPlaceSubmissions PlaceSubmission[] @relation("PlaceSubmissionReviewer")
 
   hiddenPets           UserHiddenPet[]
   storyLikes StoryLike[]
@@ -1290,6 +1292,7 @@ model Place {
   galleryImages Json // string[]
   openingHours Json // { mon: [{open, close}], ... }
   isActive     Boolean       @default(true)
+  submission PlaceSubmission?
 
   // Denormalized từ PlaceReview
   rating       Float         @default(0)
@@ -1410,4 +1413,48 @@ model RecentPlaceView {
   @@id([userId, placeId])
   @@index([userId, viewedAt(sort: Desc)])
   @@map("recent_place_views")
+}
+
+enum PlaceSubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model PlaceSubmission {
+  id               String                @id @default(cuid())
+  status           PlaceSubmissionStatus @default(PENDING)
+
+  submitterId      String
+  submitter        User                  @relation("PlaceSubmissionSubmitter", fields: [submitterId], references: [id], onDelete: Cascade)
+
+  reviewedById     String?
+  reviewedBy       User?                 @relation("PlaceSubmissionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt       DateTime?
+  rejectReason     String?               @db.Text
+
+  placeId          String?               @unique
+  place            Place?                @relation(fields: [placeId], references: [id], onDelete: SetNull)
+
+  name             String
+  description      String?               @db.Text
+  address          String
+  city             String?
+  latitude         Float
+  longitude        Float
+  phone            String?
+  website          String?
+  categoryKeys     Json
+  openingHours     Json
+  isUncertainHours Boolean               @default(false)
+  amenities        Json
+  extraRules       String?               @db.Text
+  images           Json
+  menu             Json
+
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([status, createdAt])
+  @@index([submitterId, status])
 }
