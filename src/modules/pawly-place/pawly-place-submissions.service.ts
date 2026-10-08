@@ -188,56 +188,57 @@ export class PawlyPlaceSubmissionsService {
 
         let featuredLeft = 6; // detail chỉ preview các item isFeatured
 
-        const place = await this.prisma.$transaction(async (tx) => {
-            // Claim atomically để 2 admin bấm cùng lúc không tạo 2 Place
-            const claimed = await tx.placeSubmission.updateMany({
-                where: { id, status: PlaceSubmissionStatus.PENDING },
-                data: { status: PlaceSubmissionStatus.APPROVED, reviewedById: reviewerId, reviewedAt: new Date(), rejectReason: null },
-            });
-            if (claimed.count === 0) throw this.alreadyProcessed();
+        const place = await this.prisma.$transaction(
+            async (tx) => {
+                // Claim atomically để 2 admin bấm cùng lúc không tạo 2 Place
+                const claimed = await tx.placeSubmission.updateMany({
+                    where: { id, status: PlaceSubmissionStatus.PENDING },
+                    data: { status: PlaceSubmissionStatus.APPROVED, reviewedById: reviewerId, reviewedAt: new Date(), rejectReason: null },
+                });
+                if (claimed.count === 0) throw this.alreadyProcessed();
 
-            const created = await tx.place.create({
-                data: {
-                    name: sub.name,
-                    address: sub.address,
-                    city: sub.city ?? '',
-                    latitude: sub.latitude,
-                    longitude: sub.longitude,
-                    phone: sub.phone,
-                    isActive: true,
-                    heroImage,
-                    galleryImages: images,
-                    intro: i18n(sub.description ?? ''),
-                    categoryText: i18n(ordered.map((c) => c.nameVi).join(', ')),
-                    openingHours: toPlaceOpeningHours(hours),
-                    category: { connect: { id: primary.id } },
-                    amenities: {
-                        create: amenityRows.map((a) => ({ amenity: { connect: { id: a.id } } })),
+                const created = await tx.place.create({
+                    data: {
+                        name: sub.name,
+                        address: sub.address,
+                        city: sub.city ?? '',
+                        latitude: sub.latitude,
+                        longitude: sub.longitude,
+                        phone: sub.phone,
+                        isActive: true,
+                        heroImage,
+                        galleryImages: images,
+                        intro: i18n(sub.description ?? ''),
+                        categoryText: i18n(ordered.map((c) => c.nameVi).join(', ')),
+                        openingHours: toPlaceOpeningHours(hours),
+                        category: { connect: { id: primary.id } },
+                        amenities: {
+                            create: amenityRows.map((a) => ({ amenity: { connect: { id: a.id } } })),
+                        },
+                        menuSections: {
+                            create: menu.map((s, si) => ({
+                                title: i18n(s.title),
+                                sortOrder: si,
+                                items: {
+                                    create: s.items.map((it, ii) => ({
+                                        name: it.name,
+                                        subtext: it.subtext ?? '',
+                                        price: parsePrice(it.priceLabel),
+                                        image: it.image || '',
+                                        sortOrder: ii,
+                                        isAvailable: true,
+                                        isFeatured: featuredLeft-- > 0,
+                                    })),
+                                },
+                            })),
+                        },
                     },
-                    menuSections: {
-                        create: menu.map((s, si) => ({
-                            title: i18n(s.title),
-                            sortOrder: si,
-                            items: {
-                                create: s.items.map((it, ii) => ({
-                                    name: it.name,
-                                    subtext: it.subtext ?? '',
-                                    price: parsePrice(it.priceLabel),
-                                    image: it.image || '',
-                                    sortOrder: ii,
-                                    isAvailable: true,
-                                    isFeatured: featuredLeft-- > 0,
-                                })),
-                            },
-                        })),
-                    },
-                },
-                select: { id: true },
-            });
+                    select: { id: true },
+                });
 
-            await tx.placeSubmission.update({ where: { id }, data: { placeId: created.id } });
-            return created;
-        });
+                await tx.placeSubmission.update({ where: { id }, data: { placeId: created.id } });
+                return created;
+            }, { maxWait: 5000, timeout: 20000 },);
 
         return { success: true, placeId: place.id, unmatchedAmenities };
     }
