@@ -223,7 +223,7 @@ export class PawlyPlaceSubmissionsService {
                                     name: it.name,
                                     subtext: it.subtext ?? '',
                                     price: parsePrice(it.priceLabel),
-                                    image: it.image || null,
+                                    image: it.image || '',
                                     sortOrder: ii,
                                     isAvailable: true,
                                     isFeatured: featuredLeft-- > 0,
