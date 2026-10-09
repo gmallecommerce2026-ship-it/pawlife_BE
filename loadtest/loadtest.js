@@ -4,7 +4,7 @@ import { check, sleep } from 'k6';
 const BASE = __ENV.BASE_URL;
 const VUS = Number(__ENV.VUS || 150);
 const DURATION = __ENV.DURATION || '5m';
-const USERS = Number(__ENV.USERS || 100);
+const USERS = Number(__ENV.USERS || 150);
 const PASSWORD = __ENV.PASSWORD || 'Test@1234';
 const rnd = (a, b) => a + Math.random() * (b - a);
 
@@ -39,27 +39,41 @@ export function setup() {
         tags: { name: 'login' },
       },
     );
-    if (i <= 3) console.log(`login #${i} -> ${r.status} ${r.body}`);
     let t;
-    try { t = r.json('data.accessToken'); } catch (e) {}
-    if (t) tokens.push(t);
+    try { t = r.json('accessToken'); } catch (e) {}
+    if (t) tokens.push({ token: t, deviceId: `k6-device-${i}` });
+    else if (i <= 3) console.log(`login #${i} -> ${r.status} ${r.body}`);
   }
+  console.log(`Login OK: ${tokens.length}/${USERS}`);
   if (!tokens.length) throw new Error('Login thất bại: xem log status/body ở trên');
   return { tokens };
 }
 
 export default function (data) {
-  const token = data.tokens[(__VU - 1) % data.tokens.length];
+  const u = data.tokens[(__VU - 1) % data.tokens.length];
   const p = (name) => ({
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers: {
+      Authorization: `Bearer ${u.token}`,
+      'Content-Type': 'application/json',
+      'x-device-id': u.deviceId,
+      'x-device-name': 'k6',
+      'x-device-os': 'k6',
+    },
     tags: { name },
   });
 
   const feed = http.get(
     `${BASE}/pets/feed?limit=10&lat=${rnd(10.7, 10.9)}&lng=${rnd(106.6, 106.8)}`, p('feed'));
   check(feed, { 'feed 200': (r) => r.status === 200 });
+
   let pets = [];
-  try { pets = feed.json('data') || []; } catch (e) {}
+  try {
+    const body = feed.json();
+    pets = Array.isArray(body) ? body : (body.data || body.items || body.pets || []);
+  } catch (e) {}
+  if (!pets.length && __ITER === 0 && __VU <= 3) {
+    console.log(`feed -> ${feed.status} ${String(feed.body).slice(0, 300)}`);
+  }
   sleep(rnd(1, 3));
 
   for (const pet of pets.slice(0, 5)) {
