@@ -1,15 +1,21 @@
 /**
  * Seed QR thẻ vật lý THEO TÊN FILE: PL-00001.png -> tag id "PL-00001".
- * Không quét nội dung mã QR nữa (bỏ jsQR/jimp).
+ *
+ * Luồng chạy thật:
+ *   1) Thêm tag mới (bỏ qua tag đã có)
+ *   2) Chuyển pet từ các tag sắp xoá sang tag trống trong danh sách file
+ *   3) Xoá tag thừa (trống, không có trong danh sách file)
+ *   4) R2: (tuỳ chọn) xoá ảnh thừa, upload ảnh còn thiếu
  *
  * Cách chạy:
- *   npx ts-node src/database/seed-qr.ts --dry-run   # chỉ báo cáo, KHÔNG ghi/xoá gì
- *   npx ts-node src/database/seed-qr.ts             # xoá tag thừa -> thêm tag -> upload R2
+ *   npx ts-node src/database/prisma/seed-qr.ts --dry-run   # chỉ báo cáo, KHÔNG ghi/xoá gì
+ *   npx ts-node src/database/prisma/seed-qr.ts             # chạy thật
  *
  * Cờ tuỳ chọn:
  *   --force          upload lại toàn bộ ảnh lên R2
  *   --clean-r2       xoá luôn ảnh thừa trên R2 (key không nằm trong danh sách PL-xxxxx.png)
  *   --allow-partial  vẫn chạy dù thiếu nhiều ảnh / có file sai tên
+ *   --move-ids=PL-00001,PL-00002   chuyển cả pet của các tag TRONG dải này sang tag trống khác
  */
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
@@ -23,18 +29,26 @@ import {
 } from '@aws-sdk/client-s3';
 
 const prisma = new PrismaClient();
-const OVERWRITE_PROTECTED = process.argv.includes('--overwrite-protected');
+
 const DRY_RUN = process.argv.includes('--dry-run');
 const FORCE_UPLOAD = process.argv.includes('--force');
 const CLEAN_R2 = process.argv.includes('--clean-r2');
 const ALLOW_PARTIAL = process.argv.includes('--allow-partial');
 
+const MOVE_IDS = new Set(
+  (process.argv.find((a) => a.startsWith('--move-ids='))?.split('=')[1] ?? '')
+    .split(',')
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean),
+);
+
 const BUCKET_NAME = process.env.R2_BUCKET ?? 'pawcare';
 const R2_PREFIX = 'qr-codes/';
 const QR_DIR = path.join(process.cwd(), 'src/database/QR_Codes');
 const REPORT_FILE = path.join(process.cwd(), 'qr-scan-report.json');
+const MAP_FILE = path.join(process.cwd(), 'qr-migrate-map.json');
 
-const EXPECTED_TOTAL = 810; // dải PL-00001 ... PL-10000
+const EXPECTED_TOTAL = 810; // dải PL-00001 ... PL-00810
 const UPLOAD_CONCURRENCY = 20;
 const DELETE_BATCH = 500;
 const MAX_MISSING_RATIO = 0.05; // thiếu quá 5% thì dừng, không xoá gì (tránh trỏ nhầm thư mục)
@@ -72,7 +86,7 @@ const FILE_NAME_RE = /^PL-(\d{5})\.png$/i;
 
 type LocalScan = {
   idToFile: Map<string, string>; // "PL-00001" -> "PL-00001.png"
-  badNames: string[]; // file .png nhưng tên không đúng dạng PL-xxxxx.png
+  badNames: string[];
   duplicates: Record<string, string[]>;
   missing: string[];
   outOfRange: string[];
@@ -116,9 +130,69 @@ function scanLocalFiles(files: string[]): LocalScan {
 }
 
 // ---------------------------------------------------------------------------
-// BƯỚC 1: XOÁ TAG THỪA TRONG DB
-// Chỉ xoá tag: (1) chưa gắn thú cưng (petId = null) và (2) id KHÔNG nằm trong
-// danh sách PL-xxxxx lấy từ tên file. Tag đã gắn thú cưng luôn được giữ.
+// BƯỚC 1: THÊM TAG MỚI (bỏ qua tag đã có)
+// ---------------------------------------------------------------------------
+async function addNewTags(ids: string[]): Promise<void> {
+  let created = 0;
+  for (let i = 0; i < ids.length; i += 1000) {
+    const result = await prisma.tag.createMany({
+      data: ids.slice(i, i + 1000).map((id) => ({ id, status: 'INACTIVE' as const })),
+      skipDuplicates: true,
+    });
+    created += result.count;
+  }
+  console.log(`✅ DB: Đã thêm mới ${created} thẻ, bỏ qua ${ids.length - created} thẻ đã tồn tại.`);
+}
+
+// ---------------------------------------------------------------------------
+// BƯỚC 2: CHUYỂN PET TỪ TAG SẮP XOÁ SANG TAG MỚI/TRỐNG
+// Nguồn: tag đang gắn pet mà (id không nằm trong danh sách file) hoặc (nằm trong --move-ids)
+// Đích: tag trong danh sách file, đang trống, không phải tag nguồn (ưu tiên số lớn nhất)
+// ---------------------------------------------------------------------------
+type Move = { from: string; to: string; petId: string };
+
+async function planMoves(validIds: Set<string>): Promise<{ moves: Move[]; shortage: number }> {
+  const attached = await prisma.tag.findMany({ where: { petId: { not: null } } });
+  const sources = attached.filter((t) => !validIds.has(t.id) || MOVE_IDS.has(t.id));
+
+  const sourceIds = new Set(sources.map((t) => t.id));
+  const free = await prisma.tag.findMany({
+    where: { petId: null, id: { in: [...validIds] } },
+    select: { id: true },
+    orderBy: { id: 'desc' },
+  });
+  const targets = free.map((t) => t.id).filter((id) => !sourceIds.has(id));
+
+  const moves: Move[] = sources.slice(0, targets.length).map((t, i) => ({
+    from: t.id,
+    to: targets[i],
+    petId: t.petId as string,
+  }));
+  return { moves, shortage: Math.max(0, sources.length - targets.length) };
+}
+
+async function applyMoves(moves: Move[]): Promise<void> {
+  if (moves.length === 0) {
+    console.log('🔁 Không có pet nào cần chuyển.');
+    return;
+  }
+  for (const m of moves) {
+    const old: any = await prisma.tag.findUnique({ where: { id: m.from } });
+    const { id: _id, createdAt: _c, updatedAt: _u, ...rest } = old;
+    // Giải phóng pet khỏi tag cũ trước (petId có thể unique), rồi gắn sang tag mới, cùng 1 transaction
+    await prisma.$transaction([
+      prisma.tag.update({ where: { id: m.from }, data: { petId: null, status: 'INACTIVE' } }),
+      prisma.tag.update({ where: { id: m.to }, data: rest }),
+    ]);
+    console.log(`🔁 ${m.from} -> ${m.to} (pet ${m.petId})`);
+  }
+  fs.writeFileSync(MAP_FILE, JSON.stringify(moves, null, 2));
+  console.log(`📝 Đã chuyển ${moves.length} pet. Bảng ánh xạ cũ -> mới: ${MAP_FILE}`);
+}
+
+// ---------------------------------------------------------------------------
+// BƯỚC 3: XOÁ TAG THỪA TRONG DB
+// Xoá tag: (1) chưa gắn thú cưng (petId = null) và (2) id KHÔNG nằm trong danh sách file.
 // ---------------------------------------------------------------------------
 type DeleteStats = { deleted: number; kept: string[] };
 
@@ -131,6 +205,7 @@ async function deleteBatch(ids: string[], stats: DeleteStats): Promise<void> {
     if (e?.code !== 'P2003') throw e;
     // Vướng khoá ngoại: chia đôi lô để tìm đúng tag bị ràng buộc
     if (ids.length === 1) {
+      console.log(`🔗 Giữ ${ids[0]} do khoá ngoại:`, e.meta?.field_name ?? e.message);
       stats.kept.push(ids[0]);
       return;
     }
@@ -147,13 +222,7 @@ async function findOrphanTagIds(validIds: Set<string>): Promise<string[]> {
   });
   return empty.map((t) => t.id).filter((id) => !validIds.has(id));
 }
-async function findProtectedTagIds(): Promise<Set<string>> {
-  const rows = await prisma.tag.findMany({
-    where: { petId: { not: null } },
-    select: { id: true },
-  });
-  return new Set(rows.map((t) => t.id));
-}
+
 async function cleanOrphanTags(validIds: Set<string>): Promise<void> {
   const orphans = await findOrphanTagIds(validIds);
   console.log(`🔎 Tìm thấy ${orphans.length} tag thừa (trống, không có trong danh sách file)...`);
@@ -164,28 +233,13 @@ async function cleanOrphanTags(validIds: Set<string>): Promise<void> {
     if ((i / DELETE_BATCH) % 10 === 0 && i > 0) console.log(`🗑️ Đã xoá ${stats.deleted}/${orphans.length}...`);
   }
 
-  const activeTagsCount = await prisma.tag.count({ where: { petId: { not: null } } });
+  const stillAttached = await prisma.tag.count({ where: { petId: { not: null } } });
   console.log(`🗑️ Đã xoá ${stats.deleted} tag thừa (${stats.kept.length} tag bị giữ do ràng buộc khoá ngoại).`);
-  console.log(`🛡️ Đang bảo vệ ${activeTagsCount} tag đã gắn với thú cưng.`);
+  console.log(`ℹ️ Hiện còn ${stillAttached} tag đang gắn thú cưng.`);
 }
 
 // ---------------------------------------------------------------------------
-// BƯỚC 2: THÊM TAG MỚI (bỏ qua tag đã có)
-// ---------------------------------------------------------------------------
-async function addNewTags(ids: string[]): Promise<void> {
-  let created = 0;
-  for (let i = 0; i < ids.length; i += 1000) {
-    const result = await prisma.tag.createMany({
-      data: ids.slice(i, i + 1000).map((id) => ({ id, status: 'INACTIVE' as const })),
-      skipDuplicates: true,
-    });
-    created += result.count;
-  }
-  console.log(`✅ DB: Đã thêm mới ${created} thẻ, bỏ qua ${ids.length - created} thẻ đã tồn tại.`);
-}
-
-// ---------------------------------------------------------------------------
-// BƯỚC 3: R2 (key = qr-codes/PL-00001.png)
+// BƯỚC 4: R2 (key = qr-codes/PL-00001.png)
 // ---------------------------------------------------------------------------
 async function listR2Keys(): Promise<Set<string>> {
   const keys = new Set<string>();
@@ -206,16 +260,12 @@ async function listR2Keys(): Promise<Set<string>> {
   return keys;
 }
 
-async function cleanOrphanR2(
-  existing: Set<string>,
-  validIds: Set<string>,
-  protectedIds: Set<string>,
-): Promise<void> {
-  const keepKeys = new Set(
-    [...validIds, ...protectedIds].map((id) => `${R2_PREFIX}${id}.png`),
+async function cleanOrphanR2(existing: Set<string>, validIds: Set<string>): Promise<void> {
+  const validKeys = new Set([...validIds].map((id) => `${R2_PREFIX}${id}.png`));
+  // Chỉ xét các key nằm trực tiếp dưới qr-codes/ (không đụng thư mục phiên bản qr-codes/v2/...)
+  const orphans = [...existing].filter(
+    (k) => !validKeys.has(k) && !k.slice(R2_PREFIX.length).includes('/'),
   );
-  const orphans = [...existing].filter((k) => !keepKeys.has(k));
-
   console.log(`🔎 R2: Tìm thấy ${orphans.length} ảnh thừa.`);
 
   let deleted = 0;
@@ -234,19 +284,10 @@ async function cleanOrphanR2(
   orphans.forEach((k) => existing.delete(k));
 }
 
-async function uploadMissing(
-  existing: Set<string>,
-  idToFile: Map<string, string>,
-  overwriteIds: Set<string>,
-): Promise<number> {
+async function uploadMissing(existing: Set<string>, idToFile: Map<string, string>): Promise<number> {
   const have = FORCE_UPLOAD ? new Set<string>() : existing;
-  const todo = [...idToFile.entries()].filter(
-    ([id]) => overwriteIds.has(id) || !have.has(`${R2_PREFIX}${id}.png`),
-  );
-  const overwriteCount = todo.filter(([id]) => overwriteIds.has(id) && existing.has(`${R2_PREFIX}${id}.png`)).length;
-  console.log(
-    `☁️ R2: Cần upload ${todo.length} ảnh (trong đó ${overwriteCount} ảnh ghi đè lên tag được bảo vệ).`,
-  );
+  const todo = [...idToFile.entries()].filter(([id]) => !have.has(`${R2_PREFIX}${id}.png`));
+  console.log(`☁️ R2: Đã có ${idToFile.size - todo.length} ảnh, cần upload thêm ${todo.length} ảnh.`);
 
   let cursor = 0;
   let done = 0;
@@ -262,6 +303,7 @@ async function uploadMissing(
             Key: `${R2_PREFIX}${id}.png`,
             Body: fs.readFileSync(path.join(QR_DIR, fileName)),
             ContentType: 'image/png',
+            CacheControl: 'no-cache',
           }),
         );
       } catch (e: any) {
@@ -326,13 +368,20 @@ async function main() {
   console.log(`📝 Báo cáo chi tiết: ${REPORT_FILE}`);
 
   if (DRY_RUN) {
-    // Chỉ ĐỌC DB để xem sẽ xoá bao nhiêu, không ghi gì
+    // Chỉ ĐỌC DB để xem trước, không ghi gì
     try {
       const orphans = await findOrphanTagIds(validIds);
       const active = await prisma.tag.count({ where: { petId: { not: null } } });
       const total = await prisma.tag.count();
-      console.log(`🧪 DB hiện có ${total} tag, trong đó ${active} tag đã gắn thú cưng (được giữ).`);
-      console.log(`🧪 Sẽ xoá ${orphans.length} tag thừa. Ví dụ: ${orphans.slice(0, 5).join(', ') || '(không có)'}`);
+      console.log(`🧪 DB hiện có ${total} tag, trong đó ${active} tag đang gắn thú cưng.`);
+
+      const { moves, shortage } = await planMoves(validIds);
+      console.log(`🧪 Sẽ chuyển ${moves.length} pet sang tag mới (thiếu tag trống: ${shortage}).`);
+      moves.slice(0, 10).forEach((m) => console.log(`   ${m.from} -> ${m.to}`));
+
+      console.log(
+        `🧪 Sẽ xoá khoảng ${orphans.length} tag thừa đang trống (cộng thêm các tag nguồn sau khi chuyển pet nếu nằm ngoài danh sách file). Ví dụ: ${orphans.slice(0, 5).join(', ') || '(không có)'}`,
+      );
     } catch (e: any) {
       console.log(`🧪 Không đọc được DB để xem trước: ${e.message}`);
     }
@@ -350,36 +399,37 @@ async function main() {
     return;
   }
 
-  // 1) Xoá tag thừa trong DB
+  // 1) Thêm tag mới
+  await addNewTags([...validIds]);
+
+  // 2) Chuyển pet từ tag sắp xoá sang tag mới/trống
+  const { moves, shortage } = await planMoves(validIds);
+  if (shortage > 0) {
+    console.error(`⛔ Thiếu ${shortage} tag trống để nhận pet. DỪNG, chưa đổi/xoá gì.`);
+    process.exitCode = 1;
+    return;
+  }
+  await applyMoves(moves);
+
+  // 3) Xoá tag thừa trong DB
   try {
     await cleanOrphanTags(validIds);
   } catch (e: any) {
     console.error('❌ Lỗi khi xoá tag thừa, bỏ qua và tiếp tục:', e.message);
   }
 
-  // 2) Thêm tag mới
-  await addNewTags([...validIds]);
-
-  // 3) R2
-  const protectedIds = await findProtectedTagIds();
-  const withFile = [...protectedIds].filter((id) => validIds.has(id)).length;
-  console.log(`🧪 Tag được bảo vệ: ${protectedIds.size}, trong đó ${withFile} tag có file mới (sẽ bị ghi đè nếu dùng --overwrite-protected).`);
-  const protectedWithFile = new Set([...protectedIds].filter((id) => scan.idToFile.has(id)));
-  const protectedNoFile = [...protectedIds].filter((id) => !scan.idToFile.has(id));
-
-  console.log(`🛡️ Tag được bảo vệ: ${protectedIds.size} (có file mới: ${protectedWithFile.size}, không có file mới: ${protectedNoFile.length})`);
-  if (protectedNoFile.length) {
-    console.log(`   Không có ảnh để ghi đè, ví dụ: ${protectedNoFile.slice(0, 5).join(', ')}`);
-  }
-
-  let failedUpload = 0;
+  // 4) R2: xoá ảnh thừa (nếu có --clean-r2) rồi upload ảnh còn thiếu
   const existing = FORCE_UPLOAD && !CLEAN_R2 ? new Set<string>() : await listR2Keys();
-  if (CLEAN_R2) await cleanOrphanR2(existing, validIds, protectedIds);
-  failedUpload = await uploadMissing(
-    existing,
-    scan.idToFile,
-    OVERWRITE_PROTECTED ? protectedWithFile : new Set<string>(),
-  );
+  if (CLEAN_R2) await cleanOrphanR2(existing, validIds);
+  const failedUpload = await uploadMissing(existing, scan.idToFile);
+
+  console.log(`📊 Tổng số thẻ trong Database: ${await prisma.tag.count()}`);
+  if (failedUpload === 0 && !problem) {
+    console.log('🎉 QUY TRÌNH HOÀN TẤT THÀNH CÔNG!');
+  } else {
+    console.log(`⚠️ Xong nhưng có ${failedUpload} ảnh upload lỗi hoặc danh sách file chưa sạch (xem ${REPORT_FILE}).`);
+    process.exitCode = 1;
+  }
 }
 
 main()
