@@ -51,6 +51,7 @@ import { PawlyPlacesModule } from './modules/pawly-place/pawly-place.module';
 
         return {
           throttlers: [{ name: 'default', ttl: 60000, limit: 50 }],
+          skipIf: () => config.get<string>('DISABLE_THROTTLE') === 'true',
           storage: new ThrottlerStorageRedisService(
             new Redis({
               host,
