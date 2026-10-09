@@ -46,20 +46,25 @@ export class PawlyPlacesService {
   // =====================================================================
   async getConfig(dto: LangQueryDto) {
     const lang = normLang(dto.lang);
-    const cacheKey = `pawly-places:config:${lang}`;
+    const cacheKey = `pawly-places:config:v2:${lang}`;
     const cached = await this.redis.get<any>(cacheKey);
     if (cached) return cached;
 
-    const [categories, filters] = await Promise.all([
+    const [categories, filters, amenities] = await Promise.all([
       this.prisma.placeCategory.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
       this.prisma.placeAmenity.findMany({ where: { isFilter: true }, orderBy: { sortOrder: 'asc' } }),
+      this.prisma.placeAmenity.findMany({ where: { showInDetail: true }, orderBy: { sortOrder: 'asc' } }),
     ]);
+
 
     const result = {
       categories: categories.map((c) => ({
         id: c.id, key: c.key, name: loc(c.nameVi, c.nameEn, lang), icon: c.icon,
       })),
       filters: filters.map((f) => ({ key: f.key, label: loc(f.labelVi, f.labelEn, lang) })),
+      amenities: amenities.map((a) => ({
+        key: a.key, label: loc(a.labelVi, a.labelEn, lang), isFilter: a.isFilter,
+      })),
     };
     await this.redis.set(cacheKey, result, this.CONFIG_TTL);
     return result;
@@ -188,6 +193,7 @@ export class PawlyPlacesService {
       latitude: place.latitude,
       longitude: place.longitude,
       phone: place.phone,
+      website: place.website ?? null,
       distanceKm: dist != null ? Math.round(dist * 10) / 10 : null,
       distanceLabel: dist != null ? formatDistance(dist) : null,
       openStatus: { isOpen: status.isOpen, label: status.label, detail: status.detail },

@@ -53,7 +53,11 @@ function parsePrice(label?: string): number {
     const digits = label.replace(/[^\d]/g, '');
     return digits ? Math.min(Number(digits), 2_000_000_000) : 0;
 }
-
+function normalizeWebsite(v?: string | null): string | null {
+    const s = v?.trim();
+    if (!s) return null;
+    return /^https?:\/\//i.test(s) ? s : `https://${s}`;
+}
 @Injectable()
 export class PawlyPlaceSubmissionsService {
     constructor(private prisma: PrismaService) { }
@@ -103,7 +107,7 @@ export class PawlyPlaceSubmissionsService {
                 latitude: dto.latitude,
                 longitude: dto.longitude,
                 phone: dto.phone?.trim() || null,
-                website: dto.website?.trim() || null,
+                website: normalizeWebsite(dto.website),
                 categoryKeys: keys as unknown as Prisma.InputJsonValue,
                 openingHours: dto.operatingHours as unknown as Prisma.InputJsonValue,
                 isUncertainHours: dto.isUncertainHours ?? false,
@@ -172,11 +176,11 @@ export class PawlyPlaceSubmissionsService {
         const labels = asArray<string>(sub.amenities);
         const amenityRows = labels.length
             ? await this.prisma.placeAmenity.findMany({
-                where: { OR: [{ labelVi: { in: labels } }, { key: { in: labels } }] },
+                where: { OR: [{ key: { in: labels } }, { labelVi: { in: labels } }, { labelEn: { in: labels } }] },
             })
             : [];
         const matched = new Set<string>();
-        amenityRows.forEach((a) => { matched.add(a.labelVi); matched.add(a.key); });
+        amenityRows.forEach((a) => { matched.add(a.key); matched.add(a.labelVi); matched.add(a.labelEn); });
         const unmatchedAmenities = labels.filter((l) => !matched.has(l));
 
         // ---- images / menu ----
@@ -205,6 +209,7 @@ export class PawlyPlaceSubmissionsService {
                         latitude: sub.latitude,
                         longitude: sub.longitude,
                         phone: sub.phone,
+                        website: normalizeWebsite(sub.website),
                         isActive: true,
                         heroImage,
                         galleryImages: images,

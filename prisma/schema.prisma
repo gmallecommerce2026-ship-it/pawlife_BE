@@ -1288,6 +1288,7 @@ model Place {
   latitude     Float
   longitude    Float
   phone        String?
+  website      String?
   heroImage    String        @db.Text
   galleryImages Json // string[]
   openingHours Json // { mon: [{open, close}], ... }
