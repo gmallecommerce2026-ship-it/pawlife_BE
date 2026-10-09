@@ -1911,12 +1911,16 @@ export class PetsService {
     // 2. Nếu QR tồn tại nhưng ĐANG TRỐNG (chưa có Pet)
     if (!tag.pet) {
       const r2Domain = this.configService.get<string>('R2_PUBLIC_DOMAIN');
+      const qrVersion = this.configService.get<string>('R2_QR_VERSION') ?? '2';
+
       return {
         isUnlinked: true,
         tagId: tag.id,
         status: tag.status,
         linkCount: (tag as any).linkCount || 0,
-        qrImageUrl: r2Domain ? `${r2Domain}/qr-codes/${tag.id}.png` : null,
+        qrImageUrl: r2Domain
+          ? `${r2Domain.replace(/\/+$/, '')}/qr-codes/v${qrVersion}/${tag.id}.png`
+          : null,
       };
     }
 
