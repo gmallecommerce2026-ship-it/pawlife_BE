@@ -29,13 +29,22 @@ export function setup() {
     const r = http.post(
       `${BASE}/auth/login`,
       JSON.stringify({ email: `loadtest${i}@test.com`, password: PASSWORD }),
-      { headers: { 'Content-Type': 'application/json', 'x-device-name': `k6-${i}`, 'x-device-os': 'k6' } },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-device-id': `k6-device-${i}`,
+          'x-device-name': `k6-${i}`,
+          'x-device-os': 'k6',
+        },
+        tags: { name: 'login' },
+      },
     );
+    if (i <= 3) console.log(`login #${i} -> ${r.status} ${r.body}`);
     let t;
-    try { t = r.json('data.accessToken'); } catch (e) {}   // ← chỉnh path theo response login thật
+    try { t = r.json('data.accessToken'); } catch (e) {}
     if (t) tokens.push(t);
   }
-  if (!tokens.length) throw new Error('Login thất bại: kiểm tra tài khoản seed hoặc path token');
+  if (!tokens.length) throw new Error('Login thất bại: xem log status/body ở trên');
   return { tokens };
 }
 
