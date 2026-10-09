@@ -23,7 +23,7 @@ import {
 } from '@aws-sdk/client-s3';
 
 const prisma = new PrismaClient();
-
+const OVERWRITE_PROTECTED = process.argv.includes('--overwrite-protected');
 const DRY_RUN = process.argv.includes('--dry-run');
 const FORCE_UPLOAD = process.argv.includes('--force');
 const CLEAN_R2 = process.argv.includes('--clean-r2');
@@ -147,7 +147,13 @@ async function findOrphanTagIds(validIds: Set<string>): Promise<string[]> {
   });
   return empty.map((t) => t.id).filter((id) => !validIds.has(id));
 }
-
+async function findProtectedTagIds(): Promise<Set<string>> {
+  const rows = await prisma.tag.findMany({
+    where: { petId: { not: null } },
+    select: { id: true },
+  });
+  return new Set(rows.map((t) => t.id));
+}
 async function cleanOrphanTags(validIds: Set<string>): Promise<void> {
   const orphans = await findOrphanTagIds(validIds);
   console.log(`🔎 Tìm thấy ${orphans.length} tag thừa (trống, không có trong danh sách file)...`);
@@ -200,9 +206,16 @@ async function listR2Keys(): Promise<Set<string>> {
   return keys;
 }
 
-async function cleanOrphanR2(existing: Set<string>, validIds: Set<string>): Promise<void> {
-  const validKeys = new Set([...validIds].map((id) => `${R2_PREFIX}${id}.png`));
-  const orphans = [...existing].filter((k) => !validKeys.has(k));
+async function cleanOrphanR2(
+  existing: Set<string>,
+  validIds: Set<string>,
+  protectedIds: Set<string>,
+): Promise<void> {
+  const keepKeys = new Set(
+    [...validIds, ...protectedIds].map((id) => `${R2_PREFIX}${id}.png`),
+  );
+  const orphans = [...existing].filter((k) => !keepKeys.has(k));
+
   console.log(`🔎 R2: Tìm thấy ${orphans.length} ảnh thừa.`);
 
   let deleted = 0;
@@ -221,10 +234,19 @@ async function cleanOrphanR2(existing: Set<string>, validIds: Set<string>): Prom
   orphans.forEach((k) => existing.delete(k));
 }
 
-async function uploadMissing(existing: Set<string>, idToFile: Map<string, string>): Promise<number> {
+async function uploadMissing(
+  existing: Set<string>,
+  idToFile: Map<string, string>,
+  overwriteIds: Set<string>,
+): Promise<number> {
   const have = FORCE_UPLOAD ? new Set<string>() : existing;
-  const todo = [...idToFile.entries()].filter(([id]) => !have.has(`${R2_PREFIX}${id}.png`));
-  console.log(`☁️ R2: Đã có ${idToFile.size - todo.length} ảnh, cần upload thêm ${todo.length} ảnh.`);
+  const todo = [...idToFile.entries()].filter(
+    ([id]) => overwriteIds.has(id) || !have.has(`${R2_PREFIX}${id}.png`),
+  );
+  const overwriteCount = todo.filter(([id]) => overwriteIds.has(id) && existing.has(`${R2_PREFIX}${id}.png`)).length;
+  console.log(
+    `☁️ R2: Cần upload ${todo.length} ảnh (trong đó ${overwriteCount} ảnh ghi đè lên tag được bảo vệ).`,
+  );
 
   let cursor = 0;
   let done = 0;
@@ -338,19 +360,26 @@ async function main() {
   // 2) Thêm tag mới
   await addNewTags([...validIds]);
 
-  // 3) R2: xoá ảnh thừa (nếu có --clean-r2) rồi upload ảnh còn thiếu
+  // 3) R2
+  const protectedIds = await findProtectedTagIds();
+  const withFile = [...protectedIds].filter((id) => validIds.has(id)).length;
+  console.log(`🧪 Tag được bảo vệ: ${protectedIds.size}, trong đó ${withFile} tag có file mới (sẽ bị ghi đè nếu dùng --overwrite-protected).`);
+  const protectedWithFile = new Set([...protectedIds].filter((id) => scan.idToFile.has(id)));
+  const protectedNoFile = [...protectedIds].filter((id) => !scan.idToFile.has(id));
+
+  console.log(`🛡️ Tag được bảo vệ: ${protectedIds.size} (có file mới: ${protectedWithFile.size}, không có file mới: ${protectedNoFile.length})`);
+  if (protectedNoFile.length) {
+    console.log(`   Không có ảnh để ghi đè, ví dụ: ${protectedNoFile.slice(0, 5).join(', ')}`);
+  }
+
   let failedUpload = 0;
   const existing = FORCE_UPLOAD && !CLEAN_R2 ? new Set<string>() : await listR2Keys();
-  if (CLEAN_R2) await cleanOrphanR2(existing, validIds);
-  failedUpload = await uploadMissing(existing, scan.idToFile);
-
-  console.log(`📊 Tổng số thẻ trong Database: ${await prisma.tag.count()}`);
-  if (failedUpload === 0 && !problem) {
-    console.log('🎉 QUY TRÌNH HOÀN TẤT THÀNH CÔNG!');
-  } else {
-    console.log(`⚠️ Xong nhưng có ${failedUpload} ảnh upload lỗi hoặc danh sách file chưa sạch (xem ${REPORT_FILE}).`);
-    process.exitCode = 1;
-  }
+  if (CLEAN_R2) await cleanOrphanR2(existing, validIds, protectedIds);
+  failedUpload = await uploadMissing(
+    existing,
+    scan.idToFile,
+    OVERWRITE_PROTECTED ? protectedWithFile : new Set<string>(),
+  );
 }
 
 main()
