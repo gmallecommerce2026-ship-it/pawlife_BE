@@ -5,6 +5,9 @@ import { NotificationType } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RedisService } from 'src/database/redis/redis.service';
 
+// Shelter duy nhất được phép hiển thị trên app
+const ALLOWED_SHELTER_NAME = 'Sân Nhà Nhiều Chó';
+
 @Injectable()
 export class SheltersService {
   constructor(
@@ -71,9 +74,6 @@ export class SheltersService {
     await this.redisService.set('shelters:cache_version:global', current + 1, 0);
   }
 
-  // =====================================================================
-  // THE REMAINING FUNCTIONS ARE KEPT COMPLETELY UNCHANGED
-  // =====================================================================
   async findAll(query: GetSheltersDto, userId?: string) {
     const { search, page = 1, limit = 10 } = query;
 
@@ -90,7 +90,8 @@ export class SheltersService {
       this.getCacheVersion(userId),
       this.getGlobalCacheVersion(),
     ]);
-    const cacheKey = `shelters:all:page_${page}:limit_${limit}:search_${search || 'none'}:u_${userId || 'guest'}:v_${version}:gv_${globalVersion}`;
+    // Đổi prefix sang "v2" để bỏ qua cache cũ (cache cũ còn chứa các shelter khác)
+    const cacheKey = `shelters:v2:all:page_${page}:limit_${limit}:search_${search || 'none'}:u_${userId || 'guest'}:v_${version}:gv_${globalVersion}`;
 
     const cachedData = await this.redisService.get<any>(cacheKey);
     if (cachedData) return cachedData;
@@ -100,55 +101,60 @@ export class SheltersService {
 
     if (isLocked) {
       await new Promise(resolve => setTimeout(resolve, 200));
-      return this.findAll(query);
+      // FIX: truyền userId để không mất danh sách shelter bị chặn khi retry
+      return this.findAll(query, userId);
     }
     await this.redisService.set(lockKey, true, 10);
 
-    const skip = (page - 1) * limit;
-    
-    // Tạm ẩn BoNé Petkery
-    const whereClause: any = {
-      name: { not: 'BoNé Petkery' }
-    };
+    try {
+      const skip = (page - 1) * limit;
 
-    if (search) {
-      whereClause.AND = [
-        {
-          OR: [
-            { name: { contains: search } },
-            { address: { contains: search } },
-          ],
-        }
-      ];
-    }
+      // Chỉ cho phép đúng 1 shelter
+      const whereClause: any = {
+        name: ALLOWED_SHELTER_NAME,
+      };
 
-    if (blockedIds.length > 0) {
-      whereClause.id = { notIn: blockedIds };
-    }
+      if (search) {
+        whereClause.AND = [
+          {
+            OR: [
+              { name: { contains: search } },
+              { address: { contains: search } },
+            ],
+          }
+        ];
+      }
 
-    const [shelters, total] = await Promise.all([
-      this.prisma.shelter.findMany({
-        where: whereClause,
-        skip,
-        take: limit,
-        include: {
-          _count: {
-            select: { pets: { where: { status: 'AVAILABLE' } } },
+      if (blockedIds.length > 0) {
+        whereClause.id = { notIn: blockedIds };
+      }
+
+      const [shelters, total] = await Promise.all([
+        this.prisma.shelter.findMany({
+          where: whereClause,
+          skip,
+          take: limit,
+          include: {
+            _count: {
+              select: { pets: { where: { status: 'AVAILABLE' } } },
+            },
           },
-        },
-      }),
-      this.prisma.shelter.count({ where: whereClause }),
-    ]);
+        }),
+        this.prisma.shelter.count({ where: whereClause }),
+      ]);
 
-    const result = {
-      data: shelters,
-      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
-    };
+      const result = {
+        data: shelters,
+        meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+      };
 
-    await this.redisService.set(cacheKey, result, 3600);
-    await this.redisService.del(lockKey);
+      await this.redisService.set(cacheKey, result, 3600);
 
-    return result;
+      return result;
+    } finally {
+      // Luôn nhả lock kể cả khi query lỗi
+      await this.redisService.del(lockKey);
+    }
   }
 
   async findOne(id: string, userId?: string) {
@@ -170,8 +176,8 @@ export class SheltersService {
       },
     });
 
-    // Chặn hiển thị chi tiết nếu là BoNé Petkery
-    if (!shelter || shelter.name === 'BoNé Petkery') {
+    // Chỉ cho xem chi tiết shelter được phép
+    if (!shelter || shelter.name !== ALLOWED_SHELTER_NAME) {
       throw new NotFoundException('Shelter not found');
     }
 
@@ -205,7 +211,7 @@ export class SheltersService {
 
   async follow(shelterId: string, userId: string) {
     const shelter = await this.prisma.shelter.findUnique({ where: { id: shelterId } });
-    if (!shelter || shelter.name === 'BoNé Petkery') {
+    if (!shelter || shelter.name !== ALLOWED_SHELTER_NAME) {
       throw new NotFoundException('Shelter not found');
     }
 
@@ -250,7 +256,7 @@ export class SheltersService {
       where: { id: shelterId },
     });
 
-    if (!shelter || shelter.name === 'BoNé Petkery') {
+    if (!shelter || shelter.name !== ALLOWED_SHELTER_NAME) {
       throw new NotFoundException('Shelter not found');
     }
 
@@ -303,7 +309,7 @@ export class SheltersService {
       where: {
         userId: userId,
         shelter: {
-          name: { not: 'BoNé Petkery' } // Tạm ẩn khỏi danh sách Followed
+          name: ALLOWED_SHELTER_NAME // Chỉ hiển thị shelter được phép trong danh sách Followed
         }
       },
       include: {
@@ -390,7 +396,8 @@ export class SheltersService {
       this.getCacheVersion(userId),
       this.getGlobalCacheVersion(),
     ]);
-    const cacheKey = `shelters:nearby:lat_${roundedLat}:lng_${roundedLng}:limit_${limit}:u_${userId || 'guest'}:v_${version}:gv_${globalVersion}`;
+    // Đổi prefix sang "v2" để bỏ qua cache cũ
+    const cacheKey = `shelters:v2:nearby:lat_${roundedLat}:lng_${roundedLng}:limit_${limit}:u_${userId || 'guest'}:v_${version}:gv_${globalVersion}`;
 
     const cachedData = await this.redisService.get<any>(cacheKey);
     if (cachedData) return cachedData;
@@ -402,79 +409,65 @@ export class SheltersService {
     }
     await this.redisService.set(lockKey, true, 10);
 
-    const REDIS_KEY = 'shelters:locations';
-
-    let nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, 50);
-
-    if (!nearbyShelterIds || nearbyShelterIds.length === 0) {
-      const allShelters = await this.prisma.shelter.findMany({
-        where: { latitude: { not: null }, longitude: { not: null } },
-      });
-      for (const s of allShelters) {
-        await this.redisService.addLocation(REDIS_KEY, s.longitude!, s.latitude!, s.id);
+    try {
+      let blockedIds: string[] = [];
+      if (userId) {
+        const blocked = await this.prisma.userBlockedShelter.findMany({
+          where: { userId },
+          select: { shelterId: true }
+        });
+        blockedIds = blocked.map(b => b.shelterId);
       }
-      nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, 50);
-    }
 
-    let blockedIds: string[] = [];
-    if (userId) {
-      const blocked = await this.prisma.userBlockedShelter.findMany({
-        where: { userId },
-        select: { shelterId: true }
-      });
-      blockedIds = blocked.map(b => b.shelterId);
-    }
-
-    const targetIds = nearbyShelterIds
-      .filter(id => !blockedIds.includes(id))
-      .slice(0, limit);
-
-    if (targetIds.length === 0) {
-      return { data: [], meta: { limit, count: 0 } };
-    }
-
-    const shelters = await this.prisma.shelter.findMany({
-      where: { 
-        id: { in: targetIds },
-        name: { not: 'BoNé Petkery' } // Tạm ẩn khỏi Nearby
-      },
-    });
-
-    const petCounts = await this.prisma.pet.groupBy({
-      by: ['shelterId'],
-      where: { shelterId: { in: targetIds }, status: 'AVAILABLE' },
-      _count: { _all: true },
-    });
-
-    const formattedShelters = shelters.map(shelter => {
-      const petCountData = petCounts.find(pc => pc.shelterId === shelter.id);
-      const distanceVal = this.calculateDistance(lat, lng, shelter.latitude!, shelter.longitude!);
-
-      return {
-        ...shelter,
-        _count: {
-          pets: petCountData ? petCountData._count._all : 0
+      // Chỉ có 1 shelter được phép nên query thẳng DB theo tên,
+      // không cần lọc theo Redis GEO nữa (tránh trường hợp shelter bị cắt mất bởi slice(0, limit)
+      // trước khi lọc theo tên).
+      const shelters = await this.prisma.shelter.findMany({
+        where: {
+          name: ALLOWED_SHELTER_NAME,
+          ...(blockedIds.length > 0 ? { id: { notIn: blockedIds } } : {}),
         },
-        distance_val: distanceVal,
-      };
-    });
+        take: limit,
+      });
 
-    formattedShelters.sort((a, b) => a.distance_val - b.distance_val);
+      if (shelters.length === 0) {
+        const empty = { data: [], meta: { limit, count: 0 } };
+        await this.redisService.set(cacheKey, empty, 600);
+        return empty;
+      }
 
-    const finalData = formattedShelters.map(s => {
-      const formattedData = {
-        ...s,
-        distance: `${s.distance_val.toFixed(1)} km`,
-      };
-      delete (formattedData as any).distance_val;
-      return formattedData;
-    });
+      const shelterIds = shelters.map(s => s.id);
 
-    const result = { data: finalData, meta: { limit, count: finalData.length } };
+      const petCounts = await this.prisma.pet.groupBy({
+        by: ['shelterId'],
+        where: { shelterId: { in: shelterIds }, status: 'AVAILABLE' },
+        _count: { _all: true },
+      });
 
-    await this.redisService.set(cacheKey, result, 600);
-    await this.redisService.del(lockKey); 
+      const finalData = shelters.map(shelter => {
+        const petCountData = petCounts.find(pc => pc.shelterId === shelter.id);
+        const hasCoords = shelter.latitude != null && shelter.longitude != null;
+        const distanceVal = hasCoords
+          ? this.calculateDistance(lat, lng, shelter.latitude!, shelter.longitude!)
+          : null;
 
-    return result;
+        return {
+          ...shelter,
+          _count: {
+            pets: petCountData ? petCountData._count._all : 0
+          },
+          distance: distanceVal !== null ? `${distanceVal.toFixed(1)} km` : null,
+        };
+      });
+
+      const result = { data: finalData, meta: { limit, count: finalData.length } };
+
+      await this.redisService.set(cacheKey, result, 600);
+
+      return result;
+    } finally {
+      // Luôn nhả lock kể cả khi có lỗi hoặc return sớm
+      await this.redisService.del(lockKey);
+    }
   }
 }
