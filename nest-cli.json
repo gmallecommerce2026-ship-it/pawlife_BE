@@ -14,7 +14,8 @@
         "include": "modules/wallet/templates/**/*",
         "outDir": "dist/src",
         "watchAssets": true
-      }
+      },
+      { "include": "modules/wallet/assets/**/*", "outDir": "dist" }
     ]
   }
 }

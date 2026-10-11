@@ -19,7 +19,7 @@ import { PET_DATA_PROVIDER } from './ports/pet-data.port';
 // Interfaces/types used in decorated constructor → must 'import type'
 // (isolatedModules + emitDecoratorMetadata), otherwise TS1272 error will occur.
 import type { PetDataProvider, WalletPetGender, WalletPetTag } from './ports/pet-data.port';
-
+import * as opentype from 'opentype.js';
 // Pass signing certificates — read from disk once and cached in RAM
 interface WalletCertificates {
   wwdr: Buffer;
@@ -52,7 +52,8 @@ export class WalletService {
   // Display ID on card: PL-XXXXXXXX (first 8 chars of UUID, uppercase)
   // DO NOT display full UUID because 36 chars will be cut off on the card face — full UUID is on the back
   private toDisplayCode(sourceId: string): string {
-    return `${sourceId.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+    const raw = sourceId.replace(/-/g, '').slice(0, 8).toUpperCase();
+    return `PL-${raw}`;
   }
   private cardBgCache: string | null = null;
 
@@ -93,11 +94,52 @@ export class WalletService {
       e(cx + r * 0.65, cy - r * 0.15, r * 0.2, r * 0.27)
     );
   }
+  private fonts: { bold: opentype.Font; medium: opentype.Font } | null = null;
 
+  private getFonts() {
+    if (this.fonts) return this.fonts;
+    const load = (file: string): opentype.Font => {
+      const b = fs.readFileSync(path.join(__dirname, 'assets', 'fonts', file));
+      return opentype.parse(
+        b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer,
+      );
+    };
+    this.fonts = {
+      bold: load('BeVietnamPro-Bold.ttf'),
+      medium: load('BeVietnamPro-Medium.ttf'),
+    };
+    return this.fonts;
+  }
+
+  // Chữ → <path> vector. Tự thu nhỏ cho vừa maxWidth, vẫn dài quá thì cắt bằng "…"
+  private textPath(
+    font: opentype.Font,
+    text: string,
+    x: number,
+    baseline: number,
+    size: number,
+    minSize: number,
+    maxWidth: number,
+    fill: string,
+  ): string {
+    let sz = size;
+    while (sz > minSize && font.getAdvanceWidth(text, sz) > maxWidth) sz -= 1;
+    let t = text;
+    if (font.getAdvanceWidth(t, sz) > maxWidth) {
+      while (t.length > 1 && font.getAdvanceWidth(t + '…', sz) > maxWidth) {
+        t = t.slice(0, -1);
+      }
+      t = t.trimEnd() + '…';
+    }
+    const d = font.getPath(t, x, baseline, sz).toPathData(2);
+    return `<path d="${d}" fill="${fill}"/>`;
+  }
   // Strip hero: nền trùng màu thẻ + họa tiết mờ + avatar tròn lớn bên phải.
   // Bên trái để trống cho primary field (tên pet) đè lên.
   private async buildHeroStrip(
     photoUrl: string | null,
+    title: string,
+    subtitle: string,
   ): Promise<{ x1: Buffer; x2: Buffer; x3: Buffer }> {
     const avatarSrc = photoUrl
       ? await axios
@@ -107,8 +149,18 @@ export class WalletService {
       : null;
 
     const bg = this.getCardBackground();
-    const deep = this.mixHex(bg, '#C2662B', 0.25);   // đậm hơn một chút cho họa tiết
+    const deep = this.mixHex(bg, '#C2662B', 0.25);
     const light = this.mixHex(bg, '#FFFFFF', 0.45);
+    const { bold, medium } = this.getFonts();
+
+    // ===== Chỉnh nhanh tại đây (đơn vị pt, ở @1x) =====
+    const TEXT_COLOR = '#E89B5A';
+    const TITLE_SIZE = 40, TITLE_MIN = 24;
+    const SUB_SIZE = 15, SUB_MIN = 11;
+    const TITLE_BASELINE = 70;
+    const SUB_BASELINE = 100;      // tăng số này để giống·giới tính cách tên xa hơn
+    const LEFT = 22, GAP_TO_AVATAR = 16;
+    // ===================================================
 
     const make = async (s: number): Promise<Buffer> => {
       const W = 375 * s, H = 144 * s;
@@ -117,22 +169,33 @@ export class WalletService {
       const PAD = 22 * s;
       const cx = W - PAD - AV / 2;
       const cy = H / 2;
+      const textMaxW = cx - AV / 2 - GAP_TO_AVATAR * s - LEFT * s;
 
-      // Lớp trang trí: vòng tròn mềm + dấu chân + bóng đổ avatar
       const decor = Buffer.from(
         `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">` +
         `<defs><filter id="b" x="-50%" y="-50%" width="200%" height="200%">` +
         `<feGaussianBlur stdDeviation="${5 * s}"/></filter></defs>` +
         `<circle cx="${W * 0.55}" cy="${cy}" r="${H * 0.95}" fill="${light}" fill-opacity="0.35"/>` +
         `<circle cx="${cx}" cy="${cy}" r="${AV * 0.82}" fill="#ffffff" fill-opacity="0.22"/>` +
-        this.pawSvg(W * 0.08, H * 0.22, 12 * s, deep, 0.16) +
-        this.pawSvg(W * 0.30, H * 0.86, 15 * s, deep, 0.14) +
-        this.pawSvg(W * 0.50, H * 0.20, 10 * s, deep, 0.14) +
+        // dấu chân đặt tránh vùng chữ
+        this.pawSvg(W * 0.06, H * 0.9, 12 * s, deep, 0.16) +
+        this.pawSvg(W * 0.4, H * 0.9, 14 * s, deep, 0.14) +
+        this.pawSvg(W * 0.56, H * 0.14, 10 * s, deep, 0.14) +
         `<circle cx="${cx}" cy="${cy + 4 * s}" r="${AV / 2}" fill="#000" fill-opacity="0.22" filter="url(#b)"/>` +
         `</svg>`,
       );
 
-      const layers: sharp.OverlayOptions[] = [{ input: decor, left: 0, top: 0 }];
+      const textLayer = Buffer.from(
+        `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">` +
+        this.textPath(bold, title, LEFT * s, TITLE_BASELINE * s, TITLE_SIZE * s, TITLE_MIN * s, textMaxW, TEXT_COLOR) +
+        this.textPath(medium, subtitle, LEFT * s, SUB_BASELINE * s, SUB_SIZE * s, SUB_MIN * s, textMaxW, TEXT_COLOR) +
+        `</svg>`,
+      );
+
+      const layers: sharp.OverlayOptions[] = [
+        { input: decor, left: 0, top: 0 },
+        { input: textLayer, left: 0, top: 0 },
+      ];
 
       const ringBase = Buffer.from(
         `<svg width="${AV}" height="${AV}"><circle cx="${AV / 2}" cy="${AV / 2}" r="${AV / 2}" fill="#ffffff"/></svg>`,
@@ -154,7 +217,6 @@ export class WalletService {
           .png()
           .toBuffer();
       } else {
-        // Không có ảnh → vòng tròn trắng + dấu chân
         const paw = Buffer.from(
           `<svg width="${AV}" height="${AV}" xmlns="http://www.w3.org/2000/svg">` +
           `<circle cx="${AV / 2}" cy="${AV / 2}" r="${AV / 2}" fill="#ffffff"/>` +
@@ -401,11 +463,11 @@ export class WalletService {
         genderText === '—' ? breedText : `${breedText} · ${genderText}`;
 
       // Primary: label = giống · giới tính, value = tên pet
-      pass.primaryFields.push({
-        key: 'petName',
-        label: breedGender,
-        value: pet.name,
-      });
+      // pass.primaryFields.push({
+      //   key: 'petName',
+      //   label: breedGender,
+      //   value: pet.name,
+      // });
 
       // Hàng 1: mã | ngày sinh (giữ nguyên)
       pass.secondaryFields.push(
@@ -429,7 +491,7 @@ export class WalletService {
 
       // Strip hero (avatar)
       try {
-        const strip = await this.buildHeroStrip(pet.photoUrl);
+        const strip = await this.buildHeroStrip(pet.photoUrl, pet.name, breedGender);
         pass.addBuffer('strip.png', strip.x1);
         pass.addBuffer('strip@2x.png', strip.x2);
         pass.addBuffer('strip@3x.png', strip.x3);
@@ -449,6 +511,7 @@ export class WalletService {
 
       // Mặt sau (giữ nguyên)
       pass.backFields.push(
+        { key: 'petName', label: t.name, value: pet.name },
         { key: 'fullId', label: t.fullId, value: pet.id },
         { key: 'profile', label: t.profilePage, value: profileUrl },
         { key: 'guide', label: t.guideLabel, value: t.guideValue },
@@ -460,7 +523,6 @@ export class WalletService {
         message: qrValue,
         format: 'PKBarcodeFormatQR',
         messageEncoding: 'iso-8859-1',
-        altText: displayCode,
       });
 
       return {
