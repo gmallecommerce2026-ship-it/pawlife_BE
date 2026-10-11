@@ -103,12 +103,12 @@ export class WalletService {
 
     const make = async (s: number): Promise<Buffer> => {
       const W = 375 * s, H = 144 * s;
-      const PAD = 24 * s;
-      const TILE = 124 * s;       // ô trắng chứa QR
-      const TILE_R = 14 * s;      // bo góc
-      const INNER = TILE - 16 * s; // QR nằm trong ô, chừa viền trắng 8pt mỗi bên
-      const AV = 100 * s;
+      const PAD = 20 * s;
+      const AV = 124 * s;                // avatar to
       const RING = 4 * s;
+      const TILE = 100 * s;              // ô QR nhỏ hơn avatar
+      const TILE_R = 14 * s;
+      const INNER = TILE - 12 * s;
 
       // --- Ô trắng bo góc chứa QR ---
       const qr = await sharp(qrSrc)
@@ -341,18 +341,34 @@ export class WalletService {
       const dobLabel = t.dob + '\u2007'.repeat(dobFigureCount) + TRAILING_SPACER;
 
 
-      pass.headerFields.push({ key: 'docType', value: t.docType });
+      pass.headerFields.push({
+        key: 'docType',
+        value: t.docType,
+        textAlignment: 'PKTextAlignmentRight',
+      });
 
+      // Hàng 1: tên | mã
       pass.secondaryFields.push(
         { key: 'petName', label: t.name, value: pet.name },
         { key: 'petCode', label: t.pawLifeId, value: displayCode, textAlignment: 'PKTextAlignmentRight' },
       );
 
+      // Hàng 2: giống | giới tính
+      // Hàng 3: ngày sinh | microchip (nếu có)
       pass.auxiliaryFields.push(
-        { key: 'breed', label: t.breed, value: pet.breed ?? pet.species },
-        { key: 'gender', label: t.gender, value: this.toGenderText(pet.gender, lang) },
-        { key: 'dob', label: t.dob, value: this.toDobText(pet.dob), textAlignment: 'PKTextAlignmentRight' },
+        { key: 'breed', label: t.breed, value: pet.breed ?? pet.species, row: 0 },
+        { key: 'gender', label: t.gender, value: this.toGenderText(pet.gender, lang), textAlignment: 'PKTextAlignmentRight', row: 0 },
+        { key: 'dob', label: t.dob, value: this.toDobText(pet.dob), row: 1 },
       );
+      if (pet.microchipNumber) {
+        pass.auxiliaryFields.push({
+          key: 'microchipFront',
+          label: t.microchip,
+          value: pet.microchipNumber,
+          textAlignment: 'PKTextAlignmentRight',
+          row: 1,
+        });
+      }
 
       // (Phần Avatar và BackFields giữ nguyên format cũ, chỉ thay text t.*)
       // const photoUrl = pet.photoUrl;
