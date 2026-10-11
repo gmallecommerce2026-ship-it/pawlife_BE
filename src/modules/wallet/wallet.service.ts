@@ -102,12 +102,12 @@ export class WalletService {
     const bg = this.getCardBackground();
 
     const make = async (s: number): Promise<Buffer> => {
-      const W = 375 * s, H = 144 * s;
+      const W = 375 * s, H = 220 * s;   // trước là 144
       const PAD = 24 * s;
-      const TILE = 124 * s;       // ô trắng chứa QR
-      const TILE_R = 14 * s;      // bo góc
-      const INNER = TILE - 16 * s; // QR nằm trong ô, chừa viền trắng 8pt mỗi bên
-      const AV = 100 * s;
+      const TILE = 172 * s;             // trước là 124
+      const TILE_R = 18 * s;
+      const INNER = TILE - 20 * s;
+      const AV = 120 * s;               // trước là 100
       const RING = 4 * s;
 
       // --- Ô trắng bo góc chứa QR ---
