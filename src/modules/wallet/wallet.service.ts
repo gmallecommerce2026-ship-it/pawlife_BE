@@ -159,18 +159,15 @@ export class WalletService {
     // ===== Chỉnh nhanh tại đây (đơn vị pt, ở @1x) =====
     const TEXT_COLOR = '#E89B5A';
     const TITLE_SIZE = 40, TITLE_MIN = 24;
-    const SUB_SIZE = 12, SUB_MIN = 9;   
+    const SUB_SIZE = 15, SUB_MIN = 11;
+    const TITLE_BASELINE = 70;
+    const SUB_BASELINE = 100;      // tăng số này để giống·giới tính cách tên xa hơn
     const LEFT = 22, GAP_TO_AVATAR = 16;
-    const STRIP_H = 180;            // trước: 144
-    const AVATAR = 140;             // trước: 118, lớn hơn cho cân với strip cao hơn
-    const TITLE_BASELINE = 85;      // trước: 70
-    const SUB_BASELINE = 112;       // trước: 100
-
     // ===================================================
 
     const make = async (s: number): Promise<Buffer> => {
-      const W = 375 * s, H = STRIP_H * s;
-      const AV = AVATAR * s;
+      const W = 375 * s, H = 144 * s;
+      const AV = 118 * s;
       const RING = 5 * s;
       const PAD = 22 * s;
       const cx = W - PAD - AV / 2;
