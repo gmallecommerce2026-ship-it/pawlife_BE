@@ -102,12 +102,12 @@ export class WalletService {
     const bg = this.getCardBackground();
 
     const make = async (s: number): Promise<Buffer> => {
-      const W = 375 * s, H = 220 * s;   // trước là 144
+      const W = 375 * s, H = 144 * s;
       const PAD = 24 * s;
-      const TILE = 172 * s;             // trước là 124
-      const TILE_R = 18 * s;
-      const INNER = TILE - 20 * s;
-      const AV = 120 * s;               // trước là 100
+      const TILE = 124 * s;       // ô trắng chứa QR
+      const TILE_R = 14 * s;      // bo góc
+      const INNER = TILE - 16 * s; // QR nằm trong ô, chừa viền trắng 8pt mỗi bên
+      const AV = 100 * s;
       const RING = 4 * s;
 
       // --- Ô trắng bo góc chứa QR ---
@@ -341,38 +341,17 @@ export class WalletService {
       const dobLabel = t.dob + '\u2007'.repeat(dobFigureCount) + TRAILING_SPACER;
 
 
-      pass.headerFields.push({
-        key: 'docType',
-        value: t.docType,
-        textAlignment: 'PKTextAlignmentRight',
-      });
+      pass.headerFields.push({ key: 'docType', value: t.docType });
 
-      // Hàng 1: tên bé (trái) | mã (phải)
       pass.secondaryFields.push(
         { key: 'petName', label: t.name, value: pet.name },
-        {
-          key: 'petCode',
-          label: t.pawLifeId,
-          value: displayCode,
-          textAlignment: 'PKTextAlignmentRight',
-        },
+        { key: 'petCode', label: t.pawLifeId, value: displayCode, textAlignment: 'PKTextAlignmentRight' },
       );
 
-      // Hàng 2: giống + giới tính gộp một field (trái) | ngày sinh (phải)
-      const breedText = pet.breed ?? pet.species;
-      const genderText = this.toGenderText(pet.gender, lang);
       pass.auxiliaryFields.push(
-        {
-          key: 'breedGender',
-          label: isVi ? 'Giống · Giới tính' : 'Breed · Gender',
-          value: genderText === '—' ? breedText : `${breedText} · ${genderText}`,
-        },
-        {
-          key: 'dob',
-          label: t.dob,
-          value: this.toDobText(pet.dob),
-          textAlignment: 'PKTextAlignmentRight',
-        },
+        { key: 'breed', label: t.breed, value: pet.breed ?? pet.species },
+        { key: 'gender', label: t.gender, value: this.toGenderText(pet.gender, lang) },
+        { key: 'dob', label: t.dob, value: this.toDobText(pet.dob), textAlignment: 'PKTextAlignmentRight' },
       );
 
       // (Phần Avatar và BackFields giữ nguyên format cũ, chỉ thay text t.*)
