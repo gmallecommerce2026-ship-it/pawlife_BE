@@ -440,8 +440,9 @@ export class WalletService {
 
 
       pass.headerFields.push({
-        key: 'docType',
-        value: t.docType,
+        key: 'petCode',
+        label: t.pawLifeId,
+        value: displayCode,
         textAlignment: 'PKTextAlignmentRight',
       });
 
@@ -462,8 +463,7 @@ export class WalletService {
       // Hàng 2: giống · giới tính | microchip
       const breedText = pet.breed ?? pet.species;
       const genderText = this.toGenderText(pet.gender, lang);
-      const breedGender =
-        genderText === '—' ? breedText : `${breedText} · ${genderText}`;
+      const subtitle = genderText === '—' ? '' : genderText;
 
       // Primary: label = giống · giới tính, value = tên pet
       // pass.primaryFields.push({
@@ -472,9 +472,9 @@ export class WalletService {
       //   value: pet.name,
       // });
 
-      // Hàng 1: mã | ngày sinh (giữ nguyên)
+
       pass.secondaryFields.push(
-        { key: 'petCode', label: t.pawLifeId, value: displayCode },
+        { key: 'breed', label: t.breed, value: breedText },
         {
           key: 'dob',
           label: t.dob,
@@ -494,7 +494,7 @@ export class WalletService {
 
       // Strip hero (avatar)
       try {
-        const strip = await this.buildHeroStrip(pet.photoUrl, pet.name, breedGender);
+        const strip = await this.buildHeroStrip(pet.photoUrl, pet.name, subtitle);
         pass.addBuffer('strip.png', strip.x1);
         pass.addBuffer('strip@2x.png', strip.x2);
         pass.addBuffer('strip@3x.png', strip.x3);
