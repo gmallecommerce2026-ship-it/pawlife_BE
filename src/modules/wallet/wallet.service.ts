@@ -164,17 +164,24 @@ export class WalletService {
     // ===== Chỉnh nhanh tại đây (đơn vị pt, ở @1x) =====
     const BREED_BASELINE = 106;
     const TEXT_COLOR = '#E89B5A';
-    const LABEL_COLOR = this.mixHex(TEXT_COLOR, bg, 0.45);   // nhãn nhạt hơn giá trị
-    const TITLE_SIZE = 40, TITLE_MIN = 24;
+    const LABEL_COLOR = '#FFFFFF';           // đổi theo labelColor trong pass.json
+    const VALUE_COLOR = '#FFFFFF';           // đổi theo foregroundColor trong pass.json
+
+    const STRIP_H = 144;                     // KHÔNG vượt quá, Wallet sẽ cắt
+    const LEFT = 16, GAP_TO_AVATAR = 12;
+    const ROW_MARGIN = 16;
+
+    const AVATAR = 90;                       // trước: 118
+    const AV_TOP = 6;                        // avatar chiếm y = 6 → 96
+
+    const TITLE_SIZE = 34, TITLE_MIN = 22;
+    const TITLE_BASELINE = 52;
     const SUB_SIZE = 12, SUB_MIN = 9;
-    const LEFT = 22, GAP_TO_AVATAR = 16;
-    const STRIP_H = 180;
-    const AVATAR = 118;
-    const AV_TOP = 10;                       // avatar dồn lên trên
-    const TITLE_BASELINE = 68;
-    const SUB_BASELINE = 92;
-    const ROW_LABEL_BASELINE = 148;          // nhãn hàng "secondary" giả
-    const ROW_VALUE_BASELINE = 168;
+    const SUB_BASELINE = 72;
+
+    const ROW_LABEL_SIZE = 10, ROW_VALUE_SIZE = 15;
+    const ROW_LABEL_BASELINE = 112;          // dưới avatar 16pt
+    const ROW_VALUE_BASELINE = 132;          // chừa 12pt cho phần đuôi chữ (g, y, ...)
     // ===================================================
 
     const make = async (s: number): Promise<Buffer> => {
@@ -192,11 +199,10 @@ export class WalletService {
         `<defs><filter id="b" x="-50%" y="-50%" width="200%" height="200%">` +
         `<feGaussianBlur stdDeviation="${5 * s}"/></filter></defs>` +
         `<circle cx="${W * 0.55}" cy="${cy}" r="${H * 0.95}" fill="${light}" fill-opacity="0.35"/>` +
-        `<circle cx="${cx}" cy="${cy}" r="${AV * 0.82}" fill="#ffffff" fill-opacity="0.22"/>` +
+        `<circle cx="${cx}" cy="${cy}" r="${AV * 0.7}" fill="#ffffff" fill-opacity="0.22"/>` +
         // dấu chân đặt tránh vùng chữ
-        this.pawSvg(W * 0.06, H * 0.5, 12 * s, deep, 0.16) +
-        this.pawSvg(W * 0.4, H * 0.5, 14 * s, deep, 0.14) +
-        this.pawSvg(W * 0.56, H * 0.1, 10 * s, deep, 0.14) +
+        this.pawSvg(W * 0.30, H * 0.40, 10 * s, deep, 0.14) +
+        this.pawSvg(W * 0.52, H * 0.12, 9 * s, deep, 0.14) +
         `<circle cx="${cx}" cy="${cy + 4 * s}" r="${AV / 2}" fill="#000" fill-opacity="0.22" filter="url(#b)"/>` +
         `</svg>`,
       );
