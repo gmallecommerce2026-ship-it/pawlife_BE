@@ -5,6 +5,7 @@ import * as path from 'path';
 import jsQR from 'jsqr';
 import { PNG } from 'pngjs';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import sharp from 'sharp';
 
 const arg = (n: string) => process.argv.find((a) => a.startsWith(`--${n}=`))?.split('=')[1];
 const FROM = Number(arg('from') ?? 801);
@@ -25,15 +26,14 @@ function extractId(data: string) {
     return s.replace(/[^a-zA-Z0-9-_]/g, '').toUpperCase();
 }
 
-function decode(file: string): string | null {
-    const png = PNG.sync.read(fs.readFileSync(path.join(DIR, file)));
-    const d = png.data;
-    for (let i = 0; i < d.length; i += 4) { // nền trong suốt -> nền trắng
-        const a = d[i + 3] / 255;
-        for (let c = 0; c < 3; c++) d[i + c] = d[i + c] * a + 255 * (1 - a);
-        d[i + 3] = 255;
-    }
-    return jsQR(new Uint8ClampedArray(d), png.width, png.height)?.data ?? null;
+async function decode(file: string): Promise<string | null> {
+  const { data, info } = await sharp(path.join(DIR, file))
+    .flatten({ background: '#ffffff' })   // nền trong suốt -> trắng
+    .ensureAlpha()                        // jsQR cần RGBA
+    .resize(600, 600, { fit: 'inside', withoutEnlargement: true })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  return jsQR(new Uint8ClampedArray(data), info.width, info.height)?.data ?? null;
 }
 
 async function main() {
