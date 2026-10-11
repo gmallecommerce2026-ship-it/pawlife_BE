@@ -54,7 +54,33 @@ export class WalletService {
   private toDisplayCode(sourceId: string): string {
     return `${sourceId.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
   }
+  private cardBgCache: string | null = null;
 
+  // Đọc backgroundColor từ pass.json trong template → strip luôn trùng màu thẻ
+  private getCardBackground(): string {
+    if (this.cardBgCache) return this.cardBgCache;
+    let hex = '#E89B5A'; // dự phòng nếu không đọc được
+    try {
+      const raw = JSON.parse(
+        fs.readFileSync(path.join(this.templatePath, 'pass.json'), 'utf8'),
+      );
+      const bg: string | undefined = raw.backgroundColor;
+      const m = bg?.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i);
+      if (m) {
+        hex =
+          '#' +
+          [m[1], m[2], m[3]]
+            .map(n => Number(n).toString(16).padStart(2, '0'))
+            .join('');
+      } else if (bg && /^#[0-9a-f]{6}$/i.test(bg)) {
+        hex = bg;
+      }
+    } catch (error) {
+      console.warn('⚠️ Không đọc được backgroundColor, dùng màu mặc định');
+    }
+    this.cardBgCache = hex;
+    return hex;
+  }
   private async buildQrStrip(
     tagId: string,
     photoUrl: string | null,
@@ -73,33 +99,66 @@ export class WalletService {
       photoUrl ? fetchBuf(photoUrl).catch(() => null) : Promise.resolve(null),
     ]);
 
-    // strip storeCard: 375x144pt, vẽ ở @1x/@2x/@3x
-    const make = async (s: number): Promise<Buffer> => {
-      const W = 375 * s, H = 144 * s, QR = 124 * s, AV = 100 * s, PAD = 24 * s;
+    const bg = this.getCardBackground();
 
+    const make = async (s: number): Promise<Buffer> => {
+      const W = 375 * s, H = 144 * s;
+      const PAD = 24 * s;
+      const TILE = 124 * s;       // ô trắng chứa QR
+      const TILE_R = 14 * s;      // bo góc
+      const INNER = TILE - 16 * s; // QR nằm trong ô, chừa viền trắng 8pt mỗi bên
+      const AV = 100 * s;
+      const RING = 4 * s;
+
+      // --- Ô trắng bo góc chứa QR ---
       const qr = await sharp(qrSrc)
         .flatten({ background: '#ffffff' })
-        .resize(QR, QR, { fit: 'contain', background: '#ffffff', kernel: 'nearest' })
+        .resize(INNER, INNER, { fit: 'contain', background: '#ffffff', kernel: 'nearest' })
+        .png()
+        .toBuffer();
+
+      const tileMask = Buffer.from(
+        `<svg width="${TILE}" height="${TILE}"><rect width="${TILE}" height="${TILE}" rx="${TILE_R}" ry="${TILE_R}"/></svg>`,
+      );
+      const tile = await sharp({
+        create: { width: TILE, height: TILE, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } },
+      })
+        .composite([
+          { input: qr, gravity: 'center' },
+          { input: tileMask, blend: 'dest-in' },
+        ])
         .png()
         .toBuffer();
 
       const layers: sharp.OverlayOptions[] = [
-        { input: qr, left: W - PAD - QR, top: Math.round((H - QR) / 2) },
+        { input: tile, left: W - PAD - TILE, top: Math.round((H - TILE) / 2) },
       ];
 
+      // --- Avatar tròn có viền trắng, nằm thẳng trên nền cam ---
       if (avatarSrc) {
-        const mask = Buffer.from(
-          `<svg width="${AV}" height="${AV}"><circle cx="${AV / 2}" cy="${AV / 2}" r="${AV / 2}"/></svg>`,
+        const inner = AV - 2 * RING;
+        const innerMask = Buffer.from(
+          `<svg width="${inner}" height="${inner}"><circle cx="${inner / 2}" cy="${inner / 2}" r="${inner / 2}"/></svg>`,
         );
-        const avatar = await sharp(avatarSrc)
-          .resize(AV, AV, { fit: 'cover' })
-          .composite([{ input: mask, blend: 'dest-in' }])
+        const avatarImg = await sharp(avatarSrc)
+          .resize(inner, inner, { fit: 'cover' })
+          .composite([{ input: innerMask, blend: 'dest-in' }])
           .png()
           .toBuffer();
+
+        const ringBase = Buffer.from(
+          `<svg width="${AV}" height="${AV}"><circle cx="${AV / 2}" cy="${AV / 2}" r="${AV / 2}" fill="#ffffff"/></svg>`,
+        );
+        const avatar = await sharp(ringBase)
+          .composite([{ input: avatarImg, gravity: 'center' }])
+          .png()
+          .toBuffer();
+
         layers.push({ input: avatar, left: PAD, top: Math.round((H - AV) / 2) });
       }
 
-      return sharp({ create: { width: W, height: H, channels: 3, background: '#ffffff' } })
+      // Nền strip = đúng màu card
+      return sharp({ create: { width: W, height: H, channels: 3, background: bg } })
         .composite(layers)
         .png()
         .toBuffer();
@@ -282,17 +341,38 @@ export class WalletService {
       const dobLabel = t.dob + '\u2007'.repeat(dobFigureCount) + TRAILING_SPACER;
 
 
-      pass.headerFields.push({ key: 'docType', value: t.docType });
+      pass.headerFields.push({
+        key: 'docType',
+        value: t.docType,
+        textAlignment: 'PKTextAlignmentRight',
+      });
 
+      // Hàng 1: tên bé (trái) | mã (phải)
       pass.secondaryFields.push(
         { key: 'petName', label: t.name, value: pet.name },
-        { key: 'petCode', label: t.pawLifeId, value: displayCode, textAlignment: 'PKTextAlignmentRight' },
+        {
+          key: 'petCode',
+          label: t.pawLifeId,
+          value: displayCode,
+          textAlignment: 'PKTextAlignmentRight',
+        },
       );
 
+      // Hàng 2: giống + giới tính gộp một field (trái) | ngày sinh (phải)
+      const breedText = pet.breed ?? pet.species;
+      const genderText = this.toGenderText(pet.gender, lang);
       pass.auxiliaryFields.push(
-        { key: 'breed', label: t.breed, value: pet.breed ?? pet.species },
-        { key: 'gender', label: t.gender, value: this.toGenderText(pet.gender, lang) },
-        { key: 'dob', label: t.dob, value: this.toDobText(pet.dob), textAlignment: 'PKTextAlignmentRight' },
+        {
+          key: 'breedGender',
+          label: isVi ? 'Giống · Giới tính' : 'Breed · Gender',
+          value: genderText === '—' ? breedText : `${breedText} · ${genderText}`,
+        },
+        {
+          key: 'dob',
+          label: t.dob,
+          value: this.toDobText(pet.dob),
+          textAlignment: 'PKTextAlignmentRight',
+        },
       );
 
       // (Phần Avatar và BackFields giữ nguyên format cũ, chỉ thay text t.*)
