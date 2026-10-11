@@ -7,7 +7,8 @@
   "serialNumber": "TEMPLATE",
   "backgroundColor": "rgb(255, 223, 173)",
   "foregroundColor": "rgb(74, 53, 34)",
-  "labelColor": "rgb(232, 155, 90)",
+  "labelColor": "rgb(160, 96, 40)",
+  "suppressStripShine": true,
   "storeCard": {
     "headerFields": [],
     "primaryFields": [],

@@ -81,83 +81,90 @@ export class WalletService {
     this.cardBgCache = hex;
     return hex;
   }
-  private async buildQrStrip(
-    tagId: string,
+  // Dấu chân (SVG, không phụ thuộc font)
+  private pawSvg(cx: number, cy: number, r: number, fill: string, opacity: number): string {
+    const e = (x: number, y: number, rx: number, ry: number) =>
+      `<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="${fill}" fill-opacity="${opacity}"/>`;
+    return (
+      e(cx, cy + r * 0.25, r * 0.55, r * 0.45) +
+      e(cx - r * 0.65, cy - r * 0.15, r * 0.2, r * 0.27) +
+      e(cx - r * 0.22, cy - r * 0.6, r * 0.2, r * 0.27) +
+      e(cx + r * 0.22, cy - r * 0.6, r * 0.2, r * 0.27) +
+      e(cx + r * 0.65, cy - r * 0.15, r * 0.2, r * 0.27)
+    );
+  }
+
+  // Strip hero: nền trùng màu thẻ + họa tiết mờ + avatar tròn lớn bên phải.
+  // Bên trái để trống cho primary field (tên pet) đè lên.
+  private async buildHeroStrip(
     photoUrl: string | null,
   ): Promise<{ x1: Buffer; x2: Buffer; x3: Buffer }> {
-    const base =
-      this.configService.get<string>('R2_PUBLIC_URL') ??
-      'https://pub-35c6d59c9e96467b9783df2a4e890a09.r2.dev';
-
-    const fetchBuf = async (url: string) =>
-      Buffer.from(
-        (await axios.get<ArrayBuffer>(url, { responseType: 'arraybuffer', timeout: 3000 })).data,
-      );
-
-    const [qrSrc, avatarSrc] = await Promise.all([
-      fetchBuf(`${base}/qr-codes/${tagId}.png`),
-      photoUrl ? fetchBuf(photoUrl).catch(() => null) : Promise.resolve(null),
-    ]);
+    const avatarSrc = photoUrl
+      ? await axios
+        .get<ArrayBuffer>(photoUrl, { responseType: 'arraybuffer', timeout: 3000 })
+        .then(r => Buffer.from(r.data))
+        .catch(() => null)
+      : null;
 
     const bg = this.getCardBackground();
+    const deep = this.mixHex(bg, '#C2662B', 0.25);   // đậm hơn một chút cho họa tiết
+    const light = this.mixHex(bg, '#FFFFFF', 0.45);
 
     const make = async (s: number): Promise<Buffer> => {
       const W = 375 * s, H = 144 * s;
-      const PAD = 20 * s;
-      const AV = 124 * s;                // avatar to
-      const RING = 4 * s;
-      const TILE = 100 * s;              // ô QR nhỏ hơn avatar
-      const TILE_R = 14 * s;
-      const INNER = TILE - 12 * s;
+      const AV = 118 * s;
+      const RING = 5 * s;
+      const PAD = 22 * s;
+      const cx = W - PAD - AV / 2;
+      const cy = H / 2;
 
-      // --- Ô trắng bo góc chứa QR ---
-      const qr = await sharp(qrSrc)
-        .flatten({ background: '#ffffff' })
-        .resize(INNER, INNER, { fit: 'contain', background: '#ffffff', kernel: 'nearest' })
-        .png()
-        .toBuffer();
-
-      const tileMask = Buffer.from(
-        `<svg width="${TILE}" height="${TILE}"><rect width="${TILE}" height="${TILE}" rx="${TILE_R}" ry="${TILE_R}"/></svg>`,
+      // Lớp trang trí: vòng tròn mềm + dấu chân + bóng đổ avatar
+      const decor = Buffer.from(
+        `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">` +
+        `<defs><filter id="b" x="-50%" y="-50%" width="200%" height="200%">` +
+        `<feGaussianBlur stdDeviation="${5 * s}"/></filter></defs>` +
+        `<circle cx="${W * 0.55}" cy="${cy}" r="${H * 0.95}" fill="${light}" fill-opacity="0.35"/>` +
+        `<circle cx="${cx}" cy="${cy}" r="${AV * 0.82}" fill="#ffffff" fill-opacity="0.22"/>` +
+        this.pawSvg(W * 0.08, H * 0.22, 12 * s, deep, 0.16) +
+        this.pawSvg(W * 0.30, H * 0.86, 15 * s, deep, 0.14) +
+        this.pawSvg(W * 0.50, H * 0.20, 10 * s, deep, 0.14) +
+        `<circle cx="${cx}" cy="${cy + 4 * s}" r="${AV / 2}" fill="#000" fill-opacity="0.22" filter="url(#b)"/>` +
+        `</svg>`,
       );
-      const tile = await sharp({
-        create: { width: TILE, height: TILE, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } },
-      })
-        .composite([
-          { input: qr, gravity: 'center' },
-          { input: tileMask, blend: 'dest-in' },
-        ])
-        .png()
-        .toBuffer();
 
-      const layers: sharp.OverlayOptions[] = [
-        { input: tile, left: W - PAD - TILE, top: Math.round((H - TILE) / 2) },
-      ];
+      const layers: sharp.OverlayOptions[] = [{ input: decor, left: 0, top: 0 }];
 
-      // --- Avatar tròn có viền trắng, nằm thẳng trên nền cam ---
+      const ringBase = Buffer.from(
+        `<svg width="${AV}" height="${AV}"><circle cx="${AV / 2}" cy="${AV / 2}" r="${AV / 2}" fill="#ffffff"/></svg>`,
+      );
+
+      let avatarLayer: Buffer;
       if (avatarSrc) {
         const inner = AV - 2 * RING;
-        const innerMask = Buffer.from(
+        const mask = Buffer.from(
           `<svg width="${inner}" height="${inner}"><circle cx="${inner / 2}" cy="${inner / 2}" r="${inner / 2}"/></svg>`,
         );
-        const avatarImg = await sharp(avatarSrc)
+        const img = await sharp(avatarSrc)
           .resize(inner, inner, { fit: 'cover' })
-          .composite([{ input: innerMask, blend: 'dest-in' }])
+          .composite([{ input: mask, blend: 'dest-in' }])
           .png()
           .toBuffer();
-
-        const ringBase = Buffer.from(
-          `<svg width="${AV}" height="${AV}"><circle cx="${AV / 2}" cy="${AV / 2}" r="${AV / 2}" fill="#ffffff"/></svg>`,
+        avatarLayer = await sharp(ringBase)
+          .composite([{ input: img, gravity: 'center' }])
+          .png()
+          .toBuffer();
+      } else {
+        // Không có ảnh → vòng tròn trắng + dấu chân
+        const paw = Buffer.from(
+          `<svg width="${AV}" height="${AV}" xmlns="http://www.w3.org/2000/svg">` +
+          `<circle cx="${AV / 2}" cy="${AV / 2}" r="${AV / 2}" fill="#ffffff"/>` +
+          this.pawSvg(AV / 2, AV / 2, AV * 0.28, bg, 1) +
+          `</svg>`,
         );
-        const avatar = await sharp(ringBase)
-          .composite([{ input: avatarImg, gravity: 'center' }])
-          .png()
-          .toBuffer();
-
-        layers.push({ input: avatar, left: PAD, top: Math.round((H - AV) / 2) });
+        avatarLayer = await sharp(paw).png().toBuffer();
       }
+      layers.push({ input: avatarLayer, left: Math.round(cx - AV / 2), top: Math.round(cy - AV / 2) });
 
-      // Nền strip = đúng màu card
       return sharp({ create: { width: W, height: H, channels: 3, background: bg } })
         .composite(layers)
         .png()
@@ -360,17 +367,11 @@ export class WalletService {
       // Label padding trick:
       // - "PawLife ID" (10 chars) và "Mã PawLife" (10 chars) -> Dùng chung padding
       // - "Date of Birth" (13 chars) và "Ngày sinh" (9 chars) -> Bản Tiếng Việt cần nhiều padding hơn một chút để cân bằng
-      const FIGURE_BASE = 10;
       // Spacer cuối PHẢI giống nhau tuyệt đối giữa mọi label cùng cột, không được lệch số lượng
-      const TRAILING_SPACER = '\u2009\u2009\u2009\u200B';
 
       // petCode luôn dùng FIGURE_BASE làm chuẩn tham chiếu
-      const petCodeLabel = t.pawLifeId + '\u2007'.repeat(FIGURE_BASE) + TRAILING_SPACER;
 
       // dob: bù trừ theo đúng số ký tự chênh lệch so với label petCode (không đoán mò theo ngôn ngữ nữa)
-      const lengthDiff = t.pawLifeId.length - t.dob.length; // vi: 10-9=+1 | en: 10-13=-3
-      const dobFigureCount = Math.max(FIGURE_BASE + lengthDiff, 0); // vi: 11 | en: 7
-      const dobLabel = t.dob + '\u2007'.repeat(dobFigureCount) + TRAILING_SPACER;
 
 
       pass.headerFields.push({
@@ -379,21 +380,12 @@ export class WalletService {
         textAlignment: 'PKTextAlignmentRight',
       });
 
-      // Hàng 1: tên | mã
-      pass.secondaryFields.push(
-        { key: 'petName', label: t.name, value: pet.name },
-        { key: 'petCode', label: t.pawLifeId, value: displayCode, textAlignment: 'PKTextAlignmentRight' },
-      );
+      // Tên pet to, nằm đè lên strip (bên trái avatar)
+      pass.primaryFields.push({ key: 'petName', label: t.name, value: pet.name });
 
-      // Hàng 2: giống · giới tính | ngày sinh  (tổng đúng 4 field)
-      const breedText = pet.breed ?? pet.species;
-      const genderText = this.toGenderText(pet.gender, lang);
-      pass.auxiliaryFields.push(
-        {
-          key: 'breedGender',
-          label: isVi ? 'Giống · Giới tính' : 'Breed · Gender',
-          value: genderText === '—' ? breedText : `${breedText} · ${genderText}`,
-        },
+      // Hàng 1: mã | ngày sinh
+      pass.secondaryFields.push(
+        { key: 'petCode', label: t.pawLifeId, value: displayCode },
         {
           key: 'dob',
           label: t.dob,
@@ -401,38 +393,35 @@ export class WalletService {
           textAlignment: 'PKTextAlignmentRight',
         },
       );
+
+      // Hàng 2: giống · giới tính | microchip
+      const breedText = pet.breed ?? pet.species;
+      const genderText = this.toGenderText(pet.gender, lang);
+      pass.auxiliaryFields.push({
+        key: 'breedGender',
+        label: isVi ? 'Giống · Giới tính' : 'Breed · Gender',
+        value: genderText === '—' ? breedText : `${breedText} · ${genderText}`,
+      });
       if (pet.microchipNumber) {
         pass.auxiliaryFields.push({
           key: 'microchipFront',
           label: t.microchip,
           value: pet.microchipNumber,
           textAlignment: 'PKTextAlignmentRight',
-          row: 1,
         });
       }
 
-      // (Phần Avatar và BackFields giữ nguyên format cũ, chỉ thay text t.*)
-      // const photoUrl = pet.photoUrl;
-      // if (photoUrl) {
-      //   try {
-      //     const thumb = await this.buildCircleThumbnails(photoUrl);
-      //     pass.addBuffer('thumbnail.png', thumb.x1);
-      //     pass.addBuffer('thumbnail@2x.png', thumb.x2);
-      //     pass.addBuffer('thumbnail@3x.png', thumb.x3);
-      //   } catch (error) {
-      //     console.warn('⚠️ Skipping thumbnail...', error instanceof Error ? error.message : error);
-      //   }
-      // }
-      if (activeTag) {
-        try {
-          const strip = await this.buildQrStrip(activeTag.id, pet.photoUrl);
-          pass.addBuffer('strip.png', strip.x1);
-          pass.addBuffer('strip@2x.png', strip.x2);
-          pass.addBuffer('strip@3x.png', strip.x3);
-        } catch (error) {
-          console.warn('⚠️ Skipping QR strip...', error instanceof Error ? error.message : error);
-        }
+      // Strip hero (avatar)
+      try {
+        const strip = await this.buildHeroStrip(pet.photoUrl);
+        pass.addBuffer('strip.png', strip.x1);
+        pass.addBuffer('strip@2x.png', strip.x2);
+        pass.addBuffer('strip@3x.png', strip.x3);
+      } catch (error) {
+        console.warn('⚠️ Skipping hero strip...', error instanceof Error ? error.message : error);
       }
+
+      // Background gradient (giữ nguyên)
       try {
         const bgImg = await this.buildBackground();
         pass.addBuffer('background.png', bgImg.x1);
@@ -441,37 +430,22 @@ export class WalletService {
       } catch (error) {
         console.warn('⚠️ Skipping background...', error instanceof Error ? error.message : error);
       }
-      // Back of card
+
+      // Mặt sau (giữ nguyên)
       pass.backFields.push(
         { key: 'fullId', label: t.fullId, value: pet.id },
         { key: 'profile', label: t.profilePage, value: profileUrl },
+        { key: 'guide', label: t.guideLabel, value: t.guideValue },
       );
-      if (pet.microchipNumber) {
-        pass.backFields.push({
-          key: 'microchip',
-          label: t.microchip,
-          value: pet.microchipNumber,
-        });
-      }
-      pass.backFields.push({
-        key: 'guide',
-        label: t.guideLabel,
-        value: t.guideValue,
-      });
 
-      // ✅ SỬA: trước đây dùng pet.qrCodeUrl (field tĩnh, không đồng bộ khi
-      // user Replace/Transfer tag) → giờ lấy đúng tag ACTIVE giống FE
-
-
+      // QR native ở cuối thẻ → lấp khoảng trống, Wallet tự tăng sáng khi quét
       const qrValue = activeTag?.qrPayload ?? activeTag?.id ?? profileUrl;
-
-      // pass.setBarcodes({
-      //   message: qrValue,
-      //   format: 'PKBarcodeFormatQR',
-      //   messageEncoding: 'iso-8859-1',
-      //   altText: displayCode,
-      // });
-
+      pass.setBarcodes({
+        message: qrValue,
+        format: 'PKBarcodeFormatQR',
+        messageEncoding: 'iso-8859-1',
+        altText: displayCode,
+      });
 
       return {
         buffer: pass.getAsBuffer(),
