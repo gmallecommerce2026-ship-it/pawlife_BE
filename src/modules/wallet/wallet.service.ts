@@ -282,30 +282,17 @@ export class WalletService {
       const dobLabel = t.dob + '\u2007'.repeat(dobFigureCount) + TRAILING_SPACER;
 
 
-      pass.headerFields.push({
-        key: 'docType',
-        value: t.docType,
-      });
+      pass.headerFields.push({ key: 'docType', value: t.docType });
 
       pass.secondaryFields.push(
         { key: 'petName', label: t.name, value: pet.name },
-        { key: 'breed', label: t.breed, value: pet.breed ?? pet.species },
-        { key: 'petCode', label: petCodeLabel, value: displayCode, textAlignment: 'PKTextAlignmentLeft' },
+        { key: 'petCode', label: t.pawLifeId, value: displayCode, textAlignment: 'PKTextAlignmentRight' },
       );
 
-
       pass.auxiliaryFields.push(
-        {
-          key: 'gender',
-          label: t.gender,
-          value: this.toGenderText(pet.gender, lang), // Truyền lang vào đây
-        },
-        {
-          key: 'dob',
-          label: dobLabel,
-          value: this.toDobText(pet.dob),
-          textAlignment: 'PKTextAlignmentLeft',
-        },
+        { key: 'breed', label: t.breed, value: pet.breed ?? pet.species },
+        { key: 'gender', label: t.gender, value: this.toGenderText(pet.gender, lang) },
+        { key: 'dob', label: t.dob, value: this.toDobText(pet.dob), textAlignment: 'PKTextAlignmentRight' },
       );
 
       // (Phần Avatar và BackFields giữ nguyên format cũ, chỉ thay text t.*)
@@ -354,12 +341,12 @@ export class WalletService {
 
       const qrValue = activeTag?.qrPayload ?? activeTag?.id ?? profileUrl;
 
-      pass.setBarcodes({
-        message: qrValue,
-        format: 'PKBarcodeFormatQR',
-        messageEncoding: 'iso-8859-1',
-        altText: displayCode,
-      });
+      // pass.setBarcodes({
+      //   message: qrValue,
+      //   format: 'PKBarcodeFormatQR',
+      //   messageEncoding: 'iso-8859-1',
+      //   altText: displayCode,
+      // });
 
 
       return {
