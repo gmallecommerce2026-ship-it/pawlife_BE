@@ -262,6 +262,38 @@ export class WalletService {
     return tags.find(t => t.status === 'ACTIVE') ?? tags[0];
   }
 
+  // Trộn màu hex với màu khác theo tỉ lệ (0 = giữ nguyên, 1 = thành màu kia)
+  private mixHex(hex: string, withHex: string, ratio: number): string {
+    const p = (h: string) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+    const a = p(hex), b = p(withHex);
+    return (
+      '#' +
+      a
+        .map((v, i) => Math.round(v + (b[i] - v) * ratio).toString(16).padStart(2, '0'))
+        .join('')
+    );
+  }
+
+  // Ảnh nền gradient: nửa trên đúng màu card (liền mạch với strip), nửa dưới nhạt dần
+  private async buildBackground(): Promise<{ x1: Buffer; x2: Buffer; x3: Buffer }> {
+    const top = this.getCardBackground();
+    const bottom = this.mixHex(top, '#FFFFFF', 0.75);
+
+    const make = (s: number): Promise<Buffer> => {
+      const W = 180 * s, H = 220 * s;
+      const svg =
+        `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">` +
+        `<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">` +
+        `<stop offset="0%" stop-color="${top}"/>` +
+        `<stop offset="50%" stop-color="${top}"/>` +
+        `<stop offset="100%" stop-color="${bottom}"/>` +
+        `</linearGradient></defs>` +
+        `<rect width="${W}" height="${H}" fill="url(#g)"/></svg>`;
+      return sharp(Buffer.from(svg)).png().toBuffer();
+    };
+
+    return { x1: await make(1), x2: await make(2), x3: await make(3) };
+  }
 
   // Generate .pkpass (Static Pass) for a pet — returns buffer for controller to stream to client
   async generatePetPass(
@@ -400,6 +432,14 @@ export class WalletService {
         } catch (error) {
           console.warn('⚠️ Skipping QR strip...', error instanceof Error ? error.message : error);
         }
+      }
+      try {
+        const bgImg = await this.buildBackground();
+        pass.addBuffer('background.png', bgImg.x1);
+        pass.addBuffer('background@2x.png', bgImg.x2);
+        pass.addBuffer('background@3x.png', bgImg.x3);
+      } catch (error) {
+        console.warn('⚠️ Skipping background...', error instanceof Error ? error.message : error);
       }
       // Back of card
       pass.backFields.push(
