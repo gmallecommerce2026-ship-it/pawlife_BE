@@ -124,6 +124,7 @@ export class WalletService {
     minSize: number,
     maxWidth: number,
     fill: string,
+    anchor: 'start' | 'end' = 'start',
   ): string {
     let sz = size;
     while (sz > minSize && font.getAdvanceWidth(text, sz) > maxWidth) sz -= 1;
@@ -134,7 +135,9 @@ export class WalletService {
       }
       t = t.trimEnd() + '…';
     }
-    const d = font.getPath(t, x, baseline, sz).toPathData(2);
+    const w = font.getAdvanceWidth(t, sz);
+    const x0 = anchor === 'end' ? x - w : x;
+    const d = font.getPath(t, x0, baseline, sz).toPathData(2);
     return `<path d="${d}" fill="${fill}"/>`;
   }
   // Strip hero: nền trùng màu thẻ + họa tiết mờ + avatar tròn lớn bên phải.
@@ -142,8 +145,9 @@ export class WalletService {
   private async buildHeroStrip(
     photoUrl: string | null,
     title: string,
-    breed: string,
-    subtitle: string,   // "Cái · 12/03/2022"
+    subtitle: string,                       // chỉ còn giới tính
+    breed: { label: string; value: string },
+    dob: { label: string; value: string },
   ): Promise<{ x1: Buffer; x2: Buffer; x3: Buffer }> {
     const avatarSrc = photoUrl
       ? await axios
@@ -158,15 +162,19 @@ export class WalletService {
     const { bold, medium } = this.getFonts();
 
     // ===== Chỉnh nhanh tại đây (đơn vị pt, ở @1x) =====
-    const TEXT_COLOR = '#E89B5A';
-    const LEFT = 22, GAP_TO_AVATAR = 16;
-    const TITLE_SIZE = 40, TITLE_MIN = 24;
-    const SUB_SIZE = 12, SUB_MIN = 9;        // trước: 15 / 11
-    const STRIP_H = 180;
-    const AVATAR = 140;
-    const TITLE_BASELINE = 80;
     const BREED_BASELINE = 106;
-    const SUB_BASELINE = 126;
+    const TEXT_COLOR = '#E89B5A';
+    const LABEL_COLOR = this.mixHex(TEXT_COLOR, bg, 0.45);   // nhãn nhạt hơn giá trị
+    const TITLE_SIZE = 40, TITLE_MIN = 24;
+    const SUB_SIZE = 12, SUB_MIN = 9;
+    const LEFT = 22, GAP_TO_AVATAR = 16;
+    const STRIP_H = 180;
+    const AVATAR = 118;
+    const AV_TOP = 10;                       // avatar dồn lên trên
+    const TITLE_BASELINE = 68;
+    const SUB_BASELINE = 92;
+    const ROW_LABEL_BASELINE = 148;          // nhãn hàng "secondary" giả
+    const ROW_VALUE_BASELINE = 168;
     // ===================================================
 
     const make = async (s: number): Promise<Buffer> => {
@@ -175,9 +183,10 @@ export class WalletService {
       const RING = 5 * s;
       const PAD = 22 * s;
       const cx = W - PAD - AV / 2;
-      const cy = H / 2;
+      const cy = AV_TOP * s + AV / 2;          // trước: H / 2
+      const rightEdge = W - PAD;               // mép phải avatar = mép phải chữ ngày sinh
       const textMaxW = cx - AV / 2 - GAP_TO_AVATAR * s - LEFT * s;
-
+      const colW = (W - LEFT * s - PAD) / 2 - 8 * s;
       const decor = Buffer.from(
         `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">` +
         `<defs><filter id="b" x="-50%" y="-50%" width="200%" height="200%">` +
@@ -185,18 +194,23 @@ export class WalletService {
         `<circle cx="${W * 0.55}" cy="${cy}" r="${H * 0.95}" fill="${light}" fill-opacity="0.35"/>` +
         `<circle cx="${cx}" cy="${cy}" r="${AV * 0.82}" fill="#ffffff" fill-opacity="0.22"/>` +
         // dấu chân đặt tránh vùng chữ
-        this.pawSvg(W * 0.06, H * 0.9, 12 * s, deep, 0.16) +
-        this.pawSvg(W * 0.4, H * 0.9, 14 * s, deep, 0.14) +
-        this.pawSvg(W * 0.56, H * 0.14, 10 * s, deep, 0.14) +
+        this.pawSvg(W * 0.06, H * 0.5, 12 * s, deep, 0.16) +
+        this.pawSvg(W * 0.4, H * 0.5, 14 * s, deep, 0.14) +
+        this.pawSvg(W * 0.56, H * 0.1, 10 * s, deep, 0.14) +
         `<circle cx="${cx}" cy="${cy + 4 * s}" r="${AV / 2}" fill="#000" fill-opacity="0.22" filter="url(#b)"/>` +
         `</svg>`,
       );
 
       const textLayer = Buffer.from(
         `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">` +
+        // tên + giới tính
         this.textPath(bold, title, LEFT * s, TITLE_BASELINE * s, TITLE_SIZE * s, TITLE_MIN * s, textMaxW, TEXT_COLOR) +
-        this.textPath(medium, breed, LEFT * s, BREED_BASELINE * s, 14 * s, 10 * s, textMaxW, TEXT_COLOR) +
         this.textPath(medium, subtitle, LEFT * s, SUB_BASELINE * s, SUB_SIZE * s, SUB_MIN * s, textMaxW, TEXT_COLOR) +
+        // hàng giả secondary: Giống (trái) | Ngày sinh (phải, dưới avatar)
+        this.textPath(medium, breed.label, LEFT * s, ROW_LABEL_BASELINE * s, 10 * s, 8 * s, colW, LABEL_COLOR) +
+        this.textPath(bold, breed.value, LEFT * s, ROW_VALUE_BASELINE * s, 15 * s, 10 * s, colW, TEXT_COLOR) +
+        this.textPath(medium, dob.label, rightEdge, ROW_LABEL_BASELINE * s, 10 * s, 8 * s, colW, LABEL_COLOR, 'end') +
+        this.textPath(bold, dob.value, rightEdge, ROW_VALUE_BASELINE * s, 15 * s, 10 * s, colW, TEXT_COLOR, 'end') +
         `</svg>`,
       );
 
@@ -467,10 +481,9 @@ export class WalletService {
       // Hàng 2: giống · giới tính | microchip
       const breedText = pet.breed ?? pet.species;
       const genderText = this.toGenderText(pet.gender, lang);
-      const subtitle = [
-        genderText !== '—' ? genderText : null,
-        pet.dob ? this.toDobText(pet.dob) : null,
-      ].filter(Boolean).join(' · ');
+      const subtitle = genderText === '—' ? '' : genderText;
+
+
 
       // Primary: label = giống · giới tính, value = tên pet
       // pass.primaryFields.push({
@@ -501,7 +514,13 @@ export class WalletService {
 
       // Strip hero (avatar)
       try {
-        const strip = await this.buildHeroStrip(pet.photoUrl, pet.name, breedText, subtitle);
+        const strip = await this.buildHeroStrip(
+          pet.photoUrl,
+          pet.name,
+          subtitle,
+          { label: t.breed, value: breedText },
+          { label: t.dob, value: this.toDobText(pet.dob) },
+        );
         pass.addBuffer('strip.png', strip.x1);
         pass.addBuffer('strip@2x.png', strip.x2);
         pass.addBuffer('strip@3x.png', strip.x3);
