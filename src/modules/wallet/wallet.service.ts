@@ -52,8 +52,11 @@ export class WalletService {
   // Display ID on card: PL-XXXXXXXX (first 8 chars of UUID, uppercase)
   // DO NOT display full UUID because 36 chars will be cut off on the card face — full UUID is on the back
   private toDisplayCode(sourceId: string): string {
-    const raw = sourceId.replace(/-/g, '').slice(0, 8).toUpperCase();
-    return `PL-${raw}`;
+    const clean = sourceId
+      .replace(/-/g, '')
+      .replace(/^PL/i, '')   // bỏ tiền tố PL nếu ID đã có sẵn
+      .toUpperCase();
+    return `PL-${clean.slice(0, 8)}`;
   }
   private cardBgCache: string | null = null;
 
