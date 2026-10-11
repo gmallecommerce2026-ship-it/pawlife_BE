@@ -22,7 +22,10 @@ import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s
 const DRY_RUN = process.argv.includes('--dry-run');
 const NO_LEGACY = process.argv.includes('--no-legacy');
 const VERSION = process.argv.find((a) => a.startsWith('--version='))?.split('=')[1] ?? '2';
-
+const arg = (n: string) => process.argv.find((a) => a.startsWith(`--${n}=`))?.split('=')[1];
+const FROM = Number(arg('from'));
+const TO = Number(arg('to') ?? 10000);
+if (!FROM) throw new Error('Bắt buộc có --from=, ví dụ --from=801');
 const BUCKET = process.env.R2_BUCKET ?? 'pawcare';
 const QR_DIR = path.join(process.cwd(), 'src/database/QR_Codes');
 const LEGACY_PREFIX = 'qr-codes/';
@@ -89,7 +92,10 @@ async function main() {
   console.log(`🚀 Cập nhật ảnh QR -> ${VERSION_PREFIX}${NO_LEGACY ? '' : ' (+ ghi lại key cũ)'}${DRY_RUN ? ' [DRY-RUN]' : ''}`);
 
   if (!fs.existsSync(QR_DIR)) throw new Error(`Thư mục không tồn tại: ${QR_DIR}`);
-  const files = fs.readdirSync(QR_DIR).filter((f) => FILE_RE.test(f));
+  const files = fs.readdirSync(QR_DIR).filter((f) => {
+    const m = f.match(FILE_RE);
+    return !!m && Number(m[1]) >= FROM && Number(m[1]) <= TO;
+  });
   const bad = fs.readdirSync(QR_DIR).filter((f) => f.toLowerCase().endsWith('.png') && !FILE_RE.test(f));
   console.log(`📁 ${files.length} file hợp lệ, ${bad.length} file sai tên (bỏ qua).`);
   if (files.length === 0) throw new Error('Không có file hợp lệ.');
