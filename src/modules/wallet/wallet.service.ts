@@ -164,24 +164,25 @@ export class WalletService {
     // ===== Chỉnh nhanh tại đây (đơn vị pt, ở @1x) =====
     const BREED_BASELINE = 106;
     const TEXT_COLOR = '#E89B5A';
-    const LABEL_COLOR = '#FFFFFF';           // đổi theo labelColor trong pass.json
-    const VALUE_COLOR = '#FFFFFF';           // đổi theo foregroundColor trong pass.json
+    const LABEL_COLOR = '#D9822B';           // cam đậm hơn nền một chút để đọc được
+    const VALUE_COLOR = '#1A1A1A';           // đen
 
-    const STRIP_H = 144;                     // KHÔNG vượt quá, Wallet sẽ cắt
+    const STRIP_H = 123;                     // đúng kích thước Wallet hiển thị, không bị scale
     const LEFT = 16, GAP_TO_AVATAR = 12;
     const ROW_MARGIN = 16;
 
-    const AVATAR = 90;                       // trước: 118
-    const AV_TOP = 6;                        // avatar chiếm y = 6 → 96
+    const AVATAR = 76;
+    const AV_TOP = 6;                        // avatar chiếm y = 6 → 82
 
-    const TITLE_SIZE = 34, TITLE_MIN = 22;
-    const TITLE_BASELINE = 52;
+    const TITLE_SIZE = 30, TITLE_MIN = 20;
+    const TITLE_BASELINE = 44;
     const SUB_SIZE = 12, SUB_MIN = 9;
-    const SUB_BASELINE = 72;
+    const SUB_BASELINE = 62;
 
-    const ROW_LABEL_SIZE = 10, ROW_VALUE_SIZE = 15;
-    const ROW_LABEL_BASELINE = 112;          // dưới avatar 16pt
-    const ROW_VALUE_BASELINE = 132;          // chừa 12pt cho phần đuôi chữ (g, y, ...)
+    const ROW_LABEL_SIZE = 10;               // label nhỏ
+    const ROW_VALUE_SIZE = 16;               // value to hơn label
+    const ROW_LABEL_BASELINE = 93;
+    const ROW_VALUE_BASELINE = 113;          // chừa 10pt cho phần đuôi chữ
     // ===================================================
 
     const make = async (s: number): Promise<Buffer> => {
@@ -200,9 +201,8 @@ export class WalletService {
         `<feGaussianBlur stdDeviation="${5 * s}"/></filter></defs>` +
         `<circle cx="${W * 0.55}" cy="${cy}" r="${H * 0.95}" fill="${light}" fill-opacity="0.35"/>` +
         `<circle cx="${cx}" cy="${cy}" r="${AV * 0.7}" fill="#ffffff" fill-opacity="0.22"/>` +
-        // dấu chân đặt tránh vùng chữ
-        this.pawSvg(W * 0.30, H * 0.40, 10 * s, deep, 0.14) +
-        this.pawSvg(W * 0.52, H * 0.12, 9 * s, deep, 0.14) +
+        this.pawSvg(W * 0.30, H * 0.35, 9 * s, deep, 0.14) +
+        this.pawSvg(W * 0.52, H * 0.10, 8 * s, deep, 0.14) +
         `<circle cx="${cx}" cy="${cy + 4 * s}" r="${AV / 2}" fill="#000" fill-opacity="0.22" filter="url(#b)"/>` +
         `</svg>`,
       );
@@ -213,10 +213,10 @@ export class WalletService {
         this.textPath(bold, title, LEFT * s, TITLE_BASELINE * s, TITLE_SIZE * s, TITLE_MIN * s, textMaxW, TEXT_COLOR) +
         this.textPath(medium, subtitle, LEFT * s, SUB_BASELINE * s, SUB_SIZE * s, SUB_MIN * s, textMaxW, TEXT_COLOR) +
         // hàng giả secondary: Giống (trái) | Ngày sinh (phải, dưới avatar)
-        this.textPath(medium, breed.label, LEFT * s, ROW_LABEL_BASELINE * s, 10 * s, 8 * s, colW, LABEL_COLOR) +
-        this.textPath(bold, breed.value, LEFT * s, ROW_VALUE_BASELINE * s, 15 * s, 10 * s, colW, TEXT_COLOR) +
-        this.textPath(medium, dob.label, rightEdge, ROW_LABEL_BASELINE * s, 10 * s, 8 * s, colW, LABEL_COLOR, 'end') +
-        this.textPath(bold, dob.value, rightEdge, ROW_VALUE_BASELINE * s, 15 * s, 10 * s, colW, TEXT_COLOR, 'end') +
+        this.textPath(medium, breed.label, rowLeft, ROW_LABEL_BASELINE * s, ROW_LABEL_SIZE * s, 8 * s, colW, LABEL_COLOR) +
+        this.textPath(medium, breed.value, rowLeft, ROW_VALUE_BASELINE * s, ROW_VALUE_SIZE * s, 11 * s, colW, VALUE_COLOR) +
+        this.textPath(medium, dob.label, rowRight, ROW_LABEL_BASELINE * s, ROW_LABEL_SIZE * s, 8 * s, colW, LABEL_COLOR, 'end') +
+        this.textPath(medium, dob.value, rowRight, ROW_VALUE_BASELINE * s, ROW_VALUE_SIZE * s, 11 * s, colW, VALUE_COLOR, 'end') +
         `</svg>`,
       );
 
