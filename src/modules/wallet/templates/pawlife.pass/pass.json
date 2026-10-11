@@ -8,7 +8,7 @@
   "backgroundColor": "rgb(255, 223, 173)",
   "foregroundColor": "rgb(74, 53, 34)",
   "labelColor": "rgb(232, 155, 90)",
-  "generic": {
+  "storeCard": {
     "headerFields": [],
     "primaryFields": [],
     "secondaryFields": [],

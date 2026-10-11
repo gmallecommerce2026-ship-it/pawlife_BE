@@ -55,7 +55,58 @@ export class WalletService {
     return `${sourceId.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
   }
 
+  private async buildQrStrip(
+    tagId: string,
+    photoUrl: string | null,
+  ): Promise<{ x1: Buffer; x2: Buffer; x3: Buffer }> {
+    const base =
+      this.configService.get<string>('R2_PUBLIC_URL') ??
+      'https://pub-35c6d59c9e96467b9783df2a4e890a09.r2.dev';
 
+    const fetchBuf = async (url: string) =>
+      Buffer.from(
+        (await axios.get<ArrayBuffer>(url, { responseType: 'arraybuffer', timeout: 3000 })).data,
+      );
+
+    const [qrSrc, avatarSrc] = await Promise.all([
+      fetchBuf(`${base}/qr-codes/${tagId}.png`),
+      photoUrl ? fetchBuf(photoUrl).catch(() => null) : Promise.resolve(null),
+    ]);
+
+    // strip storeCard: 375x144pt, vẽ ở @1x/@2x/@3x
+    const make = async (s: number): Promise<Buffer> => {
+      const W = 375 * s, H = 144 * s, QR = 124 * s, AV = 100 * s, PAD = 24 * s;
+
+      const qr = await sharp(qrSrc)
+        .flatten({ background: '#ffffff' })
+        .resize(QR, QR, { fit: 'contain', background: '#ffffff', kernel: 'nearest' })
+        .png()
+        .toBuffer();
+
+      const layers: sharp.OverlayOptions[] = [
+        { input: qr, left: W - PAD - QR, top: Math.round((H - QR) / 2) },
+      ];
+
+      if (avatarSrc) {
+        const mask = Buffer.from(
+          `<svg width="${AV}" height="${AV}"><circle cx="${AV / 2}" cy="${AV / 2}" r="${AV / 2}"/></svg>`,
+        );
+        const avatar = await sharp(avatarSrc)
+          .resize(AV, AV, { fit: 'cover' })
+          .composite([{ input: mask, blend: 'dest-in' }])
+          .png()
+          .toBuffer();
+        layers.push({ input: avatar, left: PAD, top: Math.round((H - AV) / 2) });
+      }
+
+      return sharp({ create: { width: W, height: H, channels: 3, background: '#ffffff' } })
+        .composite(layers)
+        .png()
+        .toBuffer();
+    };
+
+    return { x1: await make(1), x2: await make(2), x3: await make(3) };
+  }
   // Bilingual short gender (matches label style "Gender" on card)
   private toGenderText(gender: WalletPetGender | null, lang: 'vi' | 'en'): string {
     if (lang === 'vi') {
@@ -236,25 +287,12 @@ export class WalletService {
         value: t.docType,
       });
 
-      pass.primaryFields.push({
-        key: 'petName',
-        label: t.name,
-        value: pet.name,
-      });
-
       pass.secondaryFields.push(
-        {
-          key: 'breed',
-          label: t.breed,
-          value: pet.breed ?? pet.species,
-        },
-        {
-          key: 'petCode',
-          label: petCodeLabel,
-          value: displayCode,
-          textAlignment: 'PKTextAlignmentLeft',
-        },
+        { key: 'petName', label: t.name, value: pet.name },
+        { key: 'breed', label: t.breed, value: pet.breed ?? pet.species },
+        { key: 'petCode', label: petCodeLabel, value: displayCode, textAlignment: 'PKTextAlignmentLeft' },
       );
+
 
       pass.auxiliaryFields.push(
         {
@@ -271,18 +309,27 @@ export class WalletService {
       );
 
       // (Phần Avatar và BackFields giữ nguyên format cũ, chỉ thay text t.*)
-      const photoUrl = pet.photoUrl;
-      if (photoUrl) {
+      // const photoUrl = pet.photoUrl;
+      // if (photoUrl) {
+      //   try {
+      //     const thumb = await this.buildCircleThumbnails(photoUrl);
+      //     pass.addBuffer('thumbnail.png', thumb.x1);
+      //     pass.addBuffer('thumbnail@2x.png', thumb.x2);
+      //     pass.addBuffer('thumbnail@3x.png', thumb.x3);
+      //   } catch (error) {
+      //     console.warn('⚠️ Skipping thumbnail...', error instanceof Error ? error.message : error);
+      //   }
+      // }
+      if (activeTag) {
         try {
-          const thumb = await this.buildCircleThumbnails(photoUrl);
-          pass.addBuffer('thumbnail.png', thumb.x1);
-          pass.addBuffer('thumbnail@2x.png', thumb.x2);
-          pass.addBuffer('thumbnail@3x.png', thumb.x3);
+          const strip = await this.buildQrStrip(activeTag.id, pet.photoUrl);
+          pass.addBuffer('strip.png', strip.x1);
+          pass.addBuffer('strip@2x.png', strip.x2);
+          pass.addBuffer('strip@3x.png', strip.x3);
         } catch (error) {
-          console.warn('⚠️ Skipping thumbnail...', error instanceof Error ? error.message : error);
+          console.warn('⚠️ Skipping QR strip...', error instanceof Error ? error.message : error);
         }
       }
-
       // Back of card
       pass.backFields.push(
         { key: 'fullId', label: t.fullId, value: pet.id },
