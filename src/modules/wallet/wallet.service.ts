@@ -163,38 +163,38 @@ export class WalletService {
 
     // ===== Chỉnh nhanh tại đây (đơn vị pt, ở @1x) =====
     const TEXT_COLOR = '#E89B5A';
-    const LABEL_COLOR = '#D9822B';           // cam đậm hơn nền một chút để đọc được
-    const VALUE_COLOR = '#1A1A1A';           // đen
+    const LABEL_COLOR = '#D9822B';
+    const VALUE_COLOR = '#1A1A1A';
 
-    const STRIP_H = 123;                     // đúng kích thước Wallet hiển thị, không bị scale
-    const LEFT = 16, GAP_TO_AVATAR = 12;
-    const ROW_MARGIN = 16;
+    const STRIP_H = 123;
+    const SAFE_X = 36;                       // lề an toàn trái/phải vì Wallet cắt hai bên
+    const GAP_TO_AVATAR = 10;
 
-    const AVATAR = 76;
-    const AV_TOP = 6;                        // avatar chiếm y = 6 → 82
+    const AVATAR = 82;                       // trước: 76
+    const AV_TOP = 4;                        // avatar chiếm y = 4 → 86
 
-    const TITLE_SIZE = 30, TITLE_MIN = 20;
-    const TITLE_BASELINE = 44;
-    const SUB_SIZE = 12, SUB_MIN = 9;
-    const SUB_BASELINE = 62;
+    const TITLE_SIZE = 34, TITLE_MIN = 20;   // trước: 30
+    const TITLE_BASELINE = 48;
+    const SUB_SIZE = 14, SUB_MIN = 10;       // trước: 12
+    const SUB_BASELINE = 70;
 
-    const ROW_LABEL_SIZE = 10;               // label nhỏ
-    const ROW_VALUE_SIZE = 16;               // value to hơn label
-    const ROW_LABEL_BASELINE = 96;
-    const ROW_VALUE_BASELINE = 116;        // chừa 10pt cho phần đuôi chữ
+    const ROW_LABEL_SIZE = 12;               // label to hơn
+    const ROW_VALUE_SIZE = 11;               // value nhỏ hơn label
+    const ROW_LABEL_BASELINE = 99;
+    const ROW_VALUE_BASELINE = 115;          // đuôi chữ còn ~5pt trước mép 123
     // ===================================================
 
     const make = async (s: number): Promise<Buffer> => {
       const W = 375 * s, H = STRIP_H * s;
       const AV = AVATAR * s;
-      const RING = 5 * s;
-      const PAD = ROW_MARGIN * s;                  // trước: 22 * s, để mép avatar thẳng với chữ ngày sinh
-      const rowLeft = ROW_MARGIN * s;
-      const rowRight = W - ROW_MARGIN * s;
-      const cx = W - PAD - AV / 2;
+      const RING = 4 * s;
+      const SAFE = SAFE_X * s;
+      const rowLeft = SAFE;
+      const rowRight = W - SAFE;
+      const cx = W - SAFE - AV / 2;            // mép phải avatar thẳng với mép phải "Ngày sinh"
       const cy = AV_TOP * s + AV / 2;
-      const textMaxW = cx - AV / 2 - GAP_TO_AVATAR * s - LEFT * s;
-      const colW = (W - 2 * ROW_MARGIN * s) / 2 - 8 * s;
+      const textMaxW = cx - AV / 2 - GAP_TO_AVATAR * s - SAFE;
+      const colW = (W - 2 * SAFE) / 2 - 8 * s;
       const decor = Buffer.from(
         `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">` +
         `<defs><filter id="b" x="-50%" y="-50%" width="200%" height="200%">` +
@@ -210,8 +210,8 @@ export class WalletService {
       const textLayer = Buffer.from(
         `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">` +
         // tên + giới tính
-        this.textPath(bold, title, LEFT * s, TITLE_BASELINE * s, TITLE_SIZE * s, TITLE_MIN * s, textMaxW, TEXT_COLOR) +
-        this.textPath(medium, subtitle, LEFT * s, SUB_BASELINE * s, SUB_SIZE * s, SUB_MIN * s, textMaxW, TEXT_COLOR) +
+        this.textPath(bold, title, SAFE, TITLE_BASELINE * s, TITLE_SIZE * s, TITLE_MIN * s, textMaxW, TEXT_COLOR) +
+        this.textPath(medium, subtitle, SAFE, SUB_BASELINE * s, SUB_SIZE * s, SUB_MIN * s, textMaxW, TEXT_COLOR) +
         // hàng giả secondary: Giống (trái) | Ngày sinh (phải, dưới avatar)
         this.textPath(medium, breed.label, rowLeft, ROW_LABEL_BASELINE * s, ROW_LABEL_SIZE * s, 8 * s, colW, LABEL_COLOR) +
         this.textPath(medium, breed.value, rowLeft, ROW_VALUE_BASELINE * s, ROW_VALUE_SIZE * s, 11 * s, colW, VALUE_COLOR) +
