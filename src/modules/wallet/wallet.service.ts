@@ -397,17 +397,33 @@ export class WalletService {
       // Hàng 2: giống · giới tính | microchip
       const breedText = pet.breed ?? pet.species;
       const genderText = this.toGenderText(pet.gender, lang);
-      pass.auxiliaryFields.push({
-        key: 'breedGender',
-        label: isVi ? 'Giống · Giới tính' : 'Breed · Gender',
-        value: genderText === '—' ? breedText : `${breedText} · ${genderText}`,
+      const breedGender =
+        genderText === '—' ? breedText : `${breedText} · ${genderText}`;
+
+      // Primary: label = giống · giới tính, value = tên pet
+      pass.primaryFields.push({
+        key: 'petName',
+        label: breedGender,
+        value: pet.name,
       });
+
+      // Hàng 1: mã | ngày sinh (giữ nguyên)
+      pass.secondaryFields.push(
+        { key: 'petCode', label: t.pawLifeId, value: displayCode },
+        {
+          key: 'dob',
+          label: t.dob,
+          value: this.toDobText(pet.dob),
+          textAlignment: 'PKTextAlignmentRight',
+        },
+      );
+
+      // Hàng 2: chỉ còn microchip (giống · giới tính đã chuyển lên trên)
       if (pet.microchipNumber) {
         pass.auxiliaryFields.push({
           key: 'microchipFront',
           label: t.microchip,
           value: pet.microchipNumber,
-          textAlignment: 'PKTextAlignmentRight',
         });
       }
 
