@@ -48,7 +48,7 @@ const QR_DIR = path.join(process.cwd(), 'src/database/QR_Codes');
 const REPORT_FILE = path.join(process.cwd(), 'qr-scan-report.json');
 const MAP_FILE = path.join(process.cwd(), 'qr-migrate-map.json');
 
-const EXPECTED_TOTAL = 810; // dải PL-00001 ... PL-00810
+const EXPECTED_TOTAL = 10000; // dải PL-00001 ... PL-10000
 const UPLOAD_CONCURRENCY = 20;
 const DELETE_BATCH = 500;
 const MAX_MISSING_RATIO = 0.05; // thiếu quá 5% thì dừng, không xoá gì (tránh trỏ nhầm thư mục)
