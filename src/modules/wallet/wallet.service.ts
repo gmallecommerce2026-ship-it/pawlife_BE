@@ -441,7 +441,6 @@ export class WalletService {
 
       pass.headerFields.push({
         key: 'petCode',
-        label: t.pawLifeId,
         value: displayCode,
         textAlignment: 'PKTextAlignmentRight',
       });
