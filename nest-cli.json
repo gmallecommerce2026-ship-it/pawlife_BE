@@ -15,7 +15,11 @@
         "outDir": "dist/src",
         "watchAssets": true
       },
-      { "include": "modules/wallet/assets/**/*", "outDir": "dist" }
+      {
+        "include": "modules/wallet/assets/**/*",
+        "outDir": "dist/src",
+        "watchAssets": true
+      }
     ]
   }
 }
