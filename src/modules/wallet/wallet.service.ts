@@ -162,7 +162,6 @@ export class WalletService {
     const { bold, medium } = this.getFonts();
 
     // ===== Chỉnh nhanh tại đây (đơn vị pt, ở @1x) =====
-    const BREED_BASELINE = 106;
     const TEXT_COLOR = '#E89B5A';
     const LABEL_COLOR = '#D9822B';           // cam đậm hơn nền một chút để đọc được
     const VALUE_COLOR = '#1A1A1A';           // đen
@@ -181,20 +180,21 @@ export class WalletService {
 
     const ROW_LABEL_SIZE = 10;               // label nhỏ
     const ROW_VALUE_SIZE = 16;               // value to hơn label
-    const ROW_LABEL_BASELINE = 93;
-    const ROW_VALUE_BASELINE = 113;          // chừa 10pt cho phần đuôi chữ
+    const ROW_LABEL_BASELINE = 96;
+    const ROW_VALUE_BASELINE = 116;        // chừa 10pt cho phần đuôi chữ
     // ===================================================
 
     const make = async (s: number): Promise<Buffer> => {
       const W = 375 * s, H = STRIP_H * s;
       const AV = AVATAR * s;
       const RING = 5 * s;
-      const PAD = 22 * s;
+      const PAD = ROW_MARGIN * s;                  // trước: 22 * s, để mép avatar thẳng với chữ ngày sinh
+      const rowLeft = ROW_MARGIN * s;
+      const rowRight = W - ROW_MARGIN * s;
       const cx = W - PAD - AV / 2;
-      const cy = AV_TOP * s + AV / 2;          // trước: H / 2
-      const rightEdge = W - PAD;               // mép phải avatar = mép phải chữ ngày sinh
+      const cy = AV_TOP * s + AV / 2;
       const textMaxW = cx - AV / 2 - GAP_TO_AVATAR * s - LEFT * s;
-      const colW = (W - LEFT * s - PAD) / 2 - 8 * s;
+      const colW = (W - 2 * ROW_MARGIN * s) / 2 - 8 * s;
       const decor = Buffer.from(
         `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">` +
         `<defs><filter id="b" x="-50%" y="-50%" width="200%" height="200%">` +
