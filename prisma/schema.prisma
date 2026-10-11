@@ -936,7 +936,7 @@ model AdoptionRequest {
 model Tag {
   id     String    @id @default(uuid()) // UUID khớp với mã QR/NFC
   status TagStatus @default(INACTIVE)
-
+  qrPayload String?   @db.VarChar(512)
   linkCount Int @default(0)
 
   petId     String?

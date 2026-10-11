@@ -52,8 +52,8 @@ export class WalletService {
   // Display ID on card: PL-XXXXXXXX (first 8 chars of UUID, uppercase)
   // DO NOT display full UUID because 36 chars will be cut off on the card face — full UUID is on the back
   private toDisplayCode(sourceId: string): string {
-  return `PL-${sourceId.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
-}
+    return `PL-${sourceId.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+  }
 
 
   // Bilingual short gender (matches label style "Gender" on card)
@@ -147,6 +147,10 @@ export class WalletService {
     const activeTag = tags.find(t => t.status === 'ACTIVE') ?? tags[0];
     return activeTag.id;
   }
+  private getActiveTag(tags: WalletPetTag[] | undefined): WalletPetTag | null {
+    if (!tags || tags.length === 0) return null;
+    return tags.find(t => t.status === 'ACTIVE') ?? tags[0];
+  }
 
 
   // Generate .pkpass (Static Pass) for a pet — returns buffer for controller to stream to client
@@ -163,9 +167,9 @@ export class WalletService {
         'You do not have permission to perform actions on this pet!',
       );
     }
-    const activeTagId = this.getActiveTagId(pet.tags);
-    // 2. Prepare dynamic data (Giữ nguyên)
-    const displayCode = this.toDisplayCode(activeTagId ?? pet.id);
+    const activeTag = this.getActiveTag(pet.tags);
+    const displayCode = this.toDisplayCode(activeTag?.id ?? pet.id);
+
     const profileBaseUrl =
       this.configService.get<string>('WALLET_PROFILE_BASE_URL') ??
       'https://pawlife.vn/profile';
@@ -300,12 +304,14 @@ export class WalletService {
       // ✅ SỬA: trước đây dùng pet.qrCodeUrl (field tĩnh, không đồng bộ khi
       // user Replace/Transfer tag) → giờ lấy đúng tag ACTIVE giống FE
 
-      const qrValue = activeTagId ?? profileUrl;
+
+      const qrValue = activeTag?.qrPayload ?? activeTag?.id ?? profileUrl;
 
       pass.setBarcodes({
         message: qrValue,
         format: 'PKBarcodeFormatQR',
         messageEncoding: 'iso-8859-1',
+        altText: displayCode,
       });
 
 

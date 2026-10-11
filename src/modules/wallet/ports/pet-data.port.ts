@@ -10,6 +10,7 @@ export type WalletPetGender = 'MALE' | 'FEMALE' | 'UNKNOWN';
 export interface WalletPetTag {
   id: string;
   status: 'ACTIVE' | 'LOST' | 'INACTIVE';
+  qrPayload?: string | null;
 }
 
 // Đúng-và-đủ dữ liệu Wallet cần để in lên thẻ. Đã làm phẳng (vd ảnh đầu tiên
