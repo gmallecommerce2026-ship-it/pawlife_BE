@@ -381,18 +381,18 @@ export class WalletService {
       });
 
       // Tên pet to, nằm đè lên strip (bên trái avatar)
-      pass.primaryFields.push({ key: 'petName', label: t.name, value: pet.name });
+      // pass.primaryFields.push({ key: 'petName', label: t.name, value: pet.name });
 
       // Hàng 1: mã | ngày sinh
-      pass.secondaryFields.push(
-        { key: 'petCode', label: t.pawLifeId, value: displayCode },
-        {
-          key: 'dob',
-          label: t.dob,
-          value: this.toDobText(pet.dob),
-          textAlignment: 'PKTextAlignmentRight',
-        },
-      );
+      // pass.secondaryFields.push(
+      //   { key: 'petCode', label: t.pawLifeId, value: displayCode },
+      //   {
+      //     key: 'dob',
+      //     label: t.dob,
+      //     value: this.toDobText(pet.dob),
+      //     textAlignment: 'PKTextAlignmentRight',
+      //   },
+      // );
 
       // Hàng 2: giống · giới tính | microchip
       const breedText = pet.breed ?? pet.species;
