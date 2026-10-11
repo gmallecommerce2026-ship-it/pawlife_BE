@@ -124,7 +124,6 @@ export class WalletService {
     minSize: number,
     maxWidth: number,
     fill: string,
-    anchor: 'start' | 'end' = 'start',
   ): string {
     let sz = size;
     while (sz > minSize && font.getAdvanceWidth(text, sz) > maxWidth) sz -= 1;
@@ -135,9 +134,7 @@ export class WalletService {
       }
       t = t.trimEnd() + '…';
     }
-    const w = font.getAdvanceWidth(t, sz);
-    const x0 = anchor === 'end' ? x - w : x;
-    const d = font.getPath(t, x0, baseline, sz).toPathData(2);
+    const d = font.getPath(t, x, baseline, sz).toPathData(2);
     return `<path d="${d}" fill="${fill}"/>`;
   }
   // Strip hero: nền trùng màu thẻ + họa tiết mờ + avatar tròn lớn bên phải.
@@ -145,9 +142,7 @@ export class WalletService {
   private async buildHeroStrip(
     photoUrl: string | null,
     title: string,
-    subtitle: string,                       // chỉ còn giới tính
-    breed: { label: string; value: string },
-    dob: { label: string; value: string },
+    subtitle: string,
   ): Promise<{ x1: Buffer; x2: Buffer; x3: Buffer }> {
     const avatarSrc = photoUrl
       ? await axios
@@ -163,60 +158,43 @@ export class WalletService {
 
     // ===== Chỉnh nhanh tại đây (đơn vị pt, ở @1x) =====
     const TEXT_COLOR = '#E89B5A';
-    const LABEL_COLOR = '#D9822B';
-    const VALUE_COLOR = '#1A1A1A';
+    const TITLE_SIZE = 40, TITLE_MIN = 24;
+    const SUB_SIZE = 12, SUB_MIN = 9;   
+    const LEFT = 22, GAP_TO_AVATAR = 16;
+    const STRIP_H = 180;            // trước: 144
+    const AVATAR = 140;             // trước: 118, lớn hơn cho cân với strip cao hơn
+    const TITLE_BASELINE = 85;      // trước: 70
+    const SUB_BASELINE = 112;       // trước: 100
 
-    const STRIP_H = 123;
-    const SAFE_X = 36;                       // lề an toàn trái/phải vì Wallet cắt hai bên
-    const GAP_TO_AVATAR = 10;
-
-    const AVATAR = 82;                       // trước: 76
-    const AV_TOP = 4;                        // avatar chiếm y = 4 → 86
-
-    const TITLE_SIZE = 34, TITLE_MIN = 20;   // trước: 30
-    const TITLE_BASELINE = 48;
-    const SUB_SIZE = 14, SUB_MIN = 10;       // trước: 12
-    const SUB_BASELINE = 70;
-
-    const ROW_LABEL_SIZE = 12;               // label to hơn
-    const ROW_VALUE_SIZE = 11;               // value nhỏ hơn label
-    const ROW_LABEL_BASELINE = 99;
-    const ROW_VALUE_BASELINE = 115;          // đuôi chữ còn ~5pt trước mép 123
     // ===================================================
 
     const make = async (s: number): Promise<Buffer> => {
       const W = 375 * s, H = STRIP_H * s;
       const AV = AVATAR * s;
-      const RING = 4 * s;
-      const SAFE = SAFE_X * s;
-      const rowLeft = SAFE;
-      const rowRight = W - SAFE;
-      const cx = W - SAFE - AV / 2;            // mép phải avatar thẳng với mép phải "Ngày sinh"
-      const cy = AV_TOP * s + AV / 2;
-      const textMaxW = cx - AV / 2 - GAP_TO_AVATAR * s - SAFE;
-      const colW = (W - 2 * SAFE) / 2 - 8 * s;
+      const RING = 5 * s;
+      const PAD = 22 * s;
+      const cx = W - PAD - AV / 2;
+      const cy = H / 2;
+      const textMaxW = cx - AV / 2 - GAP_TO_AVATAR * s - LEFT * s;
+
       const decor = Buffer.from(
         `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">` +
         `<defs><filter id="b" x="-50%" y="-50%" width="200%" height="200%">` +
         `<feGaussianBlur stdDeviation="${5 * s}"/></filter></defs>` +
         `<circle cx="${W * 0.55}" cy="${cy}" r="${H * 0.95}" fill="${light}" fill-opacity="0.35"/>` +
-        `<circle cx="${cx}" cy="${cy}" r="${AV * 0.7}" fill="#ffffff" fill-opacity="0.22"/>` +
-        this.pawSvg(W * 0.30, H * 0.35, 9 * s, deep, 0.14) +
-        this.pawSvg(W * 0.52, H * 0.10, 8 * s, deep, 0.14) +
+        `<circle cx="${cx}" cy="${cy}" r="${AV * 0.82}" fill="#ffffff" fill-opacity="0.22"/>` +
+        // dấu chân đặt tránh vùng chữ
+        this.pawSvg(W * 0.06, H * 0.9, 12 * s, deep, 0.16) +
+        this.pawSvg(W * 0.4, H * 0.9, 14 * s, deep, 0.14) +
+        this.pawSvg(W * 0.56, H * 0.14, 10 * s, deep, 0.14) +
         `<circle cx="${cx}" cy="${cy + 4 * s}" r="${AV / 2}" fill="#000" fill-opacity="0.22" filter="url(#b)"/>` +
         `</svg>`,
       );
 
       const textLayer = Buffer.from(
         `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">` +
-        // tên + giới tính
-        this.textPath(bold, title, SAFE, TITLE_BASELINE * s, TITLE_SIZE * s, TITLE_MIN * s, textMaxW, TEXT_COLOR) +
-        this.textPath(medium, subtitle, SAFE, SUB_BASELINE * s, SUB_SIZE * s, SUB_MIN * s, textMaxW, TEXT_COLOR) +
-        // hàng giả secondary: Giống (trái) | Ngày sinh (phải, dưới avatar)
-        this.textPath(medium, breed.label, rowLeft, ROW_LABEL_BASELINE * s, ROW_LABEL_SIZE * s, 8 * s, colW, LABEL_COLOR) +
-        this.textPath(medium, breed.value, rowLeft, ROW_VALUE_BASELINE * s, ROW_VALUE_SIZE * s, 11 * s, colW, VALUE_COLOR) +
-        this.textPath(medium, dob.label, rowRight, ROW_LABEL_BASELINE * s, ROW_LABEL_SIZE * s, 8 * s, colW, LABEL_COLOR, 'end') +
-        this.textPath(medium, dob.value, rowRight, ROW_VALUE_BASELINE * s, ROW_VALUE_SIZE * s, 11 * s, colW, VALUE_COLOR, 'end') +
+        this.textPath(bold, title, LEFT * s, TITLE_BASELINE * s, TITLE_SIZE * s, TITLE_MIN * s, textMaxW, TEXT_COLOR) +
+        this.textPath(medium, subtitle, LEFT * s, SUB_BASELINE * s, SUB_SIZE * s, SUB_MIN * s, textMaxW, TEXT_COLOR) +
         `</svg>`,
       );
 
@@ -489,8 +467,6 @@ export class WalletService {
       const genderText = this.toGenderText(pet.gender, lang);
       const subtitle = genderText === '—' ? '' : genderText;
 
-
-
       // Primary: label = giống · giới tính, value = tên pet
       // pass.primaryFields.push({
       //   key: 'petName',
@@ -499,15 +475,15 @@ export class WalletService {
       // });
 
 
-      // pass.secondaryFields.push(
-      //   { key: 'breed', label: t.breed, value: breedText },
-      //   {
-      //     key: 'dob',
-      //     label: t.dob,
-      //     value: this.toDobText(pet.dob),
-      //     textAlignment: 'PKTextAlignmentRight',
-      //   },
-      // );
+      pass.secondaryFields.push(
+        { key: 'breed', label: t.breed, value: breedText },
+        {
+          key: 'dob',
+          label: t.dob,
+          value: this.toDobText(pet.dob),
+          textAlignment: 'PKTextAlignmentRight',
+        },
+      );
 
       // Hàng 2: chỉ còn microchip (giống · giới tính đã chuyển lên trên)
       if (pet.microchipNumber) {
@@ -520,13 +496,7 @@ export class WalletService {
 
       // Strip hero (avatar)
       try {
-        const strip = await this.buildHeroStrip(
-          pet.photoUrl,
-          pet.name,
-          subtitle,
-          { label: t.breed, value: breedText },
-          { label: t.dob, value: this.toDobText(pet.dob) },
-        );
+        const strip = await this.buildHeroStrip(pet.photoUrl, pet.name, subtitle);
         pass.addBuffer('strip.png', strip.x1);
         pass.addBuffer('strip@2x.png', strip.x2);
         pass.addBuffer('strip@3x.png', strip.x3);
@@ -547,9 +517,6 @@ export class WalletService {
       // Mặt sau (giữ nguyên)
       pass.backFields.push(
         { key: 'petName', label: t.name, value: pet.name },
-        { key: 'breed', label: t.breed, value: breedText },
-        { key: 'dob', label: t.dob, value: this.toDobText(pet.dob) },
-        { key: 'gender', label: t.gender, value: genderText },
         { key: 'fullId', label: t.fullId, value: pet.id },
         { key: 'profile', label: t.profilePage, value: profileUrl },
         { key: 'guide', label: t.guideLabel, value: t.guideValue },
