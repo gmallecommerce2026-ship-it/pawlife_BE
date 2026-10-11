@@ -3,7 +3,6 @@ import 'dotenv/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import jsQR from 'jsqr';
-import { PNG } from 'pngjs';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 
@@ -45,7 +44,7 @@ async function main() {
         const nm = f.match(/^PL-(\d{5})\.png$/i);
         if (FAST && (!nm || Number(nm[1]) < FROM || Number(nm[1]) > TO)) continue;
 
-        const raw = decode(f);
+        const raw = await decode(f);
         if (!raw) { unreadable.push(f); continue; }
         const id = extractId(raw);
         if (!/^PL-\d{5}$/.test(id)) { odd.push({ file: f, raw }); continue; }
