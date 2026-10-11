@@ -142,7 +142,8 @@ export class WalletService {
   private async buildHeroStrip(
     photoUrl: string | null,
     title: string,
-    subtitle: string,
+    breed: string,
+    subtitle: string,   // "Cái · 12/03/2022"
   ): Promise<{ x1: Buffer; x2: Buffer; x3: Buffer }> {
     const avatarSrc = photoUrl
       ? await axios
@@ -158,16 +159,19 @@ export class WalletService {
 
     // ===== Chỉnh nhanh tại đây (đơn vị pt, ở @1x) =====
     const TEXT_COLOR = '#E89B5A';
-    const TITLE_SIZE = 40, TITLE_MIN = 24;
-    const SUB_SIZE = 15, SUB_MIN = 11;
-    const TITLE_BASELINE = 70;
-    const SUB_BASELINE = 100;      // tăng số này để giống·giới tính cách tên xa hơn
     const LEFT = 22, GAP_TO_AVATAR = 16;
+    const TITLE_SIZE = 40, TITLE_MIN = 24;
+    const SUB_SIZE = 12, SUB_MIN = 9;        // trước: 15 / 11
+    const STRIP_H = 180;
+    const AVATAR = 140;
+    const TITLE_BASELINE = 80;
+    const BREED_BASELINE = 106;
+    const SUB_BASELINE = 126;
     // ===================================================
 
     const make = async (s: number): Promise<Buffer> => {
-      const W = 375 * s, H = 144 * s;
-      const AV = 118 * s;
+      const W = 375 * s, H = STRIP_H * s;
+      const AV = AVATAR * s;
       const RING = 5 * s;
       const PAD = 22 * s;
       const cx = W - PAD - AV / 2;
@@ -191,6 +195,7 @@ export class WalletService {
       const textLayer = Buffer.from(
         `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">` +
         this.textPath(bold, title, LEFT * s, TITLE_BASELINE * s, TITLE_SIZE * s, TITLE_MIN * s, textMaxW, TEXT_COLOR) +
+        this.textPath(medium, breed, LEFT * s, BREED_BASELINE * s, 14 * s, 10 * s, textMaxW, TEXT_COLOR) +
         this.textPath(medium, subtitle, LEFT * s, SUB_BASELINE * s, SUB_SIZE * s, SUB_MIN * s, textMaxW, TEXT_COLOR) +
         `</svg>`,
       );
@@ -462,7 +467,10 @@ export class WalletService {
       // Hàng 2: giống · giới tính | microchip
       const breedText = pet.breed ?? pet.species;
       const genderText = this.toGenderText(pet.gender, lang);
-      const subtitle = genderText === '—' ? '' : genderText;
+      const subtitle = [
+        genderText !== '—' ? genderText : null,
+        pet.dob ? this.toDobText(pet.dob) : null,
+      ].filter(Boolean).join(' · ');
 
       // Primary: label = giống · giới tính, value = tên pet
       // pass.primaryFields.push({
@@ -472,15 +480,15 @@ export class WalletService {
       // });
 
 
-      pass.secondaryFields.push(
-        { key: 'breed', label: t.breed, value: breedText },
-        {
-          key: 'dob',
-          label: t.dob,
-          value: this.toDobText(pet.dob),
-          textAlignment: 'PKTextAlignmentRight',
-        },
-      );
+      // pass.secondaryFields.push(
+      //   { key: 'breed', label: t.breed, value: breedText },
+      //   {
+      //     key: 'dob',
+      //     label: t.dob,
+      //     value: this.toDobText(pet.dob),
+      //     textAlignment: 'PKTextAlignmentRight',
+      //   },
+      // );
 
       // Hàng 2: chỉ còn microchip (giống · giới tính đã chuyển lên trên)
       if (pet.microchipNumber) {
@@ -493,7 +501,7 @@ export class WalletService {
 
       // Strip hero (avatar)
       try {
-        const strip = await this.buildHeroStrip(pet.photoUrl, pet.name, subtitle);
+        const strip = await this.buildHeroStrip(pet.photoUrl, pet.name, breedText, subtitle);
         pass.addBuffer('strip.png', strip.x1);
         pass.addBuffer('strip@2x.png', strip.x2);
         pass.addBuffer('strip@3x.png', strip.x3);
@@ -514,6 +522,9 @@ export class WalletService {
       // Mặt sau (giữ nguyên)
       pass.backFields.push(
         { key: 'petName', label: t.name, value: pet.name },
+        { key: 'breed', label: t.breed, value: breedText },
+        { key: 'dob', label: t.dob, value: this.toDobText(pet.dob) },
+        { key: 'gender', label: t.gender, value: genderText },
         { key: 'fullId', label: t.fullId, value: pet.id },
         { key: 'profile', label: t.profilePage, value: profileUrl },
         { key: 'guide', label: t.guideLabel, value: t.guideValue },
