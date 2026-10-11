@@ -353,12 +353,21 @@ export class WalletService {
         { key: 'petCode', label: t.pawLifeId, value: displayCode, textAlignment: 'PKTextAlignmentRight' },
       );
 
-      // Hàng 2: giống | giới tính
-      // Hàng 3: ngày sinh | microchip (nếu có)
+      // Hàng 2: giống · giới tính | ngày sinh  (tổng đúng 4 field)
+      const breedText = pet.breed ?? pet.species;
+      const genderText = this.toGenderText(pet.gender, lang);
       pass.auxiliaryFields.push(
-        { key: 'breed', label: t.breed, value: pet.breed ?? pet.species, row: 0 },
-        { key: 'gender', label: t.gender, value: this.toGenderText(pet.gender, lang), textAlignment: 'PKTextAlignmentRight', row: 0 },
-        { key: 'dob', label: t.dob, value: this.toDobText(pet.dob), row: 1 },
+        {
+          key: 'breedGender',
+          label: isVi ? 'Giống · Giới tính' : 'Breed · Gender',
+          value: genderText === '—' ? breedText : `${breedText} · ${genderText}`,
+        },
+        {
+          key: 'dob',
+          label: t.dob,
+          value: this.toDobText(pet.dob),
+          textAlignment: 'PKTextAlignmentRight',
+        },
       );
       if (pet.microchipNumber) {
         pass.auxiliaryFields.push({
