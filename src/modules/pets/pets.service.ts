@@ -1148,10 +1148,7 @@ export class PetsService {
     }
 
     const { search, type, status, page = 1, pageSize = 20 } = params;
-    const whereCondition: Prisma.PetWhereInput = {
-      status: 'AVAILABLE',
-      ...onlyAllowedShelterPet,
-    };
+    const whereCondition: Prisma.PetWhereInput = { shelterId: user.shelterId };
 
     if (status) whereCondition.status = status as any;
     const keyword = search?.trim();
@@ -1317,7 +1314,7 @@ export class PetsService {
 
     const whereCondition: Prisma.PetWhereInput = {
       status: 'AVAILABLE',
-      ...notHiddenShelterPet,
+      ...onlyAllowedShelterPet,
     };
 
     if (userId) {
@@ -1488,24 +1485,26 @@ export class PetsService {
         },
       });
 
-      // if (!pet) {
-      //   throw new NotFoundException({
-      //     message: 'Pet information not found!',
-      //     i18n: { key: 'error.pet_not_found' },
-      //   });
-      // }
-      if (pet?.shelter?.name === HIDDEN_SHELTER_NAME) {
-        // Cho nhân viên của chính shelter này vẫn xem được để dashboard hoạt động
-        const viewer = userId
-          ? await this.prisma.user.findUnique({ where: { id: userId }, select: { shelterId: true } })
-          : null;
-        if (!viewer?.shelterId || viewer.shelterId !== pet.shelterId) {
-          throw new NotFoundException({
-            message: 'Pet information not found!',
-            i18n: { key: 'error.pet_not_found' },
-          });
-        }
+      if (!pet) {
+        throw new NotFoundException({
+          message: 'Pet information not found!',
+          i18n: { key: 'error.pet_not_found' },
+        });
       }
+
+      // comment tạm
+      // if (pet?.shelter?.name === HIDDEN_SHELTER_NAME) {
+      //   // Cho nhân viên của chính shelter này vẫn xem được để dashboard hoạt động
+      //   const viewer = userId
+      //     ? await this.prisma.user.findUnique({ where: { id: userId }, select: { shelterId: true } })
+      //     : null;
+      //   if (!viewer?.shelterId || viewer.shelterId !== pet.shelterId) {
+      //     throw new NotFoundException({
+      //       message: 'Pet information not found!',
+      //       i18n: { key: 'error.pet_not_found' },
+      //     });
+      //   }
+      // }
       // ── Auto-generate shelter code nếu chưa có ─────────────────────────────
       if (!pet.idSetByShelter) {
         const newCode = await this.generateUniqueShelterCode();
