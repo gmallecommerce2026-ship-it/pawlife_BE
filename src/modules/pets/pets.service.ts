@@ -13,9 +13,9 @@ import { ConfigService } from '@nestjs/config';
 import { ToggleLostModeDto } from './dto/toggle-lost-mode.dto';
 import { ReplaceQrDto } from './dto/replace-qr.dto';
 import { Logger } from '@nestjs/common';
-const HIDDEN_SHELTER_NAME = 'BoNé Petkery';
-const notHiddenShelterPet: Prisma.PetWhereInput = {
-  NOT: { shelter: { is: { name: HIDDEN_SHELTER_NAME } } },
+const ALLOWED_SHELTER_NAME = 'Sân Nhà Nhiều Chó';
+const onlyAllowedShelterPet: Prisma.PetWhereInput = {
+  shelter: { is: { name: ALLOWED_SHELTER_NAME } },
 };
 export interface FeedFilters {
   gender?: PetGender;
@@ -194,15 +194,30 @@ export class PetsService {
     }
     return `${this.generateShelterCode()}-${Date.now().toString().slice(-4)}`;
   }
+  // Lấy id shelter duy nhất được phép (cache 1 giờ)
+  private async getAllowedShelterId(): Promise<string | null> {
+    const cacheKey = 'shelters:allowed:id:v1';
+    const cached = await this.redisService.get<string>(cacheKey);
+    if (cached) return cached;
 
+    const shelter = await this.prisma.shelter.findFirst({
+      where: { name: ALLOWED_SHELTER_NAME },
+      select: { id: true },
+    });
+    if (!shelter) return null;
+
+    await this.redisService.set(cacheKey, shelter.id, 3600);
+    return shelter.id;
+  }
   private async getAvailablePetsByShelterIds(shelterIds: string[]) {
-    const cacheKey = `pets:available:v2:shelters:${shelterIds.sort().join('_')}`;
+    // v3: bỏ cache cũ (v2 còn chứa pet của các shelter khác)
+    const cacheKey = `pets:available:v3:shelters:${[...shelterIds].sort().join('_')}`;
 
     const cached = await this.redisService.get<any[]>(cacheKey);
     if (cached) return cached;
 
     const pets = await this.prisma.pet.findMany({
-      where: { status: 'AVAILABLE', shelterId: { in: shelterIds }, ...notHiddenShelterPet },
+      where: { status: 'AVAILABLE', shelterId: { in: shelterIds }, ...onlyAllowedShelterPet },
       include: { images: true, shelter: true }
     });
 
@@ -319,7 +334,7 @@ export class PetsService {
     const hiddenPetIds = hiddenPetRecords.map(h => h.petId);
 
     // 2. Tạo điều kiện filter linh hoạt cho Prisma
-    const blockFilterCondition: Prisma.PetWhereInput = { ...notHiddenShelterPet };
+    const blockFilterCondition: Prisma.PetWhereInput = { ...onlyAllowedShelterPet };
     if (blockedUserIds.length > 0) {
       blockFilterCondition.ownerId = { notIn: blockedUserIds };
     }
@@ -344,24 +359,29 @@ export class PetsService {
       const allSwipedIds = new Set(userInteractions.map(i => i.petId));
       const passActionIds = new Set(userInteractions.filter(i => i.action === 'PASS').map(i => i.petId));
 
-      const REDIS_KEY = 'shelters:locations';
-      const MAX_RADIUS_KM = 2000;   // 🆕 đủ phủ cả nước, thay cho 50
-      const MAX_SHELTERS = 100;     // 🆕 thay cho 30
+      // comment tạm, ko xoá
+      // const REDIS_KEY = 'shelters:locations';
+      // const MAX_RADIUS_KM = 2000;   // 🆕 đủ phủ cả nước, thay cho 50
+      // const MAX_SHELTERS = 100;     // 🆕 thay cho 30
 
-      let nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, MAX_RADIUS_KM);
+      // let nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, MAX_RADIUS_KM);
 
-      if (!nearbyShelterIds || nearbyShelterIds.length === 0) {
-        // ... (Giữ nguyên logic của bạn) ...
-        const allShelters = await this.prisma.shelter.findMany({
-          where: { latitude: { not: null }, longitude: { not: null } }
-        });
-        for (const s of allShelters) {
-          await this.redisService.addLocation(REDIS_KEY, s.longitude!, s.latitude!, s.id);
-        }
-        nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, MAX_RADIUS_KM);
-      }
+      // if (!nearbyShelterIds || nearbyShelterIds.length === 0) {
+      //   // ... (Giữ nguyên logic của bạn) ...
+      //   const allShelters = await this.prisma.shelter.findMany({
+      //     where: { latitude: { not: null }, longitude: { not: null } }
+      //   });
+      //   for (const s of allShelters) {
+      //     await this.redisService.addLocation(REDIS_KEY, s.longitude!, s.latitude!, s.id);
+      //   }
+      //   nearbyShelterIds = await this.redisService.getNearby(REDIS_KEY, lng, lat, MAX_RADIUS_KM);
+      // }
 
-      const targetShelterIds = nearbyShelterIds.slice(0, MAX_SHELTERS);
+      const allowedShelterId = await this.getAllowedShelterId();
+      const targetShelterIds = allowedShelterId ? [allowedShelterId] : [];
+
+      // comment tạm, ko xoá
+      // const targetShelterIds = nearbyShelterIds.slice(0, MAX_SHELTERS);
 
       if (targetShelterIds.length > 0) {
         const allPetsInShelters = await this.getAvailablePetsByShelterIds(targetShelterIds);
@@ -861,7 +881,7 @@ export class PetsService {
   async getFavorites(userId: string, skip: number, take: number) {
     const favoriteWhere: Prisma.FavoritePetWhereInput = {
       userId,
-      pet: { ...notHiddenShelterPet },
+      pet: { ...onlyAllowedShelterPet },
     };
 
     const favorites = await this.prisma.favoritePet.findMany({
@@ -1128,7 +1148,10 @@ export class PetsService {
     }
 
     const { search, type, status, page = 1, pageSize = 20 } = params;
-    const whereCondition: Prisma.PetWhereInput = { shelterId: user.shelterId };
+    const whereCondition: Prisma.PetWhereInput = {
+      status: 'AVAILABLE',
+      ...onlyAllowedShelterPet,
+    };
 
     if (status) whereCondition.status = status as any;
     const keyword = search?.trim();
@@ -1465,12 +1488,12 @@ export class PetsService {
         },
       });
 
-      if (!pet) {
-        throw new NotFoundException({
-          message: 'Pet information not found!',
-          i18n: { key: 'error.pet_not_found' },
-        });
-      }
+      // if (!pet) {
+      //   throw new NotFoundException({
+      //     message: 'Pet information not found!',
+      //     i18n: { key: 'error.pet_not_found' },
+      //   });
+      // }
       if (pet?.shelter?.name === HIDDEN_SHELTER_NAME) {
         // Cho nhân viên của chính shelter này vẫn xem được để dashboard hoạt động
         const viewer = userId
@@ -1797,6 +1820,26 @@ export class PetsService {
       await this.redisService.set(cacheKey, petData, 600);
     }
 
+    if (petData.shelterId && petData.shelter?.name !== ALLOWED_SHELTER_NAME) {
+      const isOwnerOrReceiver =
+        !!userId && (petData.ownerId === userId || petData.receiverId === userId);
+
+      let isShelterStaff = false;
+      if (userId && !isOwnerOrReceiver) {
+        const viewer = await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { shelterId: true },
+        });
+        isShelterStaff = !!viewer?.shelterId && viewer.shelterId === petData.shelterId;
+      }
+
+      if (!isOwnerOrReceiver && !isShelterStaff) {
+        throw new NotFoundException({
+          message: 'Pet information not found!',
+          i18n: { key: 'error.pet_not_found' },
+        });
+      }
+    }
     // ── isFavorited — không cache theo user ───────────────────────────────────
     let isFavorited = false;
     if (userId) {
