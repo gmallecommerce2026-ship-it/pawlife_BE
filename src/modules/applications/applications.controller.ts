@@ -306,7 +306,17 @@ export class ApplicationsController {
     );
     return { success: true, data };
   }
-
+  @Delete(':id')
+  @UseGuards(RolesGuard, ShelterGuard)
+  @Roles(Role.SHELTER)
+  async deleteApplication(
+    @User('id') staffId: string,
+    @User('shelterId') shelterId: string,
+    @Param('id') applicationId: string,
+  ) {
+    await this.applicationsService.deleteApplication(shelterId, applicationId, staffId);
+    return { success: true, message: 'Application deleted successfully' };
+  }
   @Post(':id/appointments')
   @UseGuards(RolesGuard, ShelterGuard)
   @Roles(Role.SHELTER)

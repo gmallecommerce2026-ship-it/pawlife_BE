@@ -754,7 +754,82 @@ export class ApplicationsService {
 
     return updated;
   }
+  // Hard delete là thao tác không hoàn tác → chặn ở backend, không chỉ ẩn nút ở FE.
+  // Logic phải khớp với useIsShelterAdmin ở FE (user SHELTER cũ chưa có shelterRole coi như ADMIN).
+  private async assertShelterAdmin(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, shelterRole: true },
+    });
+    const shelterRole = (user?.shelterRole as string | null | undefined) ?? 'ADMIN';
+    if (user?.role !== Role.SHELTER || shelterRole !== 'ADMIN') {
+      throw new ForbiddenException('Chỉ quản trị viên của trạm mới được xoá đơn.');
+    }
+  }
 
+  async deleteApplication(shelterId: string, applicationId: string, staffId: string) {
+    await this.assertShelterAdmin(staffId);
+    const application = await this.assertOwnsApplication(shelterId, applicationId);
+
+    // Đơn đã hoàn tất nhận nuôi là bằng chứng chuyển quyền sở hữu pet → không cho xoá
+    if (application.status === ApplicationStatus.ADOPTION_COMPLETED) {
+      throw new BadRequestException('Không thể xoá đơn đã hoàn tất nhận nuôi.');
+    }
+
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { applicationId },
+      select: { googleEventId: true },
+    });
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        // Xoá con trước → không phụ thuộc việc schema có onDelete: Cascade hay không
+        await tx.applicationNote.deleteMany({ where: { applicationId } });
+        await tx.applicationTagOnApplication.deleteMany({ where: { applicationId } });
+        await tx.applicationDocument.deleteMany({ where: { applicationId } });
+        await tx.appointment.deleteMany({ where: { applicationId } });
+        await tx.adoptionApplication.delete({ where: { id: applicationId } });
+
+        // Đơn APPROVED đang giữ pet ở PENDING (xem moveApplication) → trả pet về AVAILABLE
+        // nếu không còn đơn APPROVED nào khác
+        if (application.status === ApplicationStatus.APPROVED) {
+          const otherApproved = await tx.adoptionApplication.count({
+            where: {
+              petId: application.petId,
+              id: { not: applicationId },
+              status: ApplicationStatus.APPROVED,
+            },
+          });
+          if (otherApproved === 0) {
+            await tx.pet.updateMany({
+              where: { id: application.petId, status: 'PENDING' },
+              data: { status: 'AVAILABLE' },
+            });
+          }
+        }
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2003') {
+        this.logger.error(`Xoá đơn ${applicationId} lỗi ràng buộc khoá ngoại`, err);
+        throw new BadRequestException('Đơn còn dữ liệu liên quan nên chưa thể xoá.');
+      }
+      throw err;
+    }
+
+    // Side-effect đặt SAU khi DB commit thành công
+    if (appointment?.googleEventId) {
+      await this.googleMeetService.cancelMeetEvent(appointment.googleEventId).catch(() => { });
+    }
+    await this.redisService.del(`pet:detail:${application.petId}`);
+
+    await this.broadcastDocumentEvent(shelterId, application.userId, 'application_deleted', {
+      applicationId,
+      petId: application.petId,
+      deleted: true,
+    });
+
+    return { success: true };
+  }
   async generateQuickMeetLink() {
     try {
       const event = await this.googleMeetService.createMeetEvent({
@@ -933,7 +1008,7 @@ export class ApplicationsService {
         if (p.qrVerificationStatus === 'VERIFIED' && p.tags?.[0]?.linkedAt) {
           history.push({ id: `qr-${p.id}`, type: 'QR_LINKED', title: 'Đăng ký mã QR', description: 'Kích hoạt vòng cổ PawLife', date: p.tags[0].linkedAt.toISOString() });
         }
-        
+
         p.medicalRecords.forEach(mr => {
           // Xử lý json recordName
           const titleVi = typeof mr.recordName === 'object' ? (mr.recordName as any)?.vi : mr.recordName;
