@@ -6,6 +6,7 @@ import { BullModule } from '@nestjs/bullmq'; // Đảm bảo bạn dùng @nestjs
 import { SwipeProcessor } from './processors/swipe.processor';
 import { PetNotesController } from './pet-notes.controller';
 import { PetNotesService } from './pet-notes.service';
+import { PublicPetsController } from './public-pets.controller';
 @Module({
   imports: [
     DatabaseModule,
@@ -13,7 +14,7 @@ import { PetNotesService } from './pet-notes.service';
       name: 'swipe-queue',
     }),
   ],
-  controllers: [PetsController, PetNotesController],
+  controllers: [PetsController, PetNotesController, PublicPetsController],
   providers: [PetsService, PetNotesService, SwipeProcessor],
   exports: [PetsService], // 🆕 thêm dòng này
 })

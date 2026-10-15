@@ -129,6 +129,52 @@ export class PetsService {
     private configService: ConfigService,
   ) { }
   private readonly logger = new Logger('QR-SCAN');
+  private toPublicPet(p: any) {
+    const KEYS = ['id', 'name', 'gender', 'dob', 'breed', 'species', 'color', 'weight', 'size', 'description',
+      'traits', 'traitsList', 'goodWith', 'badWith', 'isSpayedNeutered', 'isVaccinated', 'vaccinationStatus',
+      'status', 'images', 'avatarUrl', 'adoptionRequirements', 'createdAt'];
+    const out: any = {};
+    KEYS.forEach((k) => { if (p[k] !== undefined) out[k] = p[k]; });
+
+    const records = (p.medicalRecords ?? []).filter((r: any) => r.isPublic !== false);
+    const publicIds = new Set(records.map((r: any) => r.id));
+    out.medicalRecords = records.map((r: any) => ({
+      id: r.id, type: r.type, recordName: r.recordName, recordDate: r.recordDate, images: r.images,
+      verificationStatus: r.verificationStatus, hasNextDueDate: r.hasNextDueDate,
+      nextDueDate: r.nextDueDate, nextDueName: r.nextDueName,
+    }));
+    out.shelter = p.shelter
+      ? { id: p.shelter.id, name: p.shelter.name, address: p.shelter.address, avatarUrl: p.shelter.avatarUrl }
+      : null;
+    out.pawHistory = (p.pawHistory ?? []).filter((h: any) =>
+      !['CURRENT_OWNER', 'PREVIOUS_OWNER', 'TRANSFER'].includes(h.type) &&
+      (!String(h.id).startsWith('med_') || publicIds.has(String(h.id).slice(4))));
+    return out;
+  }
+
+  async getPublicPets(limit = 12, species?: string) {
+    const where: Prisma.PetWhereInput = { status: 'AVAILABLE', shelterId: { not: null } };
+    // Muốn giới hạn như app (chỉ 1 trạm): thêm  ...onlyAllowedShelterPet
+    if (species) {
+      where.species = { path: ['en'], equals: species.charAt(0).toUpperCase() + species.slice(1).toLowerCase() } as any;
+    }
+    const pets = await this.prisma.pet.findMany({
+      where, take: limit, orderBy: { createdAt: 'desc' },
+      include: { images: { orderBy: { createdAt: 'asc' }, take: 1 }, shelter: { select: { name: true } } },
+    });
+    return {
+      data: pets.map((p: any) => ({
+        id: p.id, name: p.name, gender: p.gender, dob: p.dob,
+        breed: getBilingualText(p.breed).vi,
+        description: getBilingualText(p.description).vi,
+        isSpayedNeutered: !!p.isSpayedNeutered, isVaccinated: !!p.isVaccinated,
+        traits: (Array.isArray(p.traits) ? p.traits : [])
+          .map((t: any) => getBilingualText(t?.name ?? t).vi).filter(Boolean),
+        image: p.images?.[0]?.url ?? null,
+        shelterName: p.shelter?.name ?? null,
+      })),
+    };
+  }
   private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371;
     const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -1432,7 +1478,7 @@ export class PetsService {
     return { success: true, data: report };
   }
   // ── HÀM (trong class PetsService) ──────────────────────────────────────────
-  async getPetById(id: string, userId?: string) {
+  async getPetById(id: string, userId?: string, isPublicView = false) {
     const cacheKey = `pet:detail:${id}`;
     let petData = await this.redisService.get<any>(cacheKey);
 
@@ -1817,6 +1863,12 @@ export class PetsService {
       };
 
       await this.redisService.set(cacheKey, petData, 600);
+    }
+    if (isPublicView) {
+      if (!petData.shelterId || petData.status !== 'AVAILABLE') {
+        throw new NotFoundException({ message: 'Pet information not found!', i18n: { key: 'error.pet_not_found' } });
+      }
+      return this.toPublicPet(petData);
     }
 
     if (petData.shelterId && petData.shelter?.name !== ALLOWED_SHELTER_NAME) {

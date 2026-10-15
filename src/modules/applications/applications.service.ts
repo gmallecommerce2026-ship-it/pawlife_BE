@@ -830,6 +830,29 @@ export class ApplicationsService {
 
     return { success: true };
   }
+  async createPublicApplication(data: CreateApplicationDto) {
+    const email = data.email?.trim().toLowerCase();
+    if (!email) throw new BadRequestException('Vui lòng nhập email để trạm cứu hộ liên hệ.');
+
+    const pet = await this.prisma.pet.findUnique({
+      where: { id: data.petId }, select: { status: true, shelterId: true },
+    });
+    if (!pet || !pet.shelterId || pet.status !== 'AVAILABLE') {
+      throw new NotFoundException('Bé này hiện không nhận đơn đăng ký.');
+    }
+
+    const user = await this.prisma.user.upsert({
+      where: { email },
+      update: {},
+      create: { email, name: data.fullName, phone: data.phone || data.zalo, role: Role.USER, provider: 'guest' },
+    });
+    if (user.role !== Role.USER || user.isDeleted) {
+      throw new BadRequestException('Email này không thể dùng để nộp đơn. Vui lòng dùng email khác.');
+    }
+
+    const created = await this.createApplication(user.id, { ...data, email });
+    return { id: created.id };
+  }
   async generateQuickMeetLink() {
     try {
       const event = await this.googleMeetService.createMeetEvent({
