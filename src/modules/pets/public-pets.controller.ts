@@ -11,7 +11,7 @@ export class PublicPetsController {
 
   @Get()
   list(@Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number, @Query('species') species?: string) {
-    return this.petsService.getPublicPets(Math.min(limit, 50), species);
+    return this.petsService.getPublicPets(Math.min(limit, 500), species);
   }
 
   @Get(':id')

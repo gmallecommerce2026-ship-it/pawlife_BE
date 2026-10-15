@@ -160,7 +160,7 @@ export class PetsService {
     }
     const pets = await this.prisma.pet.findMany({
       where, take: limit, orderBy: { createdAt: 'desc' },
-      include: { images: { orderBy: { createdAt: 'asc' }, take: 1 }, shelter: { select: { name: true } } },
+      include: { images: { orderBy: { createdAt: 'asc' }, take: 1 }, shelter: { select: { name: true, address: true } } },
     });
     return {
       data: pets.map((p: any) => ({
@@ -172,6 +172,10 @@ export class PetsService {
           .map((t: any) => getBilingualText(t?.name ?? t).vi).filter(Boolean),
         image: p.images?.[0]?.url ?? null,
         shelterName: p.shelter?.name ?? null,
+        species: getBilingualText(p.species).en,
+        size: p.size ?? null,
+        weight: p.weight ?? null,
+        shelterAddress: p.shelter?.address ?? null,
       })),
     };
   }
