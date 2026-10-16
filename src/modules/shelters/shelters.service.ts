@@ -4,9 +4,9 @@ import { GetSheltersDto } from './dto/get-shelters.dto';
 import { NotificationType } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RedisService } from 'src/database/redis/redis.service';
+import { ALLOWED_SHELTER_NAME } from 'src/common/constants/shelter.constant';
 
 // Shelter duy nhất được phép hiển thị trên app
-const ALLOWED_SHELTER_NAME = 'Sân Nhà Nhiều Chó';
 
 @Injectable()
 export class SheltersService {

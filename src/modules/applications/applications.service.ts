@@ -25,6 +25,7 @@ import { ScheduleAppointmentDto } from './dto/schedule-appointment.dto';
 import { GoogleMeetService } from '../google-meet/google-meet.service';
 import { APPLICANT_FLAG_REASONS, attachApplicantFlags } from './applicant-flag.util';
 import { renderInterviewConfirmationEmail } from './templates/interview-confirmation.template';
+import { ALLOWED_SHELTER_NAME } from 'src/common/constants/shelter.constant';
 const NOTE_AUTHOR_SELECT = {
   id: true,
   name: true,
