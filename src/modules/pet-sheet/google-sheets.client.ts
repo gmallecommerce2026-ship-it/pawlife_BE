@@ -15,11 +15,8 @@ export class GoogleSheetsClient {
     private sheets?: sheets_v4.Sheets;
     private drive?: drive_v3.Drive;
     private readonly folderId?: string;
-    private readonly imageFolderId?: string;
     constructor(config: ConfigService) {
         this.folderId = config.get<string>('PET_SHEET_FOLDER_ID')?.trim() || undefined;
-        const rawImg = config.get<string>('PET_IMAGE_FOLDER_ID')?.trim();
-        this.imageFolderId = rawImg?.match(/folders\/([\w-]+)/)?.[1] ?? rawImg ?? undefined;
         const b64 = (config.get<string>('GOOGLE_SERVICE_ACCOUNT_JSON_B64') || '').trim();
         if (!b64) {
             this.logger.warn('Thiếu GOOGLE_SERVICE_ACCOUNT_JSON_B64 — tính năng đồng bộ Google Sheet đang tắt.');
@@ -126,31 +123,26 @@ export class GoogleSheetsClient {
         if (!requests.length) return;
         await this.sheets!.spreadsheets.batchUpdate({ spreadsheetId: id, requestBody: { requests } });
     }
-    async listImages(): Promise<{ id: string; name: string }[]> {
+    /** Liệt kê ảnh trong 1 thư mục (kèm thư mục con, tối đa 20 thư mục) → trả về danh sách fileId đã sắp theo tên. */
+    async listImages(folderId: string, max = 12): Promise<string[]> {
         this.assertReady();
-        if (!this.imageFolderId) throw new ServiceUnavailableException('Chưa cấu hình PET_IMAGE_FOLDER_ID.');
         const out: { id: string; name: string }[] = [];
-        const queue = [this.imageFolderId];
+        const queue = [folderId];
         const seen = new Set<string>();
-        while (queue.length) {
+        while (queue.length && seen.size < 20) {
             const folder = queue.shift()!;
             if (seen.has(folder)) continue;
             seen.add(folder);
-            let pageToken: string | undefined;
-            do {
-                const { data } = await this.drive!.files.list({
-                    q: `'${folder}' in parents and trashed=false`,
-                    fields: 'nextPageToken, files(id,name,mimeType)',
-                    pageSize: 1000, pageToken, supportsAllDrives: true, includeItemsFromAllDrives: true,
-                });
-                for (const f of data.files ?? []) {
-                    if (f.mimeType === 'application/vnd.google-apps.folder') queue.push(f.id!);
-                    else if (f.mimeType?.startsWith('image/')) out.push({ id: f.id!, name: f.name! });
-                }
-                pageToken = data.nextPageToken ?? undefined;
-            } while (pageToken);
+            const { data } = await this.drive!.files.list({
+                q: `'${folder}' in parents and trashed=false`,
+                fields: 'files(id,name,mimeType)', pageSize: 200, supportsAllDrives: true, includeItemsFromAllDrives: true,
+            });
+            for (const f of data.files ?? []) {
+                if (f.mimeType === 'application/vnd.google-apps.folder') queue.push(f.id!);
+                else if (f.mimeType?.startsWith('image/')) out.push({ id: f.id!, name: f.name! });
+            }
         }
-        return out;
+        return out.sort((a, b) => a.name.localeCompare(b.name, 'vi', { numeric: true })).slice(0, max).map((f) => f.id);
     }
     quote = q;
 }

@@ -14,33 +14,31 @@ export class PetSheetService {
 
     status() { return { linked: true, ready: true }; }
 
-
-    private imgKey(s: string) {
-        return norm(s.replace(/\.(jpe?g|png|webp|heic|gif)[a-z]*$/i, '')).replace(/[^a-z0-9]+/g, ' ').trim();
-    }
-
-    /** Gắn ảnh từ thư mục Drive vào pet theo tên file (cột Ảnh, hoặc ID nếu trống). */
+    /** Gắn ảnh theo link Drive trong cột Ảnh (thư mục → mọi ảnh trong đó; file → chính file đó). */
     async syncImages(shelterId: string) {
-        const files = (await this.gs.listImages())
-            .map((f) => ({ id: f.id, k: this.imgKey(f.name) }))
-            .filter((f) => f.k)
-            .sort((a, b) => a.k.localeCompare(b.k));
         const pets = await this.prisma.pet.findMany({ where: { shelterId }, include: { images: { select: { url: true } } } });
-        const stat = { pets: 0, added: 0, noMatch: 0 };
-        for (const p of pets) {
-            const k = this.imgKey(p.photoNote || p.shelterInternalId || '');
-            if (!k) continue;
-            const urls = files
-                .filter((f) => f.k === k || (f.k.startsWith(k + ' ') && /^\d{1,2}$/.test(f.k.slice(k.length + 1))))
-                .map((f) => `https://lh3.googleusercontent.com/d/${f.id}=w1200`);
-            if (!urls.length) { stat.noMatch++; continue; }
+        const todo = pets.filter((p) => /drive\.google\.com/.test(p.photoNote ?? ''));
+        const stat = { pets: 0, added: 0, noLink: pets.length - todo.length, failed: 0 };
+        const toUrl = (id: string) => `https://lh3.googleusercontent.com/d/${id}=w1200`;
+
+        const work = async (p: (typeof pets)[number]) => {
+            const note = p.photoNote!;
+            const folder = note.match(/folders\/([\w-]+)/)?.[1];
+            const file = note.match(/file\/d\/([\w-]+)/)?.[1] ?? note.match(/[?&]id=([\w-]+)/)?.[1];
+            let ids: string[] = [];
+            try { ids = folder ? await this.gs.listImages(folder) : file ? [file] : []; } catch { stat.failed++; return; }
+            if (!ids.length) { stat.failed++; return; }
             const have = new Set(p.images.map((i) => i.url));
-            const fresh = urls.filter((u) => !have.has(u));
-            if (!fresh.length) continue;
-            await this.prisma.pet.update({ where: { id: p.id }, data: { images: { create: fresh.map((url) => ({ url })) } } });
+            const fresh = ids.map(toUrl).filter((u) => !have.has(u));
+            if (!fresh.length) return;
+            for (const url of fresh) {
+                await this.prisma.pet.update({ where: { id: p.id }, data: { images: { create: { url } } } });
+            }
             await this.redis.del(`pet:detail:${p.id}`);
             stat.pets++; stat.added += fresh.length;
-        }
+        };
+        const queue = [...todo];
+        await Promise.all(Array.from({ length: 5 }, async () => { for (let p; (p = queue.shift());) await work(p); }));
         return stat;
     }
 
