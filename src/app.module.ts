@@ -28,6 +28,7 @@ import { TranslateModule } from './translate/translate.module';
 import { IngredientsModule } from './modules/ingredients/ingredients.module';
 import { AppointmentsModule } from './modules/appointments/appointment.module';
 import { SupportModule } from './modules/support/support.module';
+import { PetSheetModule } from './modules/pet-sheet/pet-sheet.module';
 import { ShelterTeamModule } from './modules/shelter-team/shelter-team.module';
 import { PetParadiseModule } from './modules/pet-paradise/pet-paradise.module';
 import { ProceduresModule } from './modules/procedures/procedures.module';
@@ -129,6 +130,7 @@ import { PawlyPlacesModule } from './modules/pawly-place/pawly-place.module';
     NotificationsModule,
     ApplicationsModule,
     WalletModule,
+    PetSheetModule,
     TranslateModule,
     ScheduleModule.forRoot(),
   ],

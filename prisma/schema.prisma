@@ -717,7 +717,12 @@ model Pet {
   vetVerificationStatus VerificationStatus @default(PENDING)
   qrCodeUrl             String?
   qrVerificationStatus  VerificationStatus @default(PENDING)
-
+  
+  area            String?
+  listingNote     String?
+  extraNote       String?   @db.Text
+  ageText         String?
+  vaccinationNote String?
   idSetByShelter String? @unique
 
   interactions     PetInteraction[]
@@ -1472,4 +1477,34 @@ model PlaceSubmission {
 
   @@index([status, createdAt])
   @@index([submitterId, status])
+}
+
+model PetSheetLink {
+  id                String    @id @default(uuid())
+  shelterId         String    @unique
+  spreadsheetId     String
+  url               String    @db.Text
+  status            String    @default("ACTIVE") // ACTIVE | ERROR | PAUSED
+  lastError         String?   @db.Text
+  lastSyncedAt      DateTime?
+  lastSheetModified String?
+  dbFingerprint     String?   @db.Text
+  version           Int       @default(0)
+  sharedEmails      Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  rows PetSheetRow[]
+
+  @@map("pet_sheet_links")
+}
+
+model PetSheetRow {
+  petId  String       @id
+  linkId String
+  link   PetSheetLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  hash   String
+
+  @@index([linkId])
+  @@map("pet_sheet_rows")
 }
