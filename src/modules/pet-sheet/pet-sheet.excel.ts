@@ -52,7 +52,7 @@ export async function readWorkbook(buf: Buffer): Promise<{ sp: SheetSpecies; row
                 if (col[k] === undefined) { f[k] = ''; continue; }
                 const cell = row.getCell(col[k]! + 1);
                 const h = k === 'photo' ? (cell.value as any)?.hyperlink ?? (cell as any).hyperlink : undefined;
-                f[k] = typeof h === 'string' && h ? h : cellText(plain(cell.value));
+                f[k] = typeof h === 'string' && h ? `${cellText(plain(cell.value))}|${h}` : cellText(plain(cell.value));
             }
             if (f.id) rows.push(f);
         });
@@ -76,7 +76,12 @@ export async function buildWorkbook(pets: Pet[] = []): Promise<Buffer> {
             ws.addRow(defs.map((d) => {
                 if (d.key === 'stt') return { formula: `IF(B${i + 2}<>"",ROW(B${i + 2})-1,"")`, result: i + 1 };
                 const v = f[d.key];
-                return d.key === 'photo' && /^https?:/.test(v) ? { text: v, hyperlink: v } : v;
+                if (d.key === 'photo') {
+                    const m = /^(.*)\|(https?:\/\/\S+)$/.exec(v);
+                    if (m) return { text: m[1] || m[2], hyperlink: m[2] };
+                    if (/^https?:/.test(v)) return { text: v, hyperlink: v };
+                }
+                return v;
             }));
         });
         const lists: Record<string, string[]> = {
