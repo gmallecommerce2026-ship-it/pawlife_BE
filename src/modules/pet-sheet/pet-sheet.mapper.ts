@@ -15,7 +15,7 @@ export type Fields = Record<EditKey, string>;
 export type ColMap = Partial<Record<FieldKey, number>>;
 
 export const EDIT_KEYS: EditKey[] = [
-    'id', 'name', 'breed', 'color', 'age', 'gender', 'spay', 'vacc', 'status', 'area', 'listing', 'desc', 'extra',
+    'id', 'name', 'breed', 'color', 'age', 'gender', 'spay', 'vacc', 'status', 'area', 'listing', 'desc', 'extra', 'photo',
 ];
 
 export const norm = (s: unknown): string =>
