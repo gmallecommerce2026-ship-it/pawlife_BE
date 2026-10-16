@@ -153,7 +153,11 @@ export class PetsService {
   }
 
   async getPublicPets(limit = 12, species?: string) {
-    const where: Prisma.PetWhereInput = { status: 'AVAILABLE', shelterId: { not: null } };
+    const where: Prisma.PetWhereInput = {
+      status: 'AVAILABLE',
+      shelterId: { not: null },
+      ...onlyAllowedShelterPet,
+    };
     // Muốn giới hạn như app (chỉ 1 trạm): thêm  ...onlyAllowedShelterPet
     if (species) {
       where.species = { path: ['en'], equals: species.charAt(0).toUpperCase() + species.slice(1).toLowerCase() } as any;
@@ -1869,7 +1873,11 @@ export class PetsService {
       await this.redisService.set(cacheKey, petData, 600);
     }
     if (isPublicView) {
-      if (!petData.shelterId || petData.status !== 'AVAILABLE') {
+      if (
+        !petData.shelterId ||
+        petData.status !== 'AVAILABLE' ||
+        petData.shelter?.name !== ALLOWED_SHELTER_NAME
+      ) {
         throw new NotFoundException({ message: 'Pet information not found!', i18n: { key: 'error.pet_not_found' } });
       }
       return this.toPublicPet(petData);

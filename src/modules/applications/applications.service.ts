@@ -23,6 +23,7 @@ import {
 } from '@prisma/client';
 import { ScheduleAppointmentDto } from './dto/schedule-appointment.dto';
 import { GoogleMeetService } from '../google-meet/google-meet.service';
+import { APPLICANT_FLAG_REASONS, attachApplicantFlags } from './applicant-flag.util';
 import { renderInterviewConfirmationEmail } from './templates/interview-confirmation.template';
 const NOTE_AUTHOR_SELECT = {
   id: true,
@@ -609,8 +610,8 @@ export class ApplicationsService {
       },
       orderBy: { createdAt: 'desc' },
     });
-
-    return applications.map((a) => ({ ...a, notes: a.notes.map(mapNote) }));
+    const mapped = applications.map((a) => ({ ...a, notes: a.notes.map(mapNote) }));
+    return attachApplicantFlags(this.prisma, shelterId, mapped);
   }
 
 
@@ -756,14 +757,14 @@ export class ApplicationsService {
   }
   // Hard delete là thao tác không hoàn tác → chặn ở backend, không chỉ ẩn nút ở FE.
   // Logic phải khớp với useIsShelterAdmin ở FE (user SHELTER cũ chưa có shelterRole coi như ADMIN).
-  private async assertShelterAdmin(userId: string) {
+  private async assertShelterAdmin(userId: string, action = 'xoá đơn') {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { role: true, shelterRole: true },
     });
     const shelterRole = (user?.shelterRole as string | null | undefined) ?? 'ADMIN';
     if (user?.role !== Role.SHELTER || shelterRole !== 'ADMIN') {
-      throw new ForbiddenException('Chỉ quản trị viên của trạm mới được xoá đơn.');
+      throw new ForbiddenException(`Chỉ quản trị viên của trạm mới được ${action}.`);
     }
   }
 
@@ -830,14 +831,59 @@ export class ApplicationsService {
 
     return { success: true };
   }
+  async flagApplicant(
+    shelterId: string,
+    applicationId: string,
+    staffId: string,
+    reason: string,
+    note?: string,
+  ) {
+    await this.assertShelterAdmin(staffId, 'đánh dấu người đăng ký');
+    if (!(APPLICANT_FLAG_REASONS as readonly string[]).includes(reason)) {
+      throw new BadRequestException('Lý do đánh dấu không hợp lệ.');
+    }
+    const cleanNote = note?.trim().slice(0, 500) || null;
+    if (reason === 'OTHER' && !cleanNote) {
+      throw new BadRequestException('Vui lòng nhập ghi chú cho lý do khác.');
+    }
+    const app = await this.assertOwnsApplication(shelterId, applicationId);
+
+    const flag = await this.prisma.applicantFlag.upsert({
+      where: { shelterId_userId: { shelterId, userId: app.userId } },
+      create: { shelterId, userId: app.userId, reason, note: cleanNote, createdById: staffId },
+      update: { reason, note: cleanNote, createdById: staffId },
+    });
+    this.emitFlagChanged(shelterId, applicationId, app.petId);
+    return flag;
+  }
+
+  async unflagApplicant(shelterId: string, applicationId: string, staffId: string) {
+    await this.assertShelterAdmin(staffId, 'gỡ đánh dấu người đăng ký');
+    const app = await this.assertOwnsApplication(shelterId, applicationId);
+    await this.prisma.applicantFlag.deleteMany({ where: { shelterId, userId: app.userId } });
+    this.emitFlagChanged(shelterId, applicationId, app.petId);
+    return { success: true };
+  }
+
+  // Chỉ bắn cho room của trạm (KHÔNG bắn cho adopter) để các nhân viên khác tự refetch Kanban
+  private emitFlagChanged(shelterId: string, applicationId: string, petId: string) {
+    try {
+      this.gateway?.server
+        ?.to(`shelter_${shelterId}`)
+        .emit('application_updated', { applicationId, petId });
+    } catch (err) {
+      this.logger.warn('Emit applicant flag event thất bại', err as Error);
+    }
+  }
   async createPublicApplication(data: CreateApplicationDto) {
     const email = data.email?.trim().toLowerCase();
     if (!email) throw new BadRequestException('Vui lòng nhập email để trạm cứu hộ liên hệ.');
 
     const pet = await this.prisma.pet.findUnique({
-      where: { id: data.petId }, select: { status: true, shelterId: true },
+      where: { id: data.petId },
+      select: { status: true, shelterId: true, shelter: { select: { name: true } } },
     });
-    if (!pet || !pet.shelterId || pet.status !== 'AVAILABLE') {
+    if (!pet || !pet.shelterId || pet.status !== 'AVAILABLE' || pet.shelter?.name !== ALLOWED_SHELTER_NAME) {
       throw new NotFoundException('Bé này hiện không nhận đơn đăng ký.');
     }
 

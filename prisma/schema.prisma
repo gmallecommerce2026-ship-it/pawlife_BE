@@ -851,6 +851,20 @@ enum ApplicationNoteType {
   BACKGROUND_CHECK
 }
 
+model ApplicantFlag {
+  id          String   @id @default(cuid())
+  shelterId   String
+  userId      String
+  reason      String
+  note        String?  @db.Text
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([shelterId, userId])
+  @@index([userId])
+}
+
 model ApplicationNote {
   id            String   @id @default(uuid())
   applicationId String

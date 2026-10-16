@@ -272,7 +272,33 @@ export class ApplicationsController {
     );
     return { success: true, data };
   }
+  @Post(':id/applicant-flag')
+  @UseGuards(RolesGuard, ShelterGuard)
+  @Roles(Role.SHELTER)
+  async flagApplicant(
+    @User('id') staffId: string,
+    @User('shelterId') shelterId: string,
+    @Param('id') applicationId: string,
+    @Body('reason') reason: string,
+    @Body('note') note?: string,
+  ) {
+    const data = await this.applicationsService.flagApplicant(
+      shelterId, applicationId, staffId, reason, note,
+    );
+    return { success: true, data };
+  }
 
+  @Delete(':id/applicant-flag')
+  @UseGuards(RolesGuard, ShelterGuard)
+  @Roles(Role.SHELTER)
+  async unflagApplicant(
+    @User('id') staffId: string,
+    @User('shelterId') shelterId: string,
+    @Param('id') applicationId: string,
+  ) {
+    await this.applicationsService.unflagApplicant(shelterId, applicationId, staffId);
+    return { success: true, message: 'Applicant flag removed successfully' };
+  }
   @Delete(':id/tags/:tagId')
   @UseGuards(RolesGuard, ShelterGuard)
   @Roles(Role.SHELTER)

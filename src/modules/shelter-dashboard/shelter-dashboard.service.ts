@@ -6,7 +6,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType, ApplicationStatus, Prisma, ApplicationStatus as PrismaApplicationStatus } from '@prisma/client';
 import { UpdateShelterProfileDto } from './dto/update-shelter-profile.dto';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
-
+import { attachApplicantFlags } from '../applications/applicant-flag.util';
 function toBilingual(v: any): { vi: string; en: string } {
     if (!v) return { vi: '', en: '' };
     if (typeof v === 'string') return { vi: v, en: v };
@@ -149,7 +149,7 @@ export class ShelterDashboardService {
         }
         if (query.petId) where.petId = query.petId;
 
-        return this.prisma.adoptionApplication.findMany({
+        const apps = await this.prisma.adoptionApplication.findMany({
             where,
             include: {
                 pet: { include: { images: { take: 1, orderBy: { createdAt: 'asc' } } } },
@@ -172,6 +172,7 @@ export class ShelterDashboardService {
             },
             orderBy: { createdAt: 'desc' },
         });
+        return attachApplicantFlags(this.prisma, shelterId, apps);
     }
 
     async moveApplication(shelterId: string, applicationId: string, status: ApplicationStatus, reviewNote?: string) {
