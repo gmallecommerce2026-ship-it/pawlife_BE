@@ -60,6 +60,7 @@ export function columnsFor(sp: SheetSpecies): ColDef[] {
     const dog = sp === 'DOG';
     return [
         { key: 'id', header: 'ID', aliases: ['id', 'ma so', 'chip', 'microchip', 'so chip'], create: true, width: 21 },
+        { key: 'name', header: 'Tên', aliases: ['ten', 'ten pet', 'name'], create: true, width: 20 },
         { key: 'photo', header: 'Ảnh', aliases: ['anh', 'hinh anh'], create: true, width: 24 },
         { key: 'breed', header: 'Giống', aliases: ['giong', 'breed'], create: true, width: 22 },
         { key: 'color', header: 'Màu lông', aliases: ['mau long', 'mau', 'color'], create: true, width: 17 },

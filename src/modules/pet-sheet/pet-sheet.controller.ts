@@ -59,6 +59,10 @@ export class PetSheetController {
     images(@User() user: any) {
         return this.svc.syncImages(this.shelterId(user));
     }
+    @Post('merge')
+    merge(@User() user: any, @Query('dry') dry?: string) {
+        return this.svc.mergeDuplicates(this.shelterId(user), dry !== '0');
+    }
     // ───────────── Bảng chỉnh sửa trên web ─────────────
     @Get('grid')
     gridList(@User() user: any, @Query('species') sp?: string) {
