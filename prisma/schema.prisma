@@ -724,6 +724,7 @@ model Pet {
   ageText         String?
   vaccinationNote String?
   idSetByShelter String? @unique
+  photoNote String?
 
   interactions     PetInteraction[]
   favoritedBy      FavoritePet[]     @relation("PetFavoritedBy")

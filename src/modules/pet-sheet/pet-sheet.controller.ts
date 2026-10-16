@@ -10,6 +10,7 @@ import { User } from '../../common/decorators/user.decorator';
 import { PetSheetService } from './pet-sheet.service';
 import { PetGridService } from './pet-grid.service';
 import { buildTemplate, sanitizeWorkbook } from './pet-sheet.excel';
+import { buildWorkbook } from './pet-sheet.excel';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -30,23 +31,21 @@ export class PetSheetController {
     res.send(buf);
   }
 
-  @Get('status')
-  async status(@User() user: any) {
-    const sid = this.shelterId(user);
-    await this.svc.ensureAccess(sid, user.id);
-    return this.svc.status(sid);
+    @Get('status')
+  status(@User() user: any) {
+    this.shelterId(user);
+    return this.svc.status();
   }
 
   @Get('template')
   async template(@User() user: any, @Res() res: Response) {
     this.shelterId(user);
-    this.sendXlsx(res, await buildTemplate(), 'pawlife-pet-template.xlsx');
+    this.sendXlsx(res, await buildWorkbook(), 'pawlife-pet-template.xlsx');
   }
 
   @Get('export')
   async export(@User() user: any, @Res() res: Response) {
-    const sid = this.shelterId(user);
-    this.sendXlsx(res, await this.svc.exportXlsx(sid), 'pawlife-pets.xlsx');
+    this.sendXlsx(res, await this.svc.exportXlsx(this.shelterId(user)), 'pawlife-pets.xlsx');
   }
 
   @Post('upload')
@@ -55,24 +54,7 @@ export class PetSheetController {
     const sid = this.shelterId(user);
     if (!file) throw new BadRequestException('Chưa chọn file.');
     if (!file.originalname.toLowerCase().endsWith('.xlsx')) throw new BadRequestException('Chỉ nhận file .xlsx.');
-    return this.svc.linkWorkbook(sid, await sanitizeWorkbook(file.buffer));
-  }
-
-  @Post('init')
-  async init(@User() user: any) {
-    return this.svc.linkWorkbook(this.shelterId(user), await buildTemplate());
-  }
-
-  @Post('sync')
-  async sync(@User() user: any) {
-    const sid = this.shelterId(user);
-    const result = await this.svc.sync(sid);
-    return { ...(await this.svc.status(sid)), result };
-  }
-
-  @Delete()
-  async unlink(@User() user: any) {
-    return this.svc.unlink(this.shelterId(user));
+    return this.svc.importWorkbook(sid, file.buffer);
   }
 
   // ───────────── Bảng chỉnh sửa trên web ─────────────

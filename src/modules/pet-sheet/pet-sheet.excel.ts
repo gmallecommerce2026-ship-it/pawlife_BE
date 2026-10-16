@@ -1,89 +1,84 @@
 import { BadRequestException } from '@nestjs/common';
+import { Pet } from '@prisma/client';
 import * as ExcelJS from 'exceljs';
 import {
-  columnsFor, detectSpecies, GENDER_OPTIONS, SheetSpecies, SPAY_OPTIONS, STATUS_OPTIONS, VACC_OPTIONS,
+  cellText, columnsFor, detectSpecies, EDIT_KEYS, Fields, GENDER_OPTIONS, mapHeader, petToFields, SheetSpecies,
+  SPAY_OPTIONS, speciesOfPet, STATUS_OPTIONS, VACC_OPTIONS,
 } from './pet-sheet.mapper';
 
+const TAB: Record<SheetSpecies, string> = { DOG: 'TT chó lụm', CAT: 'TT mèo' };
+const LISTING = ['Đã đăng', 'Thiếu ảnh', 'Không đủ đk tìm chủ', 'Ưu tiên foster', 'chưa chủ điều kiện nhận nuôi', 'Lỗi'];
+
 // Công thức Google xuất ra dạng IFERROR(__xludf.DUMMYFUNCTION(...), <giá trị cache>)
-function cachedFromFormula(formula: string): string | number | null {
+function cached(formula: string): string | number | null {
   const m = formula.match(/,\s*(?:"((?:[^"]|"")*)"|(-?\d+(?:\.\d+)?))\)\s*$/);
   if (!m) return null;
   if (m[1] !== undefined) return m[1].replace(/""/g, '"');
   return m[2] !== undefined ? Number(m[2]) : null;
 }
 
-/** Bỏ các tab không phải Chó/Mèo (vd: Sync chứa CCCD, SĐT) và đổi công thức thành giá trị. */
-export async function sanitizeWorkbook(buf: Buffer): Promise<Buffer> {
-  const wb = new ExcelJS.Workbook();
-  try {
-    await wb.xlsx.load(buf as any);
-  } catch {
-    throw new BadRequestException('Không đọc được file. Vui lòng dùng file .xlsx hợp lệ.');
+function plain(v: any): string {
+  if (v === null || v === undefined) return '';
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (typeof v !== 'object') return String(v);
+  if ('error' in v) return '';
+  if ('formula' in v || 'sharedFormula' in v) {
+    let r = v.result;
+    if (r === undefined || r === null) r = cached(String(v.formula ?? ''));
+    return r === null || r === undefined ? '' : plain(r);
   }
-  const drop: number[] = [];
-  wb.eachSheet((ws) => {
-    if (!detectSpecies(ws.name)) { drop.push(ws.id); return; }
-    ws.eachRow({ includeEmpty: false }, (row) =>
-      row.eachCell({ includeEmpty: false }, (cell) => {
-        const v: any = cell.value;
-        if (v && typeof v === 'object' && ('formula' in v || 'sharedFormula' in v)) {
-          let r = v.result;
-          if (r === undefined || r === null) r = cachedFromFormula(String(v.formula ?? ''));
-          cell.value = r && typeof r === 'object' && !(r instanceof Date) ? null : (r ?? null);
-        }
-      }),
-    );
-  });
-  if (drop.length >= wb.worksheets.length) {
-    throw new BadRequestException('Không tìm thấy tab nào có tên chứa "Chó" hoặc "Mèo". Hãy đổi tên tab rồi tải lại.');
-  }
-  drop.forEach((id) => wb.removeWorksheet(id));
-  return Buffer.from(await wb.xlsx.writeBuffer());
+  if (Array.isArray(v.richText)) return v.richText.map((t: any) => t.text).join('');
+  if (typeof v.text === 'string') return v.text;
+  return '';
 }
 
-export async function buildTemplate(): Promise<Buffer> {
+/** Đọc các tab Chó/Mèo (tab khác như Sync bị bỏ qua) → danh sách Fields theo header. */
+export async function readWorkbook(buf: Buffer): Promise<{ sp: SheetSpecies; rows: Fields[] }[]> {
   const wb = new ExcelJS.Workbook();
+  try { await wb.xlsx.load(buf as any); } catch { throw new BadRequestException('Không đọc được file. Hãy dùng file .xlsx hợp lệ.'); }
+  const out: { sp: SheetSpecies; rows: Fields[] }[] = [];
+  wb.eachSheet((ws) => {
+    const sp = detectSpecies(ws.name);
+    if (!sp || out.some((o) => o.sp === sp)) return;
+    const hdr: string[] = [];
+    ws.getRow(1).eachCell({ includeEmpty: true }, (c, n) => { hdr[n - 1] = plain(c.value); });
+    const col = mapHeader(sp, hdr);
+    if (col.id === undefined) return;
+    const rows: Fields[] = [];
+    ws.eachRow({ includeEmpty: false }, (row, rn) => {
+      if (rn === 1) return;
+      const f = {} as Fields;
+      for (const k of EDIT_KEYS) f[k] = col[k] === undefined ? '' : cellText(plain(row.getCell(col[k]! + 1).value));
+      if (f.id) rows.push(f);
+    });
+    out.push({ sp, rows });
+  });
+  if (!out.length) throw new BadRequestException('Không tìm thấy tab "chó"/"mèo" có cột ID. Hãy kiểm tra tên tab và dòng tiêu đề.');
+  return out;
+}
 
-  const guide = wb.addWorksheet('Hướng dẫn');
-  guide.columns = [{ width: 26 }, { width: 100 }];
-  [
-    ['PawLife — File mẫu hồ sơ pet', ''],
-    ['', ''],
-    ['Tab Chó / Mèo', 'Mỗi dòng là một pet. Tab nào có tên chứa "Chó" hoặc "Mèo" đều được đồng bộ; tab khác bị bỏ qua.'],
-    ['ID', 'Mã nội bộ của trạm (số chip 15 số hoặc mã tuỳ ý). Có thể trùng, không bắt buộc.'],
-    ['Tên', 'Tên pet. Nếu để trống, hệ thống dùng ID làm tên.'],
-    ['Độ tuổi', 'Ví dụ: 3 tuổi, 5 tháng, 1 năm 2 tháng.'],
-    ['Giới tính / Triệt sản / Tiêm phòng / Tình trạng', 'Chọn trong danh sách thả xuống.'],
-    ['Khu, Ghi chú...', 'Nhập tự do.'],
-    ['Đơn nhận nuôi', 'Chỉ đọc — hệ thống tự điền từ các đơn đang xử lý. Không cần sửa.'],
-    ['Mã hệ thống', 'Để trống khi thêm pet mới. Hệ thống tự điền; không xoá hay sửa cột này.'],
-    ['', ''],
-    ['Ví dụ 1 dòng', 'ID: 900263003834569 | Tên: Bông | Giống: poodle | Màu lông: trắng | Độ tuổi: 3 tuổi | Giới tính: Cái | Triệt sản: Đã triệt sản | Tiêm phòng: Đã tiêm đủ | Tình trạng: Sẵn sàng nhận nuôi | Khu: Quốc Oai'],
-  ].forEach((r) => guide.addRow(r));
-  guide.getRow(1).font = { bold: true, size: 14 };
-
+/** Dựng file Excel đúng bố cục file gốc (2 tab, cùng thứ tự cột, dropdown, STT bằng công thức). */
+export async function buildWorkbook(pets: Pet[] = []): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
   for (const sp of ['DOG', 'CAT'] as SheetSpecies[]) {
-    const ws = wb.addWorksheet(sp === 'DOG' ? 'Chó' : 'Mèo');
-    const cols = columnsFor(sp).filter((c) => c.create);
-    ws.columns = cols.map((c) => ({ header: c.header, key: c.key, width: c.width }));
-    const head = ws.getRow(1);
-    head.font = { bold: true };
-    head.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF4EA' } };
-    ws.views = [{ state: 'frozen', ySplit: 1 }];
-
+    const ws = wb.addWorksheet(TAB[sp], { views: [{ state: 'frozen', ySplit: 1 }] });
+    const defs = [{ key: 'stt', header: 'STT', width: 6 }, ...columnsFor(sp).filter((c) => c.create && c.key !== 'apps')];
+    ws.columns = defs.map((d) => ({ header: d.header, key: d.key, width: d.width }));
+    ws.getRow(1).font = { bold: true };
+    const list = pets.filter((p) => speciesOfPet(p.species) === sp).sort((a, b) => +a.createdAt - +b.createdAt);
+    list.forEach((p, i) => {
+      const f: any = petToFields(p);
+      ws.addRow(defs.map((d) => (d.key === 'stt' ? { formula: `IF(B${i + 2}<>"",ROW(B${i + 2})-1,"")`, result: i + 1 } : f[d.key])));
+    });
     const lists: Record<string, string[]> = {
-      gender: GENDER_OPTIONS,
-      spay: SPAY_OPTIONS,
-      vacc: VACC_OPTIONS.slice(0, 3), // list literal của Excel không chứa được dấu phẩy
-      status: STATUS_OPTIONS,
+      gender: GENDER_OPTIONS, spay: SPAY_OPTIONS, vacc: VACC_OPTIONS.slice(0, 3), status: STATUS_OPTIONS, listing: LISTING,
     };
-    cols.forEach((c, i) => {
-      const list = lists[c.key];
-      if (!list) return;
-      for (let r = 2; r <= 1000; r++) {
-        ws.getCell(r, i + 1).dataValidation = {
-          type: 'list', allowBlank: true, showErrorMessage: false, formulae: [`"${list.join(',')}"`],
-        };
+    const last = list.length + 300;
+    defs.forEach((d, i) => {
+      const l = lists[d.key];
+      if (!l) return;
+      for (let r = 2; r <= last; r++) {
+        ws.getCell(r, i + 1).dataValidation = { type: 'list', allowBlank: true, showErrorMessage: false, formulae: [`"${l.join(',')}"`] };
       }
     });
   }
