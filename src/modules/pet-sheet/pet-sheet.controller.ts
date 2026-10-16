@@ -9,7 +9,6 @@ import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { User } from '../../common/decorators/user.decorator';
 import { PetSheetService } from './pet-sheet.service';
 import { PetGridService } from './pet-grid.service';
-import { buildTemplate, sanitizeWorkbook } from './pet-sheet.excel';
 import { buildWorkbook } from './pet-sheet.excel';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
