@@ -1,5 +1,6 @@
 import {
-  BadRequestException, Controller, Delete, ForbiddenException, Get, Post, Res, UploadedFile, UseGuards, UseInterceptors,
+  BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Param, Post, Query, Res,
+  UploadedFile, UseGuards, UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
@@ -7,6 +8,7 @@ import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { User } from '../../common/decorators/user.decorator';
 import { PetSheetService } from './pet-sheet.service';
+import { PetGridService } from './pet-grid.service';
 import { buildTemplate, sanitizeWorkbook } from './pet-sheet.excel';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -14,7 +16,7 @@ const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
 @Controller('shelter-dashboard/pet-sheet')
 @UseGuards(JwtAuthGuard)
 export class PetSheetController {
-  constructor(private readonly svc: PetSheetService) { }
+  constructor(private readonly svc: PetSheetService, private readonly grid: PetGridService) { }
 
   private shelterId(user: any): string {
     if (user?.role !== Role.SHELTER || !user?.shelterId) {
@@ -56,7 +58,6 @@ export class PetSheetController {
     return this.svc.linkWorkbook(sid, await sanitizeWorkbook(file.buffer));
   }
 
-  // Tạo Google Sheet mới từ file mẫu rồi đẩy toàn bộ pet hiện có lên
   @Post('init')
   async init(@User() user: any) {
     return this.svc.linkWorkbook(this.shelterId(user), await buildTemplate());
@@ -72,5 +73,26 @@ export class PetSheetController {
   @Delete()
   async unlink(@User() user: any) {
     return this.svc.unlink(this.shelterId(user));
+  }
+
+  // ───────────── Bảng chỉnh sửa trên web ─────────────
+  @Get('grid')
+  gridList(@User() user: any, @Query('species') sp?: string) {
+    return this.grid.list(this.shelterId(user), sp === 'CAT' ? 'CAT' : 'DOG');
+  }
+
+  @Post('grid')
+  gridCreate(@User() user: any, @Body() body: { species: string; fields?: any }) {
+    return this.grid.create(this.shelterId(user), body?.species, body?.fields);
+  }
+
+  @Post('grid/batch')
+  gridBatch(@User() user: any, @Body() body: { items: any }) {
+    return this.grid.batch(this.shelterId(user), body?.items);
+  }
+
+  @Delete('grid/:id')
+  gridRemove(@User() user: any, @Param('id') id: string) {
+    return this.grid.remove(this.shelterId(user), id);
   }
 }
