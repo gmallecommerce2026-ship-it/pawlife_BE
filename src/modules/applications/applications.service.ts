@@ -573,7 +573,64 @@ export class ApplicationsService {
   // ==========================================
   // 2. LUỒNG TRẠM CỨU HỘ (SHELTER / ADMIN)
   // ==========================================
+  // Gom các đơn ĐANG XỬ LÝ cùng một người nộp tại shelter, gắn vào từng đơn để Kanban
+  // hiển thị "còn N đơn khác" + lịch/nhân sự phỏng vấn của các đơn kia.
+  private async attachRelatedApplications<T extends { id: string; userId: string }>(
+    shelterId: string,
+    apps: T[],
+  ) {
+    const userIds = [...new Set(apps.map((a) => a.userId))];
 
+    const rows = await this.prisma.adoptionApplication.findMany({
+      where: {
+        userId: { in: userIds },
+        pet: { shelterId },
+        status: { notIn: [ApplicationStatus.CLOSED, ApplicationStatus.ADOPTION_COMPLETED] },
+      },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        petId: true,
+        pet: { select: { name: true } },
+        appointment: { select: { appointmentDate: true, status: true, members: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const byUser = new Map<string, typeof rows>();
+    for (const r of rows) {
+      const list = byUser.get(r.userId);
+      if (list) list.push(r);
+      else byUser.set(r.userId, [r]);
+    }
+
+    const DEAD = [AppointmentStatus.CANCELLED, AppointmentStatus.REJECTED] as string[];
+
+    return apps.map((a) => ({
+      ...a,
+      relatedApplications: (byUser.get(a.userId) ?? [])
+        .filter((r) => r.id !== a.id)
+        .map((r) => {
+          const ap = r.appointment && !DEAD.includes(r.appointment.status) ? r.appointment : null;
+          const raw = ap?.members;
+          const members = Array.isArray(raw) ? (raw as any[]) : [];
+          return {
+            id: r.id,
+            status: r.status,
+            petId: r.petId,
+            petName: r.pet.name,
+            interview: ap
+              ? {
+                at: ap.appointmentDate,
+                status: ap.status,
+                staff: members.map((m) => m?.name ?? m?.email).filter(Boolean) as string[],
+              }
+              : null,
+          };
+        }),
+    }));
+  }
   async getShelterApplications(
     shelterId: string,
     status?: string,
@@ -612,7 +669,8 @@ export class ApplicationsService {
       orderBy: { createdAt: 'desc' },
     });
     const mapped = applications.map((a) => ({ ...a, notes: a.notes.map(mapNote) }));
-    return attachApplicantFlags(this.prisma, shelterId, mapped);
+    const withRelated = await this.attachRelatedApplications(shelterId, mapped);
+    return attachApplicantFlags(this.prisma, shelterId, withRelated);
   }
 
 
