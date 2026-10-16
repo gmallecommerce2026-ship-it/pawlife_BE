@@ -3,7 +3,7 @@ import { Pet, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { RedisService } from '../../database/redis/redis.service';
 import { buildWorkbook, readWorkbook } from './pet-sheet.excel';
-import { buildPetData, canonFromRaw, EDIT_KEYS, norm, petToFields, SPECIES_JSON, speciesOfPet } from './pet-sheet.mapper';
+import { buildPetData, canonFromRaw, EDIT_KEYS, EditKey, norm, petToFields, SPECIES_JSON, speciesOfPet } from './pet-sheet.mapper';
 import { GoogleSheetsClient } from './google-sheets.client';
 
 const chunk = <T,>(a: T[], n: number) => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
